@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.76',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A campaign you have just started gets a tab. It was the one way to be looking at a campaign with nothing in the top strip saying so — and since the strip is also what you close a campaign from, a draft you navigated away from had no way back except the Campaigns page. Two things were keeping it out. Opening an existing campaign has always opened a tab for it and starting one never did, because starting one used to mean entering a builder that was not a campaign yet; it has been a real campaign — registered, listed, holding its own board — for a while now.',
+          'And the strip stopped hiding it. Tabs are filtered to the brand you are browsing, which is what keeps one client’s campaigns out of another client’s strip, and a new campaign belongs to no brand until you wire a Brand card into it — so it matched nothing and showed nowhere. A campaign sitting in Drafts is not another brand’s work, so there is nothing for it to leak: it shows at every scope until it has a brand of its own, and then it files with the rest of that brand’s.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.75',
     dateLabel: 'August 9, 2026',
     groups: [

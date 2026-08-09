@@ -271,3 +271,44 @@ describe('CanvasProjectTabs — opening a campaign from the strip', () => {
     expect(tabNames()).toEqual(['Alpha', 'Gamma'])
   })
 })
+
+/**
+ * A CAMPAIGN THAT IS NOBODY'S YET STILL HAS TO BE IN THE STRIP.
+ *
+ * A campaign now starts in the Drafts space and stays there until a Brand card gives it a brand, so
+ * "no brand" went from an edge case to the state every campaign passes through. The strip's scope
+ * filter is there to keep one brand's work out of another brand's tabs, and held to the plain rule —
+ * does this campaign's client equal the brand you are browsing — a draft matched nothing: you
+ * started a campaign, it opened on screen, and the one strip whose job is to say what you have open
+ * did not have it. The way back to it was the Campaigns page, and the ✕ that closes it lives in the
+ * strip it was missing from.
+ *
+ * Drafts cannot leak the way a brand can, which is what makes showing it at every scope safe rather
+ * than merely convenient.
+ */
+describe('CanvasProjectTabs — a draft campaign', () => {
+  const DRAFT = 'Untitled campaign'
+
+  beforeEach(() => {
+    registerCampaign(DRAFT, 'Drafts')
+    useTrafficStore.setState({
+      ...onTheIndex,
+      campaignList: [...CAMPAIGNS, campaign(DRAFT, 'Drafts')],
+      openProjects: ['Acme — Alpha', DRAFT],
+    })
+  })
+
+  it('shows while you are browsing a brand it does not belong to', () => {
+    act(() => root.render(<CanvasProjectTabs />))
+    expect(useTrafficStore.getState().clientFilter).toBe('Acme')
+    expect(tabNames()).toContain(DRAFT)
+  })
+
+  it('shows at every brand, because it is not any brand’s work to leak', () => {
+    act(() => root.render(<CanvasProjectTabs />))
+    act(() => useTrafficStore.getState().setClientFilter('Zeta'))
+    expect(tabNames()).toContain(DRAFT)
+    // And the other brand's campaign is still filtered out, so the rule has not simply been dropped.
+    expect(tabNames()).not.toContain('Alpha')
+  })
+})
