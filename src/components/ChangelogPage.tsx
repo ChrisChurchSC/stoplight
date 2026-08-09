@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.81',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'What worked is now read off what actually ran. The report that says which line earned the reach and which proof point carried was reading the PLAN — so a headline rewritten before it went out was credited with the numbers belonging to the one that replaced it, while the line that did the work was counted as never used. It reads the published copy for a published asset now, component by component, falling back to the plan wherever nothing was recorded, since copy is only ever written down where it changed. The export does the same: that file is opened to find out what you put out, and handing somebody the draft of a post that went out saying something else is the one way it can be wrong without looking wrong.',
+          'Nothing about writing changed. The copy editor, generating, and every check on whether an asset has been written yet all still read the plan, because they are asking what this campaign is going to say rather than what it said.',
+          'And the plan of something that has already shipped says so. It stays editable — people fix a typo, or fill in what was never written down at the time, and a plan nobody can touch is one that stays wrong forever — with one line at the top noting that editing it changes the intent behind the post rather than the post.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.80',
     dateLabel: 'August 9, 2026',
     groups: [

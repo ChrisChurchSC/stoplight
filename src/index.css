@@ -4738,6 +4738,14 @@ button.mf-open:focus-visible,
 .flow-live-actual { margin-top: 1px; }
 /* The read-back and whatever it had to say. The note sits under the button rather than beside it:
    half of what it says is a platform explaining itself, which does not fit on one line. */
+/* Said once, at the top of the plan, on an asset that has already shipped. Toned like the live mark
+   rather than like a warning: this is a statement about which of the two faces you are on, not a
+   telling-off for editing. */
+.flow-plan-ran {
+  border-left: 2px solid var(--green);
+  padding-left: 8px;
+  margin-bottom: 12px;
+}
 .flow-live-read { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .flow-live-readnote { font-size: 11.5px; line-height: 1.5; color: var(--text-faint); }
 .flow-live-metrics {

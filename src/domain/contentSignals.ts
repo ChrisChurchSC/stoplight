@@ -1,5 +1,5 @@
 import { resolveAudienceId } from './assetProfile'
-import { isPlannedAsset } from './assetMode'
+import { effectiveMessaging, isPlannedAsset } from './assetMode'
 import { CHANNELS } from './channels'
 import type { ChannelId, TrafficRow } from './types'
 
@@ -512,9 +512,17 @@ function computeVocabulary(rows: TrafficRow[]): PhraseRow[] {
 const SURFACE_LABEL: Record<string, string> = { organic: 'Social', owned: 'Owned & web', paid: 'Paid' }
 const surfaceOf = (channel: string): string => SURFACE_LABEL[CHANNELS[channel as ChannelId]?.kind ?? ''] ?? 'Other'
 
-/** All the copy on a row (every messaging field), straight apostrophes, for matching. */
+/**
+ * All the copy on a row, straight apostrophes, for matching.
+ *
+ * WHAT RAN, where anything ran (see effectiveMessaging). This file's whole subject is which words
+ * earned the reach and which proof point actually carried, and it read the PLAN — so a headline
+ * rewritten before it went out was credited with the numbers of the one that replaced it, and the
+ * line that did the work was counted as unused. On a planned asset there is nothing else to read and
+ * this is unchanged.
+ */
 function fullCopy(r: TrafficRow): string {
-  const vals = Object.values(r.messaging ?? {}).filter((v): v is string => typeof v === 'string' && !!v.trim())
+  const vals = Object.values(effectiveMessaging(r)).filter((v): v is string => typeof v === 'string' && !!v.trim())
   return (vals.length ? vals.join('  ') : r.assetName).replace(/[’]/g, "'").trim()
 }
 

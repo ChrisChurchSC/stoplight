@@ -80,3 +80,31 @@ export function copyDiffStat(lines: CopyLine[]): { compared: number; changed: nu
   const compared = lines.filter((l) => !l.empty)
   return { compared: compared.length, changed: compared.filter((l) => l.changed).length }
 }
+
+/**
+ * THE COPY A READER SHOULD BE LOOKING AT — what ran, where anything ran.
+ *
+ * Two different jobs read an asset's words and they want different answers. Anything asking "what is
+ * this campaign going to say" is reading a PLAN and must go on reading `messaging`: the copy editor,
+ * generation, the checks on whether an asset has been written yet. Anything asking "what did this
+ * campaign say" is reading a RECORD — the export you hand somebody, the analysis of what worked —
+ * and for a live asset the plan is the wrong answer, sometimes badly: a headline that was rewritten
+ * before it went out is counted by contentSignals as the thing that earned the reach.
+ *
+ * PER FIELD, NOT WHOLESALE. A component nobody recorded falls back to the plan rather than to
+ * nothing, because copy is usually recorded only where it CHANGED — an empty live box on a shipped
+ * asset almost always means "that one went as written", and blanking it would delete most of a
+ * campaign from the corpus.
+ *
+ * Which is a different reading from copyDiff's, deliberately: the diff reports the completeness of
+ * the RECORD, so an unrecorded component shows as a gap you might want to fill. This reports the
+ * best available TEXT. Same data, two honest questions, and neither should answer the other's.
+ */
+export function effectiveMessaging(row: TrafficRow): Record<string, string> {
+  const planned = (row.messaging ?? {}) as Record<string, string>
+  const live = row.live?.copy
+  if (!live || !isLiveAsset(row)) return planned
+  const out = { ...planned }
+  for (const [k, v] of Object.entries(live)) if (v?.trim()) out[k] = v
+  return out
+}
