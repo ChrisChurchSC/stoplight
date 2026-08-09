@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.64',
+    dateLabel: 'August 8, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A Voice card stops asking for a sample line and a banned-words list. “Sounds like this” and “Never say” were the card asking, per campaign, for the two things the voice record it names already holds for every campaign that uses it. Two vocabularies for one question, and only one of them comparable. Anything already typed into those fields stays stored and stops reaching the writer, so what the panel shows and what the copy is written from agree again.',
+          'And the inspector says you can save a card. Keeping a card as a smart object, to place on another campaign, was a keyboard chord and a right-click item: it existed for people who already knew. The panel that describes a card now offers it, in the same words and through the same action as the menu, and says what happens next — kept on this campaign until you add it to the brand library from its own panel.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.63',
     dateLabel: 'August 8, 2026',
     groups: [

@@ -1,3 +1,4 @@
+import { RETIRED_DIRECTION, type DirectionKey } from './direction'
 import { MAX_OBJECT_DEPTH, type SmartObject } from './smartObject'
 import { REF_TYPE_FOR_OBJECT_KIND, type CanvasObject, type FlowBoard } from './flowBoard'
 import { pickReference, type ObjectReference } from './objectReference'
@@ -98,9 +99,25 @@ export function upstreamObjects(board: FlowBoard, target: string, maxDepth = MAX
   return out
 }
 
-/** The direction a set of cards contributes, flattened in the order given. */
+/**
+ * The direction a set of cards contributes, flattened in the order given.
+ *
+ * MINUS ANYTHING ITS KIND HAS RETIRED. A card keeps every instruction it was ever given, so taking
+ * a field off the inspector would otherwise leave its old answers on the card: invisible in the
+ * panel and still shaping the copy. That is the disagreement this codebase keeps having in other
+ * forms, and it is worse here than most, because the one thing the panel claims to be is the list
+ * of what the writer reads.
+ *
+ * Filtered by RETIRED_DIRECTION rather than by DIRECTION_KEYS: the chat may set any valid key on
+ * any card (see the setDirection command), and those are deliberate instructions rather than
+ * leftovers, so only fields deliberately withdrawn are dropped.
+ */
 export const directionOf = (objects: CanvasObject[]): ResolvedDirection[] =>
-  objects.flatMap((o) => (o.direction ?? []).map((d) => ({ kind: o.kind as string, key: d.key, value: d.value })))
+  objects.flatMap((o) => {
+    const gone = RETIRED_DIRECTION[o.kind as string]
+    const kept = gone ? (o.direction ?? []).filter((d) => !gone.includes(d.key as DirectionKey)) : o.direction ?? []
+    return kept.map((d) => ({ kind: o.kind as string, key: d.key, value: d.value }))
+  })
 
 /** The instructions that reach one target, nearest card first. */
 export const directionFor = (board: FlowBoard, target: string, maxDepth = MAX_OBJECT_DEPTH): ResolvedDirection[] =>
