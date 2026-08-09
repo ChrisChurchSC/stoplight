@@ -1802,23 +1802,12 @@ export function SheetGrid({
                     )}
                   </div>
                 ))}
-                {(current || (CREATABLE.has(kind) && onCreateObject)) && <div className="mf-objsec">Actions</div>}
-                {current && (
-                  <div className="flow-ctxrow mf-objrow">
-                    <button
-                      className="flow-ctxrow-open"
-                      title="Drop the pin and hand the question back to the campaign"
-                      onClick={() => {
-                        setRowRecord(row, kind, '')
-                        closeKindPick()
-                      }}
-                    >
-                      <span className="flow-ctxrow-txt">
-                        <span className="flow-ctxrow-name"><em>No {word} — use the campaign’s</em></span>
-                      </span>
-                    </button>
-                  </div>
-                )}
+                {/* NO "Actions" HEADING AND NO UNLINK ROW. The heading labelled a section of one
+                    or two rows in a list whose every row is already an action, and the unlink was
+                    a third way to say something the cell says better: the ＋ drawer's own ✕ takes a
+                    record off the asset, next to the record it removes. This drawer is for choosing
+                    which one, so it ends on the only row that is not a choice among existing
+                    records — making a new one. */}
                 {CREATABLE.has(kind) && onCreateObject && (
                   <div className="flow-ctxrow mf-objrow">
                     <button
