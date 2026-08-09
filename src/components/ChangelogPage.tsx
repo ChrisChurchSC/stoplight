@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.63',
+    dateLabel: 'August 8, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The document panel on a card stops explaining itself over the document. Three things sat above the file: a heading offering to take a document, a paragraph saying what that would do, and — under the file — a line saying the same thing again about the actual file. The pitch is empty-state copy, so it now goes when the state does: with a document attached you see whose it is, what it is called, how long it is, and what you can do about it.',
+          'And the document’s full text is one click away rather than always underfoot. A brand strategy runs to twenty thousand characters, so the panel’s own controls sat below a scroll box of prose and every visit to the card began by scrolling past the document to reach anything that acts on it — shown by default, the source had stopped being a source and become the panel. “Read the document” opens it, unchanged and character-for-character as the writer receives it. Replacing the document and overriding it for one campaign are now one row of choices under the file, instead of a button above it and a link below it with the whole text in between.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.62',
     dateLabel: 'August 8, 2026',
     groups: [
