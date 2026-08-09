@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assetMode, copyDiff, copyDiffStat, isLiveAsset, isPlannedAsset } from '../assetMode'
+import { assetMode, copyDiff, copyDiffStat, effectiveMessaging, isLiveAsset, isPlannedAsset } from '../assetMode'
 import type { MessagingField } from '../messaging'
 import type { TrafficRow } from '../types'
 
@@ -120,5 +120,60 @@ describe('the plan against what actually ran', () => {
   it('treats a post nothing has been read back from as all-changed', () => {
     const r = row({ messaging: { headline: 'Built for storms' } })
     expect(copyDiffStat(copyDiff(r, FIELDS))).toEqual({ compared: 1, changed: 1 })
+  })
+})
+
+/**
+ * WHICH WORDS A READER GETS, and why it is not the same answer the diff gives.
+ *
+ * Two jobs read an asset's copy. "What is this going to say" is reading a plan and must keep reading
+ * `messaging` — the editor, generation, the check on whether an asset is written yet. "What did this
+ * say" is reading a record, and for a shipped asset the plan is the wrong answer: contentSignals
+ * credits a headline with the reach it earned, so a headline rewritten before it went out was being
+ * credited with numbers belonging to the one that replaced it, while the line that did the work was
+ * counted as never used.
+ */
+describe('the copy a reader should be looking at', () => {
+  const planned = { headline: 'Built for storms', body: 'Same body', cta: 'Book a demo' }
+
+  it('gives the plan for an asset that has not run', () => {
+    expect(effectiveMessaging(row({ messaging: planned }))).toEqual(planned)
+  })
+
+  it('gives what ran, where it ran', () => {
+    const r = row({
+      status: 'posted',
+      messaging: planned,
+      live: { copy: { headline: 'Made for rough water' } },
+    })
+    expect(effectiveMessaging(r)).toEqual({ ...planned, headline: 'Made for rough water' })
+  })
+
+  /**
+   * PER FIELD. Copy is recorded where it CHANGED, so an unrecorded component almost always means
+   * "that one went as written" — blanking it would delete most of a campaign from the corpus.
+   */
+  it('falls back to the plan for a component nobody recorded', () => {
+    const r = row({ status: 'posted', messaging: planned, live: { copy: { headline: 'Made for rough water', cta: '' } } })
+    expect(effectiveMessaging(r).body).toBe('Same body')
+    expect(effectiveMessaging(r).cta).toBe('Book a demo')
+  })
+
+  /**
+   * THE DIFFERENCE FROM copyDiff, stated. The same unrecorded CTA is a gap in the record and the
+   * plan's text: the diff reports completeness, this reports the best available words, and neither
+   * should answer the other's question.
+   */
+  it('reads an unrecorded component as the plan, where the diff reads it as a gap', () => {
+    const r = row({ status: 'posted', messaging: { cta: 'Book a demo' }, live: { copy: {} } })
+    expect(effectiveMessaging(r).cta).toBe('Book a demo')
+    const line = copyDiff(r, [{ key: 'cta', label: 'CTA' }])[0]
+    expect(line).toMatchObject({ live: '', changed: true })
+  })
+
+  /** A draft carrying live copy from somewhere is not a record of anything. */
+  it('ignores live copy on an asset that has not gone out', () => {
+    const r = row({ messaging: planned, live: { copy: { headline: 'Never ran' } } })
+    expect(effectiveMessaging(r)).toEqual(planned)
   })
 })

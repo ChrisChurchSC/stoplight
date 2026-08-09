@@ -9780,6 +9780,18 @@ export function FlowsView() {
           {selPost.audience ? ` · ${selPost.audience}` : ''}
           {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
         </p>
+        {/* THE PLAN OF SOMETHING THAT HAS ALREADY HAPPENED.
+            Editable, deliberately: people fix a typo, or fill in what was never written down at the
+            time, and a plan nobody can touch is one that stays wrong forever. But editing it after
+            the fact is rewriting the intent behind a post that is already out, so the panel says so
+            once rather than asking every time — a confirm on every keystroke's worth of edit is how
+            a panel that has been losing its dialogs gets one back. */}
+        {isLiveAsset(selPost) && (
+          <p className="flow-inspect-note flow-plan-ran">
+            This has already gone out. Editing here changes the plan it was written from, not the
+            post — Active holds what actually ran.
+          </p>
+        )}
         {/* THE COPY, EDITABLE, AND EVERY COMPONENT OF IT.
             This was read-only text at the bottom of the panel with empty components
             filtered out, so a post with no copy showed nothing at all and changing one

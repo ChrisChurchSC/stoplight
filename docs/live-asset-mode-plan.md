@@ -213,9 +213,22 @@ The diff and the numbers become a signal: which planned angle survived contact, 
 - **The diff reading as an error.** Copy changes between plan and post for good reasons. The diff states the difference; it does not mark it wrong.
 - **Mode drifting from truth.** The reason mode is derived. If a stored flag is ever added, this is the failure it will produce.
 
+## The four decisions, settled
+
+Answered 2026-08-09. Recorded here because each one is a rule the next piece of work has to know, and three of them are already built to it.
+
+**1. What reads the plan, and what reads what ran.** Both, split by the question being asked. `effectiveMessaging` (domain/assetMode.ts) gives a reader what ran where anything ran, per component, falling back to the plan for anything nobody recorded — because copy is recorded where it CHANGED, and blanking the rest would delete most of a campaign from the corpus.
+
+Adopted where the question is "what did this campaign say": `contentSignals` (which credits a headline with the reach it earned, and was crediting the draft of one that got rewritten) and the CSV export (the file somebody opens to find out what went out). NOT adopted where the question is "what is this going to say": the copy editor, generation, and the checks on whether an asset has been written yet all keep reading `messaging`.
+
+It reads an unrecorded component differently from `copyDiff` on purpose. The diff reports the completeness of the RECORD, so a component nobody wrote down shows as a gap worth filling; this reports the best available TEXT. Same data, two honest questions, and neither should answer the other's.
+
+**2. A live asset stays editable.** The Planner face says "This has already gone out. Editing here changes the plan it was written from, not the post" and then gets out of the way. People fix a typo or fill in what was never written down at the time, and a plan nobody can touch is one that stays wrong forever. Said once at the top rather than confirmed on every edit — this panel has spent months losing dialogs.
+
+**3. The mode belongs on the deliverable too, as its own piece of work.** Not built. "Show me this whole channel as it ran" rolls up its assets: how many shipped, how many are still planned, and the copy diff across the set. That is a real build rather than a second switch, and it wants a section of its own once the asset level has been used in anger — the roll-up should say what a person actually asks of a channel, and nobody has asked yet.
+
+**4. Planning stays neutral.** Green marks live; nothing marks planning. Red is this app's danger tone, and planning is the ordinary state of nearly every card on a board, so a mostly-red board reads as mostly-broken and the genuinely failed card stops standing out. The alternative worth revisiting is red for OVERDUE — a planned asset whose date has passed — where red would mean "this should have shipped", which is a real problem rather than a normal state.
+
 ## Open questions
 
-1. **Which copy do exports and the writer read once an asset is live?** This plan keeps `messaging` as the plan so nothing downstream changes. The other reading — that a live asset's real copy is the truth and should be what everything reads — is defensible and is a bigger change.
-2. **Does a live asset stay editable?** Editing the plan after the fact rewrites history; refusing it makes a typo permanent. Suggested: Planner stays editable and says the asset has already run.
-3. **Does the mode belong on the deliverable too?** "Show me this whole channel as it ran" is the obvious next ask.
-4. **Is red wanted anyway?** See Colour.
+Everything above is decided. What is left is phase 4's shape, and it is deliberately not being guessed at until a real campaign has been reconciled: which planned angle survived contact, and which proof point actually carried, are the questions the diff exists to answer, and what they should look like on screen is a thing to learn from one campaign's worth of use rather than to design from nothing.
