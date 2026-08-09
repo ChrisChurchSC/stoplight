@@ -8084,15 +8084,18 @@ button.mf-open:focus-visible,
    eleven framed dropdowns is a settings panel, not a canvas. */
 /* 5px + the face's own 4px padding = the 9px inset every other child of an input card carries, so
    the name lines up under the kind caption instead of stepping in from it. Only input cards ever
-   render a picker (a sticky has no record to point at), so there is one inset to match, not two. */
+   render a face (a sticky has no record to point at), so there is one inset to match, not two.
+
+   NOT A CONTROL ANY MORE. This was a button that opened the record list over the board; the list
+   moved to the toolbar, where the card is chosen. So the hover border, the focus ring and the
+   pointer cursor have gone with it — they advertised a press that no longer does anything, and on a
+   card you drag, a cursor saying "click me" is worse than no affordance at all. */
 .flow-pick { position: relative; margin: 0 5px 6px; }
 .flow-pick-face {
   width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 1px;
   border: 1px solid transparent; border-radius: 8px; background: none; padding: 4px;
-  font: inherit; text-align: left; cursor: pointer; min-width: 0;
+  font: inherit; text-align: left; min-width: 0;
 }
-.flow-pick-face:hover, .flow-pick-face.open { border-color: var(--border); background: var(--surface-2); }
-.flow-pick-face:focus-visible { outline: 2px solid var(--note-tone, var(--accent)); outline-offset: 1px; }
 .flow-pick-name {
   font-size: 13px; font-weight: 600; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -8104,20 +8107,14 @@ button.mf-open:focus-visible,
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   min-height: 14px;
 }
-/* Anchored to the card, above the cards around it. There is deliberately no scrim: every card
-   carries an inline transform, so a fixed-position child is contained by the card rather than the
-   viewport. ObjectCardPicker closes on a capture-phase press instead — see the comment there. */
-/* WIDER THAN THE CARD, on purpose. The card is 236px and the detail line is the whole reason this
-   list exists — at card width every one of them ellipsed after five words, which is the state the
-   bare <select> was already in. */
-.flow-pick-menu {
-  position: absolute; top: calc(100% + 4px); left: 0; z-index: 41;
-  width: 282px; max-width: 82vw;
-  display: flex; flex-direction: column;
-  background: var(--surface); border: 1px solid var(--border-strong, var(--border));
-  border-radius: 10px; box-shadow: 0 14px 36px rgba(16, 24, 40, 0.2);
-  padding: 5px; cursor: default;
-}
+/* The list itself now opens off the TOOLBAR, as the step between naming a card kind and the card
+   landing — .flow-tb-recmenu below. Everything from here down is shared with it; only the menu box
+   that used to hang off the card went, along with its tick (nothing in the add list is the current
+   choice, because there is not one yet).
+
+   The on-card menu never had a scrim: every card carries an inline transform, so a fixed-position
+   child is contained by the card rather than the viewport and covered about two hundred pixels of
+   it. On the toolbar that problem does not exist, and .flow-tb-palscrim does the closing. */
 .flow-pick-search {
   border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2);
   font: inherit; font-size: 12px; color: var(--text); padding: 5px 8px; margin-bottom: 4px;
@@ -8145,9 +8142,8 @@ button.mf-open:focus-visible,
   font-size: 11px; line-height: 1.35; color: var(--text-faint);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
 }
-.flow-pick-tick { flex: 0 0 auto; width: 11px; font-size: 11px; line-height: 1.5; }
-/* Unlink and "+ New" — actions on the list rather than members of it, so they sit below a hairline
-   and never scroll away with the options. */
+/* "+ New" — an action on the list rather than a member of it, so it sits below a hairline and never
+   scrolls away with the options. */
 .flow-pick-act {
   border: 0; background: none; text-align: left; cursor: pointer; font: inherit; font-size: 12px;
   color: var(--text-muted); border-radius: 7px; padding: 6px 8px; margin-top: 4px;
@@ -22890,6 +22886,11 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 11px; box-shadow: 0 14px 40px -14px rgba(16, 24, 40, 0.32), 0 2px 8px -2px rgba(16, 24, 40, 0.12);
   display: flex; flex-direction: column; gap: 1px;
 }
+/* THE RECORD STEP, in the same box the kind menu uses and wider than it. A kind row is two words;
+   a record row is a name over the line that says what it is, and that line is the whole reason the
+   list exists — at menu width every one of them ellipsed after five words. Capped against the
+   viewport so it stays on screen from a toolbar button near either edge. */
+.flow-tb-recmenu { width: 282px; max-width: 82vw; gap: 0; }
 .flow-tb-palitem {
   display: flex; align-items: center; gap: 9px; width: 100%;
   border: 0; background: none; cursor: pointer; text-align: left;
