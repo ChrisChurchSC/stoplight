@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.62',
+    version: 'v1.63',
     dateLabel: 'August 8, 2026',
     groups: [
       {
@@ -31,6 +31,18 @@ const RELEASES: Release[] = [
         items: [
           'The document panel on a card stops explaining itself over the document. Three things sat above the file: a heading offering to take a document, a paragraph saying what that would do, and — under the file — a line saying the same thing again about the actual file. The pitch is empty-state copy, so it now goes when the state does: with a document attached you see whose it is, what it is called, how long it is, and what you can do about it.',
           'And the document’s full text is one click away rather than always underfoot. A brand strategy runs to twenty thousand characters, so the panel’s own controls sat below a scroll box of prose and every visit to the card began by scrolling past the document to reach anything that acts on it — shown by default, the source had stopped being a source and become the panel. “Read the document” opens it, unchanged and character-for-character as the writer receives it. Replacing the document and overriding it for one campaign are now one row of choices under the file, instead of a button above it and a link below it with the whole text in between.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.62',
+    dateLabel: 'August 8, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'The caret on a Made from chip slides out a drawer instead of dropping a menu. A native menu could list record names and nothing else; the drawer is the same surface the ＋ already uses, scoped to the one kind the chip is — searchable, with each record’s own line under its name, ticking the one that is picked. And it carries the library edits that used to mean a trip to the Records page: rename a record in place, or delete it — with the same powers those pages grant, no more (products have no delete anywhere; a brand and a proof point stay pick-only). Deleting the record an asset had picked unpins it there too, so the row never claims a record that no longer exists.',
         ],
       },
     ],
