@@ -24,11 +24,18 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   campaign: {
     term: 'Campaign',
+    /**
+     * SAYS WHAT A CAMPAIGN IS HERE, rather than where it sits in a hierarchy. This used to open on
+     * the ladder (Umbrella contains Campaigns, a Campaign runs as Flights, a Flight holds Assets),
+     * which answers a question nobody opening a tooltip on the Campaigns page is asking, and leads
+     * with the one rung most workspaces never use. A campaign in this app is a board and the work
+     * that comes off it; the ladder is still true and still a click away under See also.
+     */
     short:
-      "A durable marketing effort with a goal and a theme. It runs as one or more flights over time and produces the assets you see on the timeline.",
+      'The unit of work here. One board where you say what you are shipping and what it should say, plus the assets that come out of it. A campaign belongs to one brand.',
     more:
-      'The ladder: Umbrella (an optional theme) contains Campaigns, a Campaign runs as one or more Flights (each a dated run), and a Flight holds the Assets (single pieces of content) you see on the timeline. Folders are just for tidiness and sit outside this ladder.',
-    seeAlso: ['flight', 'umbrella', 'folder', 'objective'],
+      'The board is the campaign. The cards you wire into its brief are what every asset it makes gets written from, and the assets are what it ships on its channels. The same campaign reads three ways: the flow, the grid, and the calendar.',
+    seeAlso: ['brand', 'flight', 'folder', 'objective'],
   },
   flight: {
     term: 'Flight',

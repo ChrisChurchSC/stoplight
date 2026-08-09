@@ -8281,36 +8281,48 @@ export function FlowsView() {
                     generate, there is no "or" and this is simply the only way in. */}
                 <div className={`flow-doc${docDropOn === nt.id ? ' dropping' : ''}`}>
                   {canGenerate && <span className="flow-doc-or">or</span>}
-                  <div className="flow-doc-lead">
-                    <span className="flow-doc-title">
-                      {canGenerate ? 'Hand it the document that already says it' : `Hand this ${kindLabel} its document`}
-                    </span>
-                    <span className="flow-doc-help">
-                      {canGenerate ? (
-                        <>
-                          A .md, kept whole and read by the copy writer as what this card is. It
-                          becomes this {kindLabel} in Records, so every campaign that uses it reads
-                          the same document.
-                        </>
-                      ) : (
-                        <>
-                          A {kindLabel} is a real organisation, so its context has to come from a
-                          document rather than from a description: a generated account is a page of
-                          confident guesses about somebody real. The document becomes the account in
-                          Records. Nothing here reaches the copy until this card is connected.
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <button
-                    className="flow-fill-upload"
-                    disabled={busy}
-                    onClick={() => { docTargetRef.current = { cardId: nt.id, override: false }; docFileRef.current?.click() }}
-                  >
-                    {/* Named for what it writes to, because the two buttons here write to different
-                        things and a pair both saying "Upload a .md" would be a coin toss. */}
-                    {hasRecordDoc ? `Replace this ${kindLabel}'s document` : 'Upload a .md'}
-                  </button>
+                  {/* THE PITCH IS EMPTY-STATE COPY AND GOES WHEN THE STATE DOES.
+                      A heading offering to take a document, and a paragraph explaining what that
+                      would do, sitting above a document already attached, is the panel talking past
+                      the person: they did the thing it is selling. Worse, it said the consequence
+                      ("every campaign that uses it reads the same document") immediately above the
+                      line under the file that says the same thing about the actual file — the same
+                      fact twice, thirty words apart, in a column this narrow. What stays true once
+                      a document is attached is said by the document's own rows; this only earns its
+                      place when there is nothing there. */}
+                  {!ref && (
+                    <>
+                      <div className="flow-doc-lead">
+                        <span className="flow-doc-title">
+                          {canGenerate ? 'Hand it the document that already says it' : `Hand this ${kindLabel} its document`}
+                        </span>
+                        <span className="flow-doc-help">
+                          {canGenerate ? (
+                            <>
+                              A .md, kept whole and read by the copy writer as what this card is. It
+                              becomes this {kindLabel} in Records, so every campaign that uses it
+                              reads the same document.
+                            </>
+                          ) : (
+                            <>
+                              A {kindLabel} is a real organisation, so its context has to come from a
+                              document rather than from a description: a generated account is a page
+                              of confident guesses about somebody real. The document becomes the
+                              account in Records. Nothing here reaches the copy until this card is
+                              connected.
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <button
+                        className="flow-fill-upload"
+                        disabled={busy}
+                        onClick={() => { docTargetRef.current = { cardId: nt.id, override: false }; docFileRef.current?.click() }}
+                      >
+                        Upload a .md
+                      </button>
+                    </>
+                  )}
                   {/* The note belongs to whichever control last did something, and with the prompt
                       box gone on a Company card this is the only place a refusal ("that has to be a
                       .md") could be said at all. */}
@@ -8382,48 +8394,72 @@ export function FlowsView() {
                     </button>
                   </div>
                 )}
-                {/* THE OVERRIDE, offered only once there is something to override.
-                    A second document on a card is a real need (this campaign reads the persona
-                    differently) and a bad default: shown from the start it would read as the normal
-                    way to attach a file, and every upload would land somewhere only one campaign can
-                    see. So it appears under a document that already exists, phrased as the departure
-                    from it that it is. */}
-                {ref && target && (
-                  <div className="flow-doc-override">
-                    {doc.from === 'record' ? (
+                {/* EVERY WAY TO CHANGE THE DOCUMENT, on one row under it.
+                    Replacing it and overriding it for this campaign are the same kind of act — both
+                    hand the card a different file — and they were split across the panel, one above
+                    the document as a button and one below it as a link, with the document's whole
+                    text between them. Together, under the thing they act on, they read as the two
+                    options they are.
+
+                    The override is offered only once there is something to override: shown from the
+                    start it would read as the normal way to attach a file, and every upload would
+                    land somewhere only one campaign can see. */}
+                {ref && (
+                  <div className="flow-doc-actions">
+                    <button
+                      className="flow-doc-override-go"
+                      disabled={busy}
+                      onClick={() => { docTargetRef.current = { cardId: nt.id, override: false }; docFileRef.current?.click() }}
+                    >
+                      {/* Named for what it writes to, because the two controls here write to
+                          different things and a pair both saying "Upload a .md" would be a coin toss. */}
+                      {hasRecordDoc ? `Replace the ${kindLabel}'s document` : 'Upload a .md'}
+                    </button>
+                    {target && doc.from === 'record' && (
                       <button
                         className="flow-doc-override-go"
                         disabled={busy}
                         onClick={() => { docTargetRef.current = { cardId: nt.id, override: true }; docFileRef.current?.click() }}
                       >
-                        Use a different document for this campaign
+                        Use a different one for this campaign
                       </button>
-                    ) : (
-                      hasRecordDoc && (
-                        <button className="flow-doc-override-go" onClick={() => setCardReference(nt.id, null)}>
-                          Go back to the {kindLabel}&rsquo;s own document
-                        </button>
-                      )
+                    )}
+                    {target && doc.from === 'card' && hasRecordDoc && (
+                      <button className="flow-doc-override-go" onClick={() => setCardReference(nt.id, null)}>
+                        Go back to the {kindLabel}&rsquo;s own document
+                      </button>
                     )}
                   </div>
                 )}
-                {/* AND WHAT IT SAYS. A filename and a character count tell you a file is attached;
-                    they do not tell you it is the right file, that the paste landed whole, or what
-                    the writer is about to be told. This is the card's context — the panel cannot
-                    show everything else about the card and then keep its one authoritative source
-                    folded up behind its own name.
+                {/* AND WHAT IT SAYS — ONE CLICK AWAY RATHER THAN ALWAYS UNDERFOOT.
+                    A filename and a character count tell you a file is attached; they do not tell
+                    you it is the right file, that the paste landed whole, or what the writer is
+                    about to be told. That argument is why the text is here at all, and it is
+                    satisfied by a control that opens it. It did NOT survive being always-open: a
+                    brand strategy runs to twenty thousand characters, so the inspector's own
+                    controls sat below a scroll box of somebody else's prose, and every visit to
+                    this card began by scrolling past the document to reach anything that acts on
+                    it. Shown by default, the source stopped being a source and became the panel.
+
+                    Closed by default and labelled with what it costs to open, so the choice is
+                    informed rather than a surprise. <details> rather than state, because the
+                    browser's own disclosure is keyboard- and screen-reader-correct for free, and
+                    this is exactly the widget it is for.
 
                     SHOWN EXACTLY AS STORED, markdown marks and all, rather than rendered into
                     headings and bullets. What is in this box is character-for-character what the
                     writer receives, and a prettier version would be a second reading of the document
                     sitting where the real one should be — you would be checking the rendering, not
                     the source. It is also the honest way to show the cut: the text simply stops
-                    where the writer's copy stops.
-
-                    Bounded and scrolled rather than truncated. A brief runs to thousands of words
-                    and the panel is a column, so the box takes a screenful and the rest is a scroll
-                    away; nothing is hidden, it is only further down. */}
-                {ref && <div className="flow-fill-doc-body">{ref.text}</div>}
+                    where the writer's copy stops. */}
+                {ref && (
+                  <details className="flow-doc-read">
+                    {/* The length is on the chip a line above; saying it again here would be the
+                        same number twice in forty pixels. */}
+                    <summary className="flow-doc-read-sum">Read the document</summary>
+                    <div className="flow-fill-doc-body">{ref.text}</div>
+                  </details>
+                )}
                 </div>
               </div>
             )
