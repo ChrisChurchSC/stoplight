@@ -80,7 +80,6 @@ import { flushPersistedState } from '../adapters/state/workspaceState'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
 import { MiniSheet } from './MiniSheet'
-import { ObjectCardPicker, type ObjectCardOption } from './ObjectCardPicker'
 import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
@@ -94,6 +93,7 @@ import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { FlowsHome } from './FlowsHome'
 import { apiFetch } from '../lib/apiFetch'
+import { AddRecordMenu, type ObjectCardOption } from './AddRecordMenu'
 
 /**
  * Flows — the campaign home + builder. A switcher lists the brand's campaigns; picking
@@ -4074,10 +4074,17 @@ export function FlowsView() {
     const lowest = taken.reduce((m, r) => Math.max(m, r.y + r.h), pad)
     return { x: pad, y: lowest + pad }
   }
-  const addObject = (kind: CanvasObjectKind) => {
+  /**
+   * `refId` because a card is now born pointing at something. The picker that used to hang off the
+   * card's face is gone (see palRecordMenu), so the record is chosen where the card is chosen and
+   * arrives with it. Still optional: the kinds with no records behind them — a Note, a Data source —
+   * drop exactly as they always did, and the programmatic callers (the agent, a document import, a
+   * proof point lifted off a data set) pass theirs the moment they know it.
+   */
+  const addObject = (kind: CanvasObjectKind, refId?: string) => {
     const id = freshObjectId()
     const spot = freeSlot()
-    setObjects((n) => [...n, { id, kind, text: '' }])
+    setObjects((n) => [...n, { id, kind, text: '', refId }])
     // Added while inside a smart object: it belongs to that object, not the outer board.
     if (openPlacementId) setPlacements((gs) => gs.map((g) => (g.id === openPlacementId ? { ...g, memberIds: [...g.memberIds, id] } : g)))
     // Provisional position; the pendingPlace effect corrects it to `spot` once the card is
@@ -4192,9 +4199,15 @@ export function FlowsView() {
        * first, in the order the drag gesture and the chat both use it; it no-ops on a card that names
        * no record yet, and picking one on the card pushes it through from there.
        */
-      const id = standing === 'unwired' && cardId ? cardId : addObject(kind)
-      attachToCampaign(id)
-      setConnectors((cs) => (cs.some((x) => x.from === id && x.to === 'campaign') ? cs : [...cs, { from: id, to: 'campaign' }]))
+      const wire = (id: string) => {
+        attachToCampaign(id)
+        setConnectors((cs) => (cs.some((x) => x.from === id && x.to === 'campaign') ? cs : [...cs, { from: id, to: 'campaign' }]))
+      }
+      // An existing card that names a record and is simply loose: wire the one that is already there.
+      // Otherwise the toolbar's record step runs first and the wire is made on the card it produces —
+      // a card added blank would answer "no audience is wired" with an audience that still names none.
+      if (standing === 'unwired' && cardId) wire(cardId)
+      else startAddObject(kind, wire)
     })
     return true
   }
@@ -4291,6 +4304,18 @@ export function FlowsView() {
   /** Which card is currently naming a new record (null = none). */
   const [creatingFor, setCreatingFor] = useState<string | null>(null)
   const [creatingName, setCreatingName] = useState('')
+  /**
+   * WHICH KIND'S RECORD LIST IS OPEN ON THE TOOLBAR — the one step between pressing a card kind and
+   * that card landing on the board. Null the rest of the time, which is nearly always.
+   */
+  const [addRecordFor, setAddRecordFor] = useState<CanvasObjectKind | null>(null)
+  const [addRecordQuery, setAddRecordQuery] = useState('')
+  /**
+   * What to do with the card once the record step names one — wire it to the brief, usually. A ref
+   * rather than state because the only reader is the click that closes the menu, and re-rendering
+   * the toolbar to remember a callback would be a render for nobody.
+   */
+  const addAfterRef = useRef<((id: string) => void) | null>(null)
   const submitCreate = (nt: CanvasObject) => {
     const made = createRecordForKind(nt.kind, creatingName)
     setCreatingFor(null)
@@ -8985,6 +9010,9 @@ export function FlowsView() {
     key: string,
     main: { title: string; tone: string; icon: ReactNode; onClick: () => void },
     items: { label: string; hint?: string; tone: string; icon: ReactNode; onClick: () => void }[],
+    // The kinds this entry can add, so the record list can anchor to the button that opened it —
+    // whether it was reached by the main button or from behind the caret.
+    kinds: CanvasObjectKind[] = [],
   ) => (
     <span className="flow-tb-palwrap" key={key}>
       <button className="flow-tb-pal" style={{ color: main.tone }} title={main.title} onClick={main.onClick}>
@@ -9015,23 +9043,86 @@ export function FlowsView() {
           </div>
         </>
       )}
+      {kinds.map((k) => <Fragment key={k}>{palRecordMenu(k)}</Fragment>)}
     </span>
   )
 
+  /**
+   * ADDING A CARD IS CHOOSING A RECORD, and this is the step where that happens.
+   *
+   * The list used to hang off the card's own face: you dropped a blank card, pressed it, and a menu
+   * opened over the board — covering the cards around the one you were editing, and the only way a
+   * card ever got a record. The list itself was fine. Where it sat was not: a card that means nothing
+   * until you press it is a control pretending to be a card, and the menu had to fight the canvas for
+   * every event it received (a drag, a click, Escape, a press that lands on a card behind it).
+   *
+   * So it has moved to the moment it answers — the toolbar, between naming the kind and the card
+   * landing. A card now arrives meaning something, and its face is a face. Kinds with no records
+   * behind them (a Note, a Data source) skip this entirely and drop as they always did.
+   */
+  const startAddObject = (kind: CanvasObjectKind, after?: (id: string) => void) => {
+    if (!objectOptions(kind)) { after?.(addObject(kind)); return }
+    setAddRecordQuery('')
+    setAddRecordFor(kind)
+    addAfterRef.current = after ?? null
+  }
+  const finishAddObject = (kind: CanvasObjectKind, refId?: string): string => {
+    const id = addObject(kind, refId)
+    addAfterRef.current?.(id)
+    addAfterRef.current = null
+    return id
+  }
+  const palRecordMenu = (kind: CanvasObjectKind) => {
+    if (addRecordFor !== kind) return null
+    const noun = OBJECT_META[kind].label.toLowerCase()
+    const close = () => { setAddRecordFor(null); setAddRecordQuery(''); addAfterRef.current = null }
+    return (
+      <AddRecordMenu
+        options={objectOptions(kind) ?? []}
+        noun={noun}
+        plural={pluralOf(noun)}
+        /* "No audiences yet" is false on a board with no brand bound: there may be plenty, they just
+           belong to brands this campaign has not named. Saying that points at the fix — wire a Brand
+           card — instead of at a library the user is told is empty and can see is not. The Brand card
+           is exempt, because it IS that gesture and has nothing to wait for. */
+        emptyNote={
+          brand || kind === 'brand'
+            ? `No ${pluralOf(noun)} yet. Make one below and it joins the library.`
+            : 'Connect a Brand card first. These come from the brand this campaign writes as.'
+        }
+        canCreate={CREATABLE_KINDS.has(kind)}
+        query={addRecordQuery}
+        onQuery={setAddRecordQuery}
+        onPick={(id) => { setAddRecordFor(null); setAddRecordQuery(''); finishAddObject(kind, id) }}
+        onCreate={() => {
+          setAddRecordFor(null)
+          setAddRecordQuery('')
+          setCreatingName('')
+          setCreatingFor(finishAddObject(kind))
+        }}
+        onClose={close}
+      />
+    )
+  }
   // One palette icon per card kind. Keeps its PER-KIND tone: the icon is all you get at this
   // size, so hue is doing real scanning work here (the card chrome is what goes role-coloured).
   // Name and description come from the registry, so the tooltip and the card can't drift.
+  //
+  // Wrapped even though it has no caret: the record list anchors to the button that opened it, and
+  // .flow-tb-palwrap is the positioned parent .flow-tb-palmenu measures from.
   const palBtn = (kind: CanvasObjectKind) => (
-    <button
-      key={kind}
-      className="flow-tb-pal"
-      style={{ color: OBJECT_META[kind].tone }}
-      title={`${OBJECT_META[kind].label}. ${OBJECT_META[kind].menuDesc}.`}
-      aria-label={`Add a ${OBJECT_META[kind].label.toLowerCase()} object`}
-      onClick={() => addObject(kind)}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[kind].icon}</svg>
-    </button>
+    <span className="flow-tb-palwrap" key={kind}>
+      <button
+        className="flow-tb-pal"
+        style={{ color: OBJECT_META[kind].tone }}
+        title={`${OBJECT_META[kind].label}. ${OBJECT_META[kind].menuDesc}.`}
+        aria-label={`Add a ${OBJECT_META[kind].label.toLowerCase()} object`}
+        onClick={() => startAddObject(kind)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[kind].icon}</svg>
+      </button>
+      {palRecordMenu(kind)}
+    </span>
   )
 
   /**
@@ -10607,53 +10698,40 @@ export function FlowsView() {
                       )
                     }
                     const picked = nt.refId ? opts.find((o) => o.id === nt.refId) : undefined
+                    /**
+                     * THE FACE, WHICH IS NOW ONLY A FACE.
+                     *
+                     * This was a button that opened the record list over the board. The list has moved
+                     * to the toolbar, where the card is chosen (see palRecordMenu), so a card arrives
+                     * already meaning something and there is nothing here left to press. What is left
+                     * is what the card SAYS: the record's name, and the one line under it.
+                     *
+                     * The card's own name still wins where it has one; otherwise the record it points
+                     * at names it, which is why the card carries no name field of its own.
+                     *
+                     * A Brand card carries no one-liner half the time and still decides a great deal,
+                     * so it says what it does rather than sitting there with a blank line under it.
+                     * A card handed a .md instead of a record is not contributing nothing either — it
+                     * is contributing that document, and the face says so instead of denying it.
+                     */
+                    const detail = picked
+                      ? picked.detail || (nt.kind === 'brand' ? 'Sets the brand this is written as' : undefined)
+                      : nt.reference?.text.trim()
+                        ? `From ${nt.reference.name}`
+                        : undefined
+                    const shown = objectName(nt, picked?.label)
                     return (
-                      <ObjectCardPicker
-                        options={opts}
-                        refId={nt.refId}
-                        // The card's own name still wins where it has one; otherwise the record it
-                        // points at names it, which is the whole reason the card stopped carrying a
-                        // name field of its own.
-                        name={objectName(nt, picked?.label)}
-                        // A brand card carries no one-liner half the time and still decides a great
-                        // deal, so it says what it does rather than sitting there with a blank line
-                        // under it. Same sentence the inspector's context list uses, for the same
-                        // reason.
-                        // A card handed a .md instead of a record is not contributing nothing —
-                        // it is contributing that document. The face says where its content comes
-                        // from instead of denying it has any.
-                        detail={
-                          picked
-                            ? picked.detail || (nt.kind === 'brand' ? 'Sets the brand this is written as' : undefined)
-                            : nt.reference?.text.trim()
-                              ? `From ${nt.reference.name}`
-                              : undefined
-                        }
-                        noun={noun}
-                        article={articleFor(noun)}
-                        plural={pluralOf(noun)}
-                        tone={meta.tone}
-                        /* "No audiences yet" is false on a board with no brand bound: there may be
-                           plenty, they just belong to brands this campaign has not named. Saying
-                           that points at the fix — wire a Brand card — instead of at a library the
-                           user is told is empty and can see is not. The Brand card is exempt,
-                           because it IS that gesture and has nothing to wait for. */
-                        emptyNote={
-                          brand || nt.kind === 'brand'
-                            ? `No ${pluralOf(noun)} yet. Make one below and it joins the library.`
-                            : 'Connect a Brand card first. These come from the brand this campaign writes as.'
-                        }
-                        // Every record-linked card can make the thing it needs. Without this a fresh
-                        // brand dead-ends here with nowhere to go.
-                        canCreate={CREATABLE_KINDS.has(nt.kind)}
-                        onPick={(id) => {
-                          setObjectRef(nt.id, id)
-                          // Re-attach so a changed record reaches the campaign without redrawing the edge.
-                          if (isAttached(nt.id)) attachToCampaign(nt.id)
-                        }}
-                        onCreate={() => { setCreatingName(''); setCreatingFor(nt.id) }}
-                        onOpen={() => { setSel(nt.id); setSelected(new Set()) }}
-                      />
+                      <div className="flow-pick">
+                        <div className="flow-pick-face" title={shown ? `${shown}${detail ? `: ${detail}` : ''}` : undefined}>
+                          <span className="flow-pick-name">{shown || <em>Nothing picked yet</em>}</span>
+                          {/* A card with nothing behind it says so plainly. It is on the board, it is
+                              possibly wired to the campaign, and it is still sending the writer
+                              nothing — worth reading from the board rather than discovering in the
+                              copy. Reachable now only on a card made before the record moved to the
+                              add step, or one whose record was deleted out from under it. */}
+                          <span className="flow-pick-sub">{detail || (nt.refId ? '' : 'Contributes nothing yet')}</span>
+                        </div>
+                      </div>
                     )
                   })()}
                   {/* THE SHAPE, ON THE CARD. Every other input card is fully described by the record
@@ -11152,7 +11230,7 @@ export function FlowsView() {
               if (id === 'brand' || id === 'fillBrand' || id === 'connect') {
                 const card = objects.find((o) => o.kind === 'brand')
                 if (card) setSel(card.id)
-                else addObject('brand')
+                else startAddObject('brand')
                 return
               }
               if (id === 'deliverables') { setPickGroup(null); openAddDeliverable(); return }
@@ -12238,15 +12316,16 @@ export function FlowsView() {
                 title: `${OBJECT_META.brand.label}. ${OBJECT_META.brand.menuDesc}.`,
                 tone: OBJECT_META.brand.tone,
                 icon: OBJECT_META.brand.icon,
-                onClick: () => addObject('brand'),
+                onClick: () => startAddObject('brand'),
               },
               (['brand', 'product'] as CanvasObjectKind[]).map((k) => ({
                 label: OBJECT_META[k].label,
                 hint: OBJECT_META[k].menuDesc,
                 tone: OBJECT_META[k].tone,
                 icon: OBJECT_META[k].icon,
-                onClick: () => addObject(k),
+                onClick: () => startAddObject(k),
               })),
+              ['brand', 'product'],
             )}
             {/* Only while the board has no Brand card. That is the one state where the campaign
                 cannot say whose voice it is written in, and the toolbar is where the answer is. */}
@@ -12261,7 +12340,7 @@ export function FlowsView() {
                 'A campaign belongs to a brand, and the writing reads that brand\u2019s voice, audiences and proof.',
                 'Add a Brand card and connect it to the campaign brief. That connection is what binds the campaign, and until it is made there is nothing to write from.',
               ]}
-              cta={{ label: 'Add a Brand card', onClick: () => addObject('brand') }}
+              cta={{ label: 'Add a Brand card', onClick: () => startAddObject('brand') }}
             />
           </div>
           {/* One entry per family: the button drops that family's most common card, the caret
@@ -12277,15 +12356,16 @@ export function FlowsView() {
                 title: `${OBJECT_META[lead].label}. ${OBJECT_META[lead].menuDesc}.`,
                 tone: OBJECT_META[lead].tone,
                 icon: OBJECT_META[lead].icon,
-                onClick: () => addObject(lead),
+                onClick: () => startAddObject(lead),
               },
               kinds.map((k) => ({
                 label: OBJECT_META[k].label,
                 hint: OBJECT_META[k].menuDesc,
                 tone: OBJECT_META[k].tone,
                 icon: OBJECT_META[k].icon,
-                onClick: () => addObject(k),
+                onClick: () => startAddObject(k),
               })),
+              kinds,
             )
           })}
           {/* PATTERN, on the bar rather than behind the `says` caret. It is the kind you add while
@@ -12384,6 +12464,12 @@ export function FlowsView() {
                   const id = addObject(kind)
                   setConnectors((c) => (c.some((x) => x.from === id && x.to === rowId) ? c : [...c, { from: id, to: rowId }]))
                   setAssetPick(null)
+                  // This row is the drawer's "＋ New …", so the record does not exist yet and there is
+                  // nothing to choose between: the card lands already asking for the name, the same
+                  // one-step move the toolbar's "+ New" makes. It asks on the CARD, so the question is
+                  // waiting on the canvas rather than answered from a toolbar this tab is not showing.
+                  setCreatingName('')
+                  setCreatingFor(id)
                   setGridPick({ kind, cardId: id, label: OBJECT_META[kind].label })
                 }}
                 /**
