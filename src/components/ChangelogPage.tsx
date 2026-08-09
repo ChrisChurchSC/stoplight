@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.77',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A Voice card called something on the canvas is called the same thing in the grid. It was reading “Untitled” there — the card named on the board, the same card nameless one tab across, which is the one disagreement the Made from column exists to prevent. The cause is a placeholder that escaped. Writing into a card that has no record yet mints one for it, deliberately without a name, because typing a tone into a card should not start by naming a thing; the record picker then lists that record as “Untitled” so its row can be pressed. That word belongs to a list with a blank row in it, and the grid was resolving its chips through the same list, so a placeholder for a picker became the answer to what the asset is made from — beating the name written on the card.',
+          'And where nothing is named on either side it now says which kind of nothing. “Untitled voice” for a record that is picked, reaching the writer, and has no name; “No voice picked” only when there is genuinely no record. Reported for Voice, and every kind a card can mint a record for was doing the same.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.76',
     dateLabel: 'August 9, 2026',
     groups: [

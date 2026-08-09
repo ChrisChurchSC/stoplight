@@ -128,3 +128,54 @@ describe('the audience the Made from column reports', () => {
     expect(madeFromText()).toContain('No audience picked')
   })
 })
+
+/**
+ * A RECORD WITH NO NAME IS NOT A RECORD CALLED "UNTITLED".
+ *
+ * The inspector mints a record the moment you write a field into a card that has none — deliberately
+ * nameless, because dropping a card and typing a tone into it should not require naming a thing
+ * first. The picker lists that record as "Untitled" so the row can be pressed, which is a placeholder
+ * for a list and not an answer to "what is this asset made from" — and the Made from column resolved
+ * its chip text through that same list. So a Voice card sat on the canvas under the name you gave it
+ * and appeared in the grid as "Untitled": the two surfaces disagreeing about one card, which is the
+ * one thing this column exists to prevent.
+ *
+ * Reported for Voice; nothing here is voice-specific, and every kind the inspector can mint for was
+ * doing it.
+ */
+describe('a card whose record has no name of its own', () => {
+  const voiceBoard = (over: { cardName?: string } = {}): FlowBoard => ({
+    key: CAMPAIGN,
+    objects: [{ id: 'v1', kind: 'voice', text: '', refId: 'voice_1', name: over.cardName }],
+    placements: [],
+    pos: {},
+    connectors: [{ from: 'v1', to: 'campaign' }],
+  })
+  /** As ensureVoiceFor leaves it: every field written, no name. */
+  const namelessVoice = { id: 'voice_1', name: '', brand: BRAND, tone: 'Plain, unhurried' }
+
+  it('reads as the card’s own name, the way the canvas reads it', () => {
+    seed({ flowBoards: [voiceBoard({ cardName: 'Storm desk' })], voices: [namelessVoice] })
+    render()
+    expect(madeFromText()).toContain('Storm desk')
+    expect(madeFromText()).not.toContain('Untitled')
+  })
+
+  /** With nothing named on either side, it says so — and does not claim nothing is picked. */
+  it('says the record is untitled, not that none is picked', () => {
+    seed({ flowBoards: [voiceBoard()], voices: [namelessVoice] })
+    render()
+    expect(madeFromText()).toContain('Untitled voice')
+    expect(madeFromText()).not.toContain('No voice picked')
+  })
+
+  /** And a record that HAS a name still wins over the card, which is the existing order. */
+  it('still prefers the record’s name when it has one', () => {
+    seed({
+      flowBoards: [voiceBoard({ cardName: 'Storm desk' })],
+      voices: [{ ...namelessVoice, name: 'Plain-spoken' }],
+    })
+    render()
+    expect(madeFromText()).toContain('Plain-spoken')
+  })
+})
