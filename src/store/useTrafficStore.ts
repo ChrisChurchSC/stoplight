@@ -6244,14 +6244,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     })
   },
 
-  /** The copy the post actually went out with. Keyed like `messaging` so the two diff field by field. */
+  /**
+   * The copy the post actually went out with. Keyed like `messaging` so the two diff field by field.
+   *
+   * MERGED AGAINST WHAT IS ALREADY THERE, not rebuilt from the arguments.
+   *
+   * `live` holds two unrelated things — the copy, and the words read off the creative — and they are
+   * edited by different controls. This took both as parameters and wrote whatever it was handed, so
+   * every caller that knew about one and not the other silently deleted the other: correcting a typo
+   * in any diff textarea wiped "Words on the creative", because that box is somewhere else on the
+   * panel and the textarea has no reason to know it exists. A store action that requires each caller
+   * to restate the fields it is not touching is one that will lose them again.
+   *
+   * `undefined` means "not mine to change" and `''` means "clear it", which is the distinction that
+   * lets the creative box empty itself while the copy boxes leave it alone.
+   */
   setLiveCopy: async (id, copy, extractedCopy) => {
     const row = get().rows.find((r) => r.id === id)
     if (!row) return
     const kept = Object.fromEntries(Object.entries(copy).filter(([, v]) => v.trim()))
+    const creative = extractedCopy !== undefined ? extractedCopy.trim() : row.live?.extractedCopy
     const next = {
       ...(Object.keys(kept).length ? { copy: kept } : {}),
-      ...(extractedCopy?.trim() ? { extractedCopy: extractedCopy.trim() } : {}),
+      ...(creative ? { extractedCopy: creative } : {}),
       fetchedAt: Date.now(),
     }
     // An empty block is cleared off the row rather than stored, so an asset nobody has read back

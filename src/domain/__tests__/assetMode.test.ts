@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { assetMode, copyDiff, copyDiffStat, effectiveMessaging, isLiveAsset, isPlannedAsset } from '../assetMode'
+import { reconciliationStat } from '../contentSignals'
 import type { MessagingField } from '../messaging'
 import type { TrafficRow } from '../types'
 
@@ -175,5 +176,32 @@ describe('the copy a reader should be looking at', () => {
   it('ignores live copy on an asset that has not gone out', () => {
     const r = row({ messaging: planned, live: { copy: { headline: 'Never ran' } } })
     expect(effectiveMessaging(r)).toEqual(planned)
+  })
+})
+
+/**
+ * HOW MANY PLANS HAVE BECOME RECORDS.
+ *
+ * The stat filtered to planned cards and counted reconciledAt inside that set, which can only ever
+ * be zero: reconciling a card is what stops it being planned. Invisible while nothing wrote
+ * reconciledAt; attaching a live post writes it now, so the count would have sat at nought while the
+ * work was being done, recommending forever that somebody start it.
+ */
+describe('how much of the plan has been reconciled', () => {
+  const planned = row({ id: 'a' })
+  const reconciled = row({ id: 'b', status: 'posted', sourceUrl: 'https://x.com/i/status/1', source: 'social-live', reconciledAt: 1700000000000 })
+
+  it('counts a reconciled card, which the old reading could not', () => {
+    expect(reconciliationStat([planned, reconciled])).toEqual({ planned: 2, reconciled: 1 })
+  })
+
+  it('is nought of nought with nothing to reconcile', () => {
+    expect(reconciliationStat([])).toEqual({ planned: 0, reconciled: 0 })
+  })
+
+  /** A card that arrived from an import was never a plan of ours, so it is in neither number. */
+  it('leaves imported content out of both halves', () => {
+    const imported = row({ id: 'c', sourceUrl: 'https://acme.com/post', source: 'imported' })
+    expect(reconciliationStat([planned, imported])).toEqual({ planned: 1, reconciled: 0 })
   })
 })
