@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { liveRecordUsage, splitRecordsByUse } from '../domain/audienceUsage'
+import { undefinedRecords } from '../domain/recordDefined'
 import { canvasBrandScope } from '../domain/brand'
 import { MESSAGE_COLUMNS, MESSAGE_FIELDS, MESSAGE_STATUSES } from '../domain/message'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -46,6 +47,14 @@ export function MessagesView() {
   // (archived campaigns, boards outliving deleted campaigns) do not get a vote.
   const usage = liveRecordUsage({ rows: allRows, boards: flowBoards, smartObjects, campaigns: campaignList })
   const { unused } = splitRecordsByUse(scoped, usage, { refType: 'message', cardKind: 'message' })
+  /** The ones that are only a name — the same rule the Audiences page applies. See hasDefinition. */
+  const undefined_ = undefinedRecords('message', scoped)
+  const [confirmUndefined, setConfirmUndefined] = useState(false)
+  const runRemoveUndefined = () => {
+    const live = useTrafficStore.getState().messages.filter((m) => !m.brand || m.brand === brand)
+    for (const m of undefinedRecords('message', live)) deleteMessage(m.id)
+    setConfirmUndefined(false)
+  }
   const [confirmSweep, setConfirmSweep] = useState(false)
   const runSweep = () => {
     // Live read: the confirm sat open while the store may have moved on.
@@ -78,6 +87,34 @@ export function MessagesView() {
 
   return (
     <>
+    {confirmUndefined && (
+      <>
+        <div className="drawer-scrim" onClick={() => setConfirmUndefined(false)} />
+        <div className="confirm-modal" role="dialog" aria-label="Remove messages that are only a name">
+          <strong className="confirm-title">
+            Remove {undefined_.length} message{undefined_.length === 1 ? '' : 's'} with nothing but a name?
+          </strong>
+          <p className="confirm-text">
+            A message has to say something beyond what it is called — the angle it argues, or an
+            uploaded document — or the copy is written from a label and a picker cannot tell it from
+            the one beside it. These say nothing. Some may still be referenced by live work: those
+            assets keep the name and lose the record, which is the same state as deleting one by hand.
+          </p>
+          <p className="confirm-text" style={{ maxHeight: 180, overflowY: 'auto' }}>
+            {undefined_.map((m) => m.name || 'Untitled').join(' · ')}
+          </p>
+          <div className="confirm-foot">
+            <button className="btn sm" onClick={() => setConfirmUndefined(false)}>
+              Cancel
+            </button>
+            <span className="spacer" />
+            <button className="btn sm danger" onClick={runRemoveUndefined}>
+              Remove {undefined_.length}
+            </button>
+          </div>
+        </div>
+      </>
+    )}
     {confirmSweep && (
       <>
         <div className="drawer-scrim" onClick={() => setConfirmSweep(false)} />
@@ -143,6 +180,11 @@ export function MessagesView() {
       rows={scoped}
       noun={['message', 'messages']}
       headerAction={[
+        // First, for the reason it is first on Audiences: a record that is only a name is a worse
+        // problem than one nothing uses, and some of these are in use.
+        ...(undefined_.length
+          ? [{ label: `Only a name (${undefined_.length})`, run: () => setConfirmUndefined(true) }]
+          : []),
         ...(unused.length ? [{ label: `Clean up unused (${unused.length})`, run: () => setConfirmSweep(true) }] : []),
         // Offered whenever the shelf holds anything: starting fresh is a decision about the whole
         // shelf, not about the unused corner of it.
