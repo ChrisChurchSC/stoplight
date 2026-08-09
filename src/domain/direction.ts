@@ -70,13 +70,30 @@ export const DIRECTION_KEYS: Partial<Record<string, DirectionKey[]>> = {
   audience: ['pain', 'objection'],
   message: ['claim', 'notThis'],
   'proof-point': ['figure'],
-  voice: ['likeThis', 'avoidSay'],
+  // Voice asks nothing. A Voice card names a voice record, and that record already carries the
+  // register and the words to avoid for every campaign that uses it; asking the card for a sample
+  // line and a banned-words list put the same two questions on the board in a second vocabulary,
+  // per campaign, where nothing could compare them. See RETIRED_DIRECTION below.
   trigger: ['justDid', 'ask'],
   company: ['situation'],
   person: ['caresAbout'],
   concept: ['claim', 'likeThis'],
   season: ['moment', 'permission'],
   'data-source': ['figure'],
+}
+
+/**
+ * FIELDS A KIND USED TO ASK FOR, and no longer sends.
+ *
+ * A card keeps every instruction it was ever given, so withdrawing a field from the inspector is
+ * only half the job: without this, its old answers would sit on the card, invisible in the panel
+ * and still shaping the copy. directionOf reads this and drops them.
+ *
+ * The values are NOT deleted from the card. Nothing is lost if a field comes back, and a stored
+ * string that reaches nothing is harmless in a way that a hidden instruction is not.
+ */
+export const RETIRED_DIRECTION: Partial<Record<string, DirectionKey[]>> = {
+  voice: ['likeThis', 'avoidSay'],
 }
 
 export interface DirectionEntry {

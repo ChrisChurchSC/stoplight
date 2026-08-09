@@ -8533,6 +8533,40 @@ export function FlowsView() {
               </>
             )
           })()}
+          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT, said where you are already looking.
+              It existed only as ⌘⇧B and a right-click item, which is to say it existed for people
+              who already knew: nothing on the panel that describes a card mentioned that the card
+              can be kept. This is the same convertSelection the menu calls, so there is one way to
+              make an object and two doors onto it.
+
+              Only for a loose card. One already inside a smart object is saved by definition, and
+              the object's own panel is where its library rung is decided (see "Add to the brand
+              library" there). */}
+          {!placementOf(nt.id) && (() => {
+            // The same pool convertSelection will actually act on, so the label cannot promise one
+            // card and bundle three. Calling it with no state changes first, because it reads the
+            // selection from this render and a setSel here would not have landed by then.
+            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
+              (id) => objects.some((o) => o.id === id) && !placementOf(id),
+            ).length
+            if (!n) return null
+            return (
+              <>
+                <button
+                  className="flow-insp-open subtle"
+                  style={{ marginTop: 12 }}
+                  title="Keep these cards as a smart object you can place on other campaigns"
+                  onClick={() => convertSelection()}
+                >
+                  {n > 1 ? `Save these ${n} cards as a smart object` : 'Save as a smart object'}
+                </button>
+                <div className="flow-inspect-note" style={{ marginTop: 6 }}>
+                  Kept on this campaign to start with. Its own panel can add it to the brand library,
+                  where every campaign can reach it.
+                </div>
+              </>
+            )
+          })()}
           {nt.kind === 'data-source' &&
           (() => {
             const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
