@@ -8275,6 +8275,23 @@ export function FlowsView() {
             const hasRecordDoc = !!(target?.current.reference as ObjectReference | undefined)?.text.trim()
             /** The object this card names, once it names one. Blank until a document or a Generate mints it. */
             const recordName = target ? String(target.current[target.nameKey] ?? '').trim() : ''
+            /**
+             * WHAT THE RECORD ALREADY SAYS. The fields Generate writes, read straight off the
+             * record, so this is exactly what the copy writer will be handed. Computed here because
+             * two things below need it: the readout, and the prompt's own heading, which cannot go
+             * on saying "Describe this audience" over an audience that is already described.
+             */
+            const said = (() => {
+              if (!target) return [] as { brief: string; value: string }[]
+              const fmt = (v: unknown): string =>
+                Array.isArray(v) ? v.filter(Boolean).map(String).join(', ') : typeof v === 'string' ? v.trim() : ''
+              return (fields ?? [])
+                // The name heads the panel two rows up; repeating it would spend the readout's first
+                // line saying what the title already said.
+                .filter((f) => f.key !== 'name')
+                .map((f) => ({ brief: f.brief, value: fmt(target.current[f.key]) }))
+                .filter((f) => f.value)
+            })()
             const kindLabel = (OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()
             return (
               <div
@@ -8312,6 +8329,26 @@ export function FlowsView() {
                     inside it, so the box you type in opened with somebody else's prose in it. The
                     document is its own object now and it lives underneath, where it reads as what it
                     is — a second, separate answer to the same question. */}
+                {/* WHAT THE RECORD ALREADY SAYS, when it says anything.
+                    Point a blank card at an audience you wrote months ago and the panel went on
+                    asking you to describe it: an empty box headed "Describe this audience", above a
+                    record full of pains and objections it never mentioned. The card had flipped to
+                    the record and the panel had not, so the one surface that is supposed to tell you
+                    what a card carries was the only one that did not know.
+                    The fields are the ones Generate writes (FILLABLE), read straight off the record,
+                    so this says exactly what the copy writer will be handed. Editing stays in
+                    Records, as it has since the forms came out of here. */}
+                {canGenerate && !!said.length && (
+                  <div className="flow-recordsays">
+                    <span className="flow-fill-title">What this {kindLabel} says</span>
+                    {said.map((f) => (
+                      <div key={f.brief} className="flow-recordsays-row">
+                        <span className="flow-recordsays-k">{f.brief}</span>
+                        <span className="flow-recordsays-v">{f.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {canGenerate && target && (
                   <div className="flow-fillbox">
                     {/* THE ASK, AND NOTHING ELSE.
@@ -8322,7 +8359,11 @@ export function FlowsView() {
                         panel this narrow the instruction is the only part that has to be legible at
                         a glance. */}
                     <div className="flow-fill-head">
-                      <span className="flow-fill-title">Describe this {kindLabel}</span>
+                      {/* Generate fills only what is still empty, so over a record that already
+                          says something the ask is the gaps, not the whole thing. */}
+                      <span className="flow-fill-title">
+                        {said.length ? `Add to this ${kindLabel}` : `Describe this ${kindLabel}`}
+                      </span>
                     </div>
                     <textarea
                       className="flow-fill-input"
