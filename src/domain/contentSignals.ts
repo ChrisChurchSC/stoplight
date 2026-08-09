@@ -1,4 +1,5 @@
 import { resolveAudienceId } from './assetProfile'
+import { isPlannedAsset } from './assetMode'
 import { CHANNELS } from './channels'
 import type { ChannelId, TrafficRow } from './types'
 
@@ -730,9 +731,14 @@ export interface ReconcileStat {
   planned: number
   reconciled: number
 }
-/** A planned card is one that hasn't posted and wasn't ingested (generated/authored/blank). */
-export const isPlannedCard = (r: TrafficRow): boolean =>
-  r.status !== 'posted' && (!r.source || r.source === 'generated' || r.source === 'authored')
+/**
+ * A planned card is one that has not become real yet.
+ *
+ * Now one rule in one place (domain/assetMode.ts), because the mode switch on the asset inspector
+ * was about to be the third statement of it and PrioritiesView's isLibraryItem was already the
+ * second. The two disagreed: this one called an `imported` row planned, that one called it live.
+ */
+export const isPlannedCard = (r: TrafficRow): boolean => isPlannedAsset(r)
 export function reconciliationStat(rows: TrafficRow[]): ReconcileStat {
   const planned = rows.filter(isPlannedCard)
   return { planned: planned.length, reconciled: planned.filter((r) => typeof r.reconciledAt === 'number').length }

@@ -23,6 +23,21 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.79',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'An asset card can now be the record of a post that actually ran. The panel opens on one of two faces: Planner, which is everything it has always been, and Active, which is the same asset once it exists in the world. Paste the link to the published post and the card stops being a plan for something and starts being the account of it — where it went out, when, what it said, and what it did.',
+          'The plan is kept, which is the whole point. The copy the post actually ran with goes in beside what was written for it, never over it, and the panel compares them component by component: "3 of 5 changed between the plan and the post" is a thing this could not previously say about any campaign, because one of the two answers was always being thrown away. Numbers are typed in for now and every reading is kept rather than overwritten, so a figure entered today is a point on a trend rather than a value that erases last week.',
+          'Which face you get is read off the asset rather than stored on it: a card with a live post opens Active, everything else opens Planner, and pressing Active on a plan is how you attach the link. Attaching one asks first where it should — a link another card already carries is refused outright, because two records of one post double everything it did; a profile instead of a post, or a link from a platform the card is not on, is a question you can overrule.',
+          'Green marks Active. Planning stays neutral rather than red: red already means something has gone wrong here, and planning is the ordinary state of nearly every card on a board.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.78',
     dateLabel: 'August 9, 2026',
     groups: [

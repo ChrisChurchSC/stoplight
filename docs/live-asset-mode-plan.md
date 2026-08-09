@@ -184,8 +184,10 @@ Consolidation, as part of the work rather than after it:
 
 ## Build order
 
-**Phase 1 — the switch and the link. No platform work.**
+**Phase 1 — the switch and the link. No platform work. BUILT.**
 The segmented control, the derived mode, both faces, the colour, the link field with dedup and platform check, paste-in copy, manual metrics, the plan-vs-actual diff, snapshots written from whatever is entered. Useful on its own: a campaign can be reconciled by hand and the board finally shows what ran.
+
+Where it landed: `domain/assetMode.ts` (the one predicate and the diff), `domain/liveLink.ts` (normalize, dedup, the two questions), `attachLiveAsset` / `detachLiveAsset` / `setLiveCopy` / `setLiveMetrics` in the store, and `renderActiveFace` beside `renderPostInspector`. `isPlannedCard` and `isLibraryItem` are now one rule, as the consolidation below asks. Not yet done from this phase: the tone on the card face on the canvas and on the grid chip — the switch carries it, the board does not.
 
 **Phase 2 — read the copy back.**
 YouTube and web surfaces automatically, since both work today with no OAuth. Instagram and LinkedIn behind their existing gates.

@@ -109,6 +109,7 @@ import {
   engagementFromMetrics,
   looksLikeBlockedPage,
 } from '../domain/importAssets'
+import { readLiveLink } from '../domain/liveLink'
 import { type SavedView, newSavedView } from '../domain/savedViews'
 import type { BrandReport } from '../domain/reports'
 import type { MediaMix } from '../domain/channelMix'
@@ -2479,6 +2480,17 @@ interface TrafficState {
 
   // sheet (spreadsheet) edits
   updateRow: (id: string, patch: Partial<TrafficRow>) => Promise<void>
+  /**
+   * PLANNED CARD → LIVE ASSET. Attaching the link is what makes it live; there is no mode field
+   * (see domain/assetMode.ts). The caller has already run readLinkFor and answered its refusals.
+   */
+  attachLiveAsset: (id: string, url: string, opts?: { channel?: ChannelId; publishedAt?: string }) => Promise<void>
+  /** Back to a plan. Keeps the copy and metrics learned while it was live — see the body. */
+  detachLiveAsset: (id: string) => Promise<void>
+  /** The copy the post actually went out with, beside the plan rather than over it. */
+  setLiveCopy: (id: string, copy: Record<string, string>, extractedCopy?: string) => Promise<void>
+  /** Latest numbers onto the row, and every reading into the append-only snapshot store. */
+  setLiveMetrics: (id: string, metrics: Record<string, number>) => Promise<void>
   /** Apply many row patches as ONE batch (sequential writes, a single refresh) so
    *  cascades don't race concurrent refreshes and leave the in-memory rows stale. */
   updateRows: (updates: { id: string; patch: Partial<TrafficRow> }[]) => Promise<void>
@@ -6181,6 +6193,106 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   updateRow: async (id, patch) => {
     await sheet.update(id, patch)
     await get().refresh()
+  },
+
+  /**
+   * ATTACH A PLANNED CARD TO THE POST IT BECAME.
+   *
+   * The act that makes an asset live, and the only writer of reconciledAt — a field whose comment
+   * has described this moment since long before anything performed it.
+   *
+   * NOTHING IS OVERWRITTEN. `messaging` stays the plan; the copy that actually ran arrives beside it
+   * (see setLiveCopy) so the two can be compared, which is the whole point. The caller has already
+   * put the link through readLinkFor and answered its refusals: this writes, it does not decide.
+   */
+  attachLiveAsset: async (id, url, opts) => {
+    const link = readLiveLink(url)
+    if (!link) return
+    const row = get().rows.find((r) => r.id === id)
+    if (!row) return
+    await get().updateRow(id, {
+      sourceUrl: link.url,
+      // A web surface is not a social post, and calling it one puts it in front of the wrong reader.
+      source: link.platform ? 'social-live' : 'site',
+      publishedAt: opts?.publishedAt ?? row.publishedAt ?? new Date().toISOString(),
+      status: 'posted',
+      postedAt: row.postedAt ?? Date.now(),
+      reconciledAt: Date.now(),
+      // The card's own channel loses to the link only when the caller says so, because the person
+      // was asked which of the two was wrong and this is their answer.
+      ...(opts?.channel ? { channel: opts.channel } : {}),
+    })
+  },
+
+  /**
+   * Put the card back to being a plan.
+   *
+   * Clears what made it live and NOT what was learned while it was: the copy it ran with and the
+   * numbers it did stay on the row. Detaching is usually "I attached the wrong post", and losing a
+   * week of measured metrics to a mis-paste would be the expensive kind of undo.
+   */
+  detachLiveAsset: async (id) => {
+    const row = get().rows.find((r) => r.id === id)
+    if (!row) return
+    await get().updateRow(id, {
+      sourceUrl: undefined,
+      source: 'generated',
+      publishedAt: undefined,
+      status: 'draft',
+      postedAt: undefined,
+      reconciledAt: undefined,
+    })
+  },
+
+  /** The copy the post actually went out with. Keyed like `messaging` so the two diff field by field. */
+  setLiveCopy: async (id, copy, extractedCopy) => {
+    const row = get().rows.find((r) => r.id === id)
+    if (!row) return
+    const kept = Object.fromEntries(Object.entries(copy).filter(([, v]) => v.trim()))
+    const next = {
+      ...(Object.keys(kept).length ? { copy: kept } : {}),
+      ...(extractedCopy?.trim() ? { extractedCopy: extractedCopy.trim() } : {}),
+      fetchedAt: Date.now(),
+    }
+    // An empty block is cleared off the row rather than stored, so an asset nobody has read back
+    // looks the same as one from before this existed.
+    await get().updateRow(id, { live: Object.keys(next).length > 1 ? next : undefined })
+  },
+
+  /**
+   * WHAT THE POST DID, and the history of it.
+   *
+   * Two writes on purpose. The row holds the LATEST, which is what the panel and the card read; the
+   * append-only snapshot store holds every reading ever taken, which is what a sparkline needs and
+   * what a single overwritten number can never give back. metricSnapshot already carried
+   * `scope: 'asset'` for exactly this and nothing had ever written one.
+   */
+  setLiveMetrics: async (id, metrics) => {
+    const row = get().rows.find((r) => r.id === id)
+    if (!row) return
+    const clean = Object.fromEntries(
+      Object.entries(metrics).filter(([, v]) => typeof v === 'number' && Number.isFinite(v)),
+    )
+    const at = Date.now()
+    await get().updateRow(id, {
+      socialMetrics: Object.keys(clean).length ? clean : undefined,
+      metricsUpdatedAt: Object.keys(clean).length ? at : undefined,
+    })
+    const brand = clientForCampaign(row.campaign ?? '')
+    if (!Object.keys(clean).length || isBrandless(brand)) return
+    void appendSnapshots(
+      Object.entries(clean).map(([metric, value]) => ({
+        brand,
+        scope: 'asset' as const,
+        scopeId: id,
+        campaign: row.campaign,
+        audience: row.audience,
+        metric,
+        value,
+        source: 'manual',
+        capturedAt: new Date(at).toISOString(),
+      })),
+    )
   },
 
   updateRows: async (updates) => {

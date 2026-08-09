@@ -235,6 +235,30 @@ export interface TrafficRow {
   /** When a planned card was reconciled to its real published post (ms epoch): the
    *  point its projection was replaced by measured metrics inherited via sourceUrl/copy. */
   reconciledAt?: number
+  /**
+   * THE ASSET AS IT ACTUALLY WENT OUT, read back from the published post.
+   *
+   * Deliberately NOT `messaging`, which stays the plan. The two are the whole reason this
+   * exists: "we planned to lead with the guarantee and shipped the discount" is a sentence
+   * nothing in here could produce while one of them was being written over the other. Every
+   * reader downstream — generation, exports, the grid, coherence, contentSignals — goes on
+   * reading `messaging`, so the actual arrives beside the plan rather than through it.
+   *
+   * See docs/live-asset-mode-plan.md.
+   */
+  live?: {
+    /** Keyed like `messaging`, so the two diff component by component. */
+    copy?: Record<string, string>
+    /**
+     * Words baked INTO the creative, read off the image rather than typed into a field —
+     * which is why they are not in `copy`. For a reel or a carousel this is most of what a
+     * person actually reads. Same thing ingestChannelHandler already returns as extractedCopy.
+     */
+    extractedCopy?: string
+    /** When the copy was last read back. Distinct from metricsUpdatedAt: copy and numbers
+     *  arrive from different places and go stale at very different rates. */
+    fetchedAt?: number
+  }
   /** ISO timestamp the post should go out. Proposed, then user-adjustable. */
   scheduledAt: string
   /** For assets that run over a period (always-on ads, landing pages, nurture
