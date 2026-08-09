@@ -8144,6 +8144,43 @@ export function FlowsView() {
             placeholder={`Name this ${meta.label.toLowerCase()}…`}
             onChange={(e) => renameObject(nt.id, e.target.value)}
           />
+          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT, near the top because a control nobody
+              scrolls to is a control nobody has.
+              It first went in below Applied to, which is under the name, the record, the whole
+              document panel and a list of everything the card feeds: on a card with a brief on it
+              that is most of a screen away, and the report was simply "I don't see the save on the
+              inspector" — correct, and the same burial this panel has been cleared of twice today.
+              It sits under the name instead, which is the other thing here that is about the card
+              itself rather than about what it says.
+
+              Only for a loose card. One already inside a smart object is saved by definition, and
+              the object's own panel is where its library rung is decided (see "Add to the brand
+              library" there). */}
+          {!placementOf(nt.id) && (() => {
+            // The same pool convertSelection will actually act on, so the label cannot promise one
+            // card and bundle three. Called with no state changes first, because it reads the
+            // selection from this render and a setSel here would not have landed by then.
+            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
+              (id) => objects.some((o) => o.id === id) && !placementOf(id),
+            ).length
+            if (!n) return null
+            return (
+              <>
+                <button
+                  className="flow-insp-open subtle"
+                  style={{ marginTop: 10 }}
+                  title="Keep this on the shelf: place it on another campaign instead of rebuilding it"
+                  onClick={() => convertSelection()}
+                >
+                  {n > 1 ? `Save these ${n} cards as a smart object` : 'Save as a smart object'}
+                </button>
+                <div className="flow-inspect-note" style={{ marginTop: 6 }}>
+                  Kept on this campaign to start with. Its own panel can add it to the brand library,
+                  where every campaign can reach it.
+                </div>
+              </>
+            )
+          })()}
           {nt.kind === 'data-source' && (
             <p className="flow-inspect-note flow-wip-note">
               This card is still being built. Pasting, uploading and describing a table all work, and
@@ -8565,40 +8602,6 @@ export function FlowsView() {
                       </div>
                     </button>
                   ))}
-                </div>
-              </>
-            )
-          })()}
-          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT, said where you are already looking.
-              It existed only as ⌘⇧B and a right-click item, which is to say it existed for people
-              who already knew: nothing on the panel that describes a card mentioned that the card
-              can be kept. This is the same convertSelection the menu calls, so there is one way to
-              make an object and two doors onto it.
-
-              Only for a loose card. One already inside a smart object is saved by definition, and
-              the object's own panel is where its library rung is decided (see "Add to the brand
-              library" there). */}
-          {!placementOf(nt.id) && (() => {
-            // The same pool convertSelection will actually act on, so the label cannot promise one
-            // card and bundle three. Calling it with no state changes first, because it reads the
-            // selection from this render and a setSel here would not have landed by then.
-            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
-              (id) => objects.some((o) => o.id === id) && !placementOf(id),
-            ).length
-            if (!n) return null
-            return (
-              <>
-                <button
-                  className="flow-insp-open subtle"
-                  style={{ marginTop: 12 }}
-                  title="Keep these cards as a smart object you can place on other campaigns"
-                  onClick={() => convertSelection()}
-                >
-                  {n > 1 ? `Save these ${n} cards as a smart object` : 'Save as a smart object'}
-                </button>
-                <div className="flow-inspect-note" style={{ marginTop: 6 }}>
-                  Kept on this campaign to start with. Its own panel can add it to the brand library,
-                  where every campaign can reach it.
                 </div>
               </>
             )
