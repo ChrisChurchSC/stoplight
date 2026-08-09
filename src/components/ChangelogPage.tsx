@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.67',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A card’s inspector has a Save button. The board has always saved itself, and the panel said so by having no Save at all, which answers the question by never mentioning it — while the one button that was there is for regenerating copy, so pressing it to find out was the obvious wrong move. This one does the work the autosave was going to do six hundred milliseconds later: it writes the board now, pushes every record still waiting out its own delay, and says Saved. The line beside it still tells you edits save on their own, so it reads as “now” rather than as “or else”.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.66',
     dateLabel: 'August 9, 2026',
     groups: [
