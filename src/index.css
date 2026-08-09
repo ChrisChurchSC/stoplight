@@ -4743,8 +4743,39 @@ button.mf-open:focus-visible,
 .flow-live-metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 10px;
 }
+.flow-live-trend { display: flex; flex-direction: column; gap: 1px; }
+.flow-live-delta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+/* THE SPARKLINE.
+
+   A 2px line, a quiet fill, and an emphasized endpoint, because "now" is the point anybody is
+   looking for and a line that simply stops leaves you working out which end is recent.
+
+   --chart-line is its own token rather than --green ON PURPOSE. The app's green is tuned for UI
+   chrome, and its dark step (#3fb883) sits at L 0.702 — outside the 0.48–0.67 band a data mark needs
+   against the dark chart surface, which the palette validator fails it on. This value passes on
+   white and on #16191f both, so it is deliberately the same in either theme: the mark's job does not
+   change with the ground, and inheriting a token whose job does is how a chart goes quietly
+   illegible in one mode. The fill is not carrying identity, so it is free to be quiet. */
+:root { --chart-line: #30a46c; }
+.spark { display: block; overflow: visible; }
+.spark-line {
+  fill: none;
+  stroke: var(--chart-line);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* The box is scaled non-uniformly (preserveAspectRatio: none), which would scale the stroke with
+     it and draw a line thicker at one end than the other. */
+  vector-effect: non-scaling-stroke;
+}
+.spark-fill { fill: color-mix(in srgb, var(--chart-line) 14%, transparent); stroke: none; }
+.spark-end { fill: var(--chart-line); }
 .flow-live-metric { display: flex; flex-direction: column; gap: 3px; }
 .flow-live-metric .flow-inspect-input { font-variant-numeric: tabular-nums; }
 

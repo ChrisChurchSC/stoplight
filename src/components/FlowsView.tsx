@@ -95,6 +95,9 @@ import { apiFetch } from '../lib/apiFetch'
 import { AddRecordMenu, type ObjectCardOption } from './AddRecordMenu'
 import { assetMode, copyDiff, copyDiffStat, isLiveAsset, type AssetMode } from '../domain/assetMode'
 import { readLinkFor } from '../domain/liveLink'
+import { assetTrend, type MetricTrend } from '../domain/assetTrend'
+import { listSnapshots } from '../adapters/metrics/metricSnapshots'
+import { Sparkline } from './Sparkline'
 
 /**
  * Flows — the campaign home + builder. A switcher lists the brand's campaigns; picking
@@ -2890,6 +2893,31 @@ export function FlowsView() {
   const viewCanvas = viewName ? canvases.find((c) => c.name === viewName) : null
   const viewRows = useMemo(() => (viewCanvas ? viewCanvas.rows.filter((r) => !r.archivedAt) : []), [viewCanvas])
 
+  /**
+   * EVERY READING EVER TAKEN FOR THE ASSET ON SCREEN.
+   *
+   * Loaded per selected asset rather than for the whole campaign: the store is append-only and a
+   * brand's history runs to thousands of rows, of which one panel needs the handful under one id.
+   *
+   * Keyed by row id on the way in AND checked again on the way out, because the read is async and
+   * clicking through three cards fires three of them — without the second check the slowest load
+   * paints its numbers under whichever card you have landed on. Re-runs on metricsUpdatedAt so the
+   * shape grows the moment a reading is typed in, rather than on the next time the card is opened.
+   */
+  const selectedLive = sel ? viewRows.find((r) => r.id === sel) : undefined
+  const liveStamp = selectedLive && isLiveAsset(selectedLive) ? `${selectedLive.id}:${selectedLive.metricsUpdatedAt ?? 0}` : ''
+  useEffect(() => {
+    const id = liveStamp.split(':')[0]
+    if (!id) { setLiveTrend(null); return }
+    const brand = clientForCampaign(viewName ?? '')
+    if (isBrandless(brand)) { setLiveTrend(null); return }
+    let live = true
+    void listSnapshots(brand, { scope: 'asset' })
+      .then((snaps) => { if (live) setLiveTrend({ id, trends: assetTrend(snaps, id) }) })
+      .catch(() => { if (live) setLiveTrend(null) })
+    return () => { live = false }
+  }, [liveStamp, viewName])
+
   // Apply an email blueprint to an existing deliverable's emails: seed each email's brief
   // + framework/subject/levers (rotating steps across the emails), clear its copy, and
   // regenerate so the emails follow the blueprint arc.
@@ -4318,6 +4346,11 @@ export function FlowsView() {
   /** The read-back in flight, and what it had to say. */
   const [reading, setReading] = useState(false)
   const [readNote, setReadNote] = useState<string | null>(null)
+  /**
+   * Every reading ever taken for the asset on screen, keyed by its id so a stale load for the card
+   * you just left cannot paint under the one you are looking at.
+   */
+  const [liveTrend, setLiveTrend] = useState<{ id: string; trends: MetricTrend[] } | null>(null)
   /**
    * WHICH KIND'S RECORD LIST IS OPEN ON THE TOOLBAR — the one step between pressing a card kind and
    * that card landing on the board. Null the rest of the time, which is nearly always.
@@ -9414,6 +9447,8 @@ export function FlowsView() {
    */
   const renderActiveFace = (selPost: TrafficRow) => {
     const link = selPost.sourceUrl?.trim()
+    const trends = liveTrend?.id === selPost.id ? liveTrend.trends : []
+    const trendOf = (metric: string) => trends.find((t) => t.metric === metric)
     const draft = liveDraft?.id === selPost.id ? liveDraft : null
     const fields = messagingFields(selPost.channel, selPost.assetType)
     const lines = copyDiff(selPost, fields)
@@ -9587,23 +9622,40 @@ export function FlowsView() {
                 : 'Type in what the platform reports. Every reading is kept, so a number here is a point on a trend rather than a value that overwrites the last.'}
             </p>
             <div className="flow-live-metrics">
-              {LIVE_METRICS.map((m) => (
-                <label key={m.key} className="flow-live-metric">
-                  <span className="flow-live-k">{m.label}</span>
-                  <BufferedInput
-                    className="flow-inspect-input"
-                    value={metrics[m.key] != null ? String(metrics[m.key]) : ''}
-                    placeholder="—"
-                    onCommit={(v) => {
-                      const n = Number(v.replace(/[^\d.-]/g, ''))
-                      const next = { ...metrics }
-                      if (v.trim() && Number.isFinite(n)) next[m.key] = n
-                      else delete next[m.key]
-                      void setLiveMetrics(selPost.id, next)
-                    }}
-                  />
-                </label>
-              ))}
+              {LIVE_METRICS.map((m) => {
+                const t = trendOf(m.key)
+                return (
+                  <label key={m.key} className="flow-live-metric">
+                    <span className="flow-live-k">{m.label}</span>
+                    <BufferedInput
+                      className="flow-inspect-input"
+                      value={metrics[m.key] != null ? String(metrics[m.key]) : ''}
+                      placeholder="—"
+                      onCommit={(v) => {
+                        const n = Number(v.replace(/[^\d.-]/g, ''))
+                        const next = { ...metrics }
+                        if (v.trim() && Number.isFinite(n)) next[m.key] = n
+                        else delete next[m.key]
+                        void setLiveMetrics(selPost.id, next)
+                      }}
+                    />
+                    {/* THE SHAPE, under the number. Only once there is a shape: one reading is a
+                        value, and drawing it as a trend would state a direction nothing measured.
+                        The delta is against the PREVIOUS reading, which is the question a person
+                        asks of a number they typed last week. */}
+                    {t && (
+                      <span className="flow-live-trend">
+                        <Sparkline trend={t} label={m.label} />
+                        <span className="flow-live-delta">
+                          {t.delta == null
+                            ? `${t.points.length === 1 ? 'first reading' : 'no change'}`
+                            : `${t.delta > 0 ? '+' : t.delta < 0 ? '−' : ''}${Math.abs(t.delta).toLocaleString()} since last`}
+                        </span>
+                      </span>
+                    )}
+                  </label>
+                )
+              })}
             </div>
           </>
         )}

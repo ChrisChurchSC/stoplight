@@ -163,6 +163,8 @@ Keyed the same as `messaging` so the panel can show them field by field: the hea
 
 Because it is a time series and not a single number, the preview is a sparkline with an emphasized endpoint rather than a figure that appears from nowhere — the shape of the first week is the thing you actually want to see, and the store has held it all along.
 
+**BUILT.** `domain/assetTrend.ts` groups the readings and draws the path, `components/Sparkline.tsx` renders it under each number with the change since the previous reading. Two things it deliberately refuses to do, both of them the usual ways a small chart lies: x is TIME rather than index, so three readings across a month and three across an afternoon are different shapes; and y is anchored to zero, so 1000 → 1001 is a wobble rather than a cliff. One reading draws as a dot and says "first reading", because a line through a single point invents a direction. The line has its own validated colour token (`--chart-line`) rather than `--green`: the app's green is tuned for UI chrome and its dark step falls outside the lightness band a data mark needs on a dark ground.
+
 **Where it comes from:** a per-post provider on the same seam as `actualsProvider` — mock first, real behind an env var, so the panel can be built and reviewed before any platform app is registered.
 
 **When it refreshes:** on opening the Active face if the stamp is stale, and on demand. Not on a timer. The numbers lag a day; polling them faster only spends quota to display the same value.
