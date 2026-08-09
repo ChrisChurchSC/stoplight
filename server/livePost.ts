@@ -19,10 +19,15 @@ import { fetchPage } from './ingestSiteHandler.js'
  *   everything else   → `available: false` with the connection that would fix it, so the panel says
  *                       "connect Instagram to read this back" rather than spinning and failing.
  *
- * METRICS ARE NOT HERE, and that is not an omission. Insights for a post are only ever available to
- * the account that owns it, on every platform including YouTube. Numbers stay typed in until an
- * account is connected (phase 3), and a reader that returned a plausible-looking number it had
- * guessed would be worse than one that returns none.
+ * METRICS, WHERE THEY ARE PUBLIC AND ONLY THERE. YouTube states a video's view, like and comment
+ * counts to anybody, so those come back on the same call as the words. Nothing else does: a web page
+ * has no public view count (that is GA4's job, not the page's), and every social platform shows a
+ * post's numbers only to the account that owns it. Full YouTube analytics — watch time, retention,
+ * traffic sources — needs the channel connected too; these are the three counts on the public
+ * record, and the panel says which they are rather than implying it has the whole picture.
+ *
+ * A reader that returned a plausible-looking number it had guessed would be worse than one that
+ * returns none, which is why every path that cannot answer says so by name.
  *
  * The platform table is domain/liveLink.ts, shared rather than restated: the client decides whether
  * a link is a post before it is attached, and this decides what can be read off it, and the two
@@ -37,6 +42,11 @@ export interface LivePostRead {
   body?: string
   /** ISO, where the source states one. */
   publishedAt?: string
+  /**
+   * Whatever the source states publicly, by metric name. Absent rather than empty where the source
+   * publishes none, so "this platform does not say" and "it says zero" stay different answers.
+   */
+  metrics?: Record<string, number>
   /** Which route answered, so the panel can say where the words came from. */
   via?: 'youtube' | 'page'
 }
@@ -65,25 +75,50 @@ export function youtubeVideoId(url: string): string | null {
   return m ? id(m[2]) : null
 }
 
+/** The counts YouTube states publicly, under the names the rest of the app uses. */
+const YT_METRICS: [string, string][] = [
+  ['viewCount', 'views'],
+  ['likeCount', 'likes'],
+  ['commentCount', 'comments'],
+]
+
+interface YtItem {
+  snippet?: { title?: string; description?: string; publishedAt?: string }
+  statistics?: Record<string, string>
+}
+
 async function readYouTubeVideo(videoId: string): Promise<LivePostRead> {
   const key = process.env.YOUTUBE_API_KEY
   // A missing key is a deployment fact, not a fault in the link, and the sentence differs.
   if (!key) return { available: false, reason: 'no-youtube-key' }
   try {
+    // Words and numbers on one call: they are two fields of one resource, and asking twice would
+    // spend two units of a quota that is counted per request.
     const res = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${encodeURIComponent(videoId)}&key=${key}`,
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${encodeURIComponent(videoId)}&key=${key}`,
       { signal: AbortSignal.timeout(8000) },
     )
     if (!res.ok) return { available: false, reason: `youtube-${res.status}` }
-    const item = ((await res.json()) as { items?: { snippet?: { title?: string; description?: string; publishedAt?: string } }[] })
-      .items?.[0]?.snippet
-    if (!item) return { available: false, reason: 'youtube-not-found' }
+    const item = ((await res.json()) as { items?: YtItem[] }).items?.[0]
+    if (!item?.snippet) return { available: false, reason: 'youtube-not-found' }
+    const snippet = item.snippet
+    /**
+     * The counts arrive as STRINGS, and a channel that has hidden its like count omits the field
+     * rather than sending zero. Both are why this parses per field and drops what does not parse:
+     * a hidden count recorded as 0 is a measurement nobody took.
+     */
+    const metrics: Record<string, number> = {}
+    for (const [from, to] of YT_METRICS) {
+      const n = Number(item.statistics?.[from])
+      if (Number.isFinite(n)) metrics[to] = n
+    }
     return {
       available: true,
       via: 'youtube',
-      title: (item.title ?? '').trim() || undefined,
-      body: (item.description ?? '').trim() || undefined,
-      publishedAt: item.publishedAt,
+      title: (snippet.title ?? '').trim() || undefined,
+      body: (snippet.description ?? '').trim() || undefined,
+      publishedAt: snippet.publishedAt,
+      ...(Object.keys(metrics).length ? { metrics } : {}),
     }
   } catch {
     return { available: false, reason: 'youtube-unreachable' }

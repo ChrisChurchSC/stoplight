@@ -196,8 +196,12 @@ YouTube and web surfaces automatically, since both work today with no OAuth. Ins
 
 Where it landed: `server/livePost.ts` (the reader and its refusals), `server/livePostHandler.ts`, `read-live-post` in `apiManifest.ts`, and a "Read it back from the post" button on the Active face. It fills only what is EMPTY, so a caption somebody typed is never replaced. The platforms it cannot read are named rather than attempted: "Instagram only shows a post's words to the account that owns it. Connect Instagram to read this back, or type it in below." No model key is needed for any of it, which is why it works on a deployment with no AI configured.
 
-**Phase 3 — pull the numbers.**
+**Phase 3 — pull the numbers. THE PUBLIC HALF IS BUILT.**
 Per-post metrics provider, mock then real. Matching a URL to a post id within a connected account. Refresh on stale.
+
+YouTube states a video's view, like and comment counts to anybody, so those arrive on the same call as the words and land through `setLiveMetrics` — which means every pull appends a snapshot and the trend draws itself. "Pull what the platform states" sits with the numbers rather than with the copy, because it is the one button anybody presses twice. A count the channel hides is omitted rather than recorded as zero, and a figure typed by hand that the source has no opinion about survives a pull.
+
+What is left is the half that needs an account: Instagram and LinkedIn insights, and YouTube's real analytics (watch time, retention, traffic sources) beyond the three public counts. All of it waits on the platform apps in `docs/social-oauth.md`, which that file is explicit about being the reader's to register.
 
 **Phase 4 — what it is all for.**
 The diff and the numbers become a signal: which planned angle survived contact, which proof point actually carried, per audience, over time. `contentSignals.ts` already computes most of this shape against planned copy; pointing it at measured copy is the payoff and is the reason not to overwrite the plan in phase 1.
