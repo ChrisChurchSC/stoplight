@@ -93,6 +93,8 @@ import { CalendarView } from './CalendarView'
 import { FlowsHome } from './FlowsHome'
 import { apiFetch } from '../lib/apiFetch'
 import { AddRecordMenu, type ObjectCardOption } from './AddRecordMenu'
+import { assetMode, copyDiff, copyDiffStat, type AssetMode } from '../domain/assetMode'
+import { readLinkFor } from '../domain/liveLink'
 
 /**
  * Flows — the campaign home + builder. A switcher lists the brand's campaigns; picking
@@ -1170,6 +1172,12 @@ export function FlowsView() {
   const updateRows = useTrafficStore((s) => s.updateRows)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
+  // The live-asset seam: attaching a card to the post it became, and what it said and did there.
+  const allRows = useTrafficStore((s) => s.rows)
+  const attachLiveAsset = useTrafficStore((s) => s.attachLiveAsset)
+  const detachLiveAsset = useTrafficStore((s) => s.detachLiveAsset)
+  const setLiveCopy = useTrafficStore((s) => s.setLiveCopy)
+  const setLiveMetrics = useTrafficStore((s) => s.setLiveMetrics)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
   const flowOpenView = useTrafficStore((s) => s.flowOpenView)
   const clearFlowOpen = useTrafficStore((s) => s.clearFlowOpen)
@@ -4292,6 +4300,21 @@ export function FlowsView() {
   /** Which card is currently naming a new record (null = none). */
   const [creatingFor, setCreatingFor] = useState<string | null>(null)
   const [creatingName, setCreatingName] = useState('')
+  /**
+   * WHICH FACE OF AN ASSET IS ON SCREEN, when it is not the one the asset actually is.
+   *
+   * The panel opens on the truth — a card with a live post opens Active, everything else opens
+   * Planner (see assetMode) — and this holds the one case that is not the truth: you pressed Active
+   * on a planned card, which is how you attach the link that makes it live. Keyed by row id so
+   * selecting a different asset drops back to its own answer rather than carrying the last one's.
+   *
+   * Deliberately NOT stored on the row. A face you are looking at is not a property of the asset,
+   * and a mode field that can disagree with sourceUrl is the fault this whole design avoids.
+   */
+  const [faceOverride, setFaceOverride] = useState<{ id: string; mode: AssetMode } | null>(null)
+  const postFace = (r: TrafficRow): AssetMode => (faceOverride?.id === r.id ? faceOverride.mode : assetMode(r))
+  /** What was typed into the Active face but not yet committed: the link, and the copy read back. */
+  const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string } | null>(null)
   /**
    * WHICH KIND'S RECORD LIST IS OPEN ON THE TOOLBAR — the one step between pressing a card kind and
    * that card landing on the board. Null the rest of the time, which is nearly always.
@@ -9342,12 +9365,202 @@ export function FlowsView() {
    * panel on the same asset rather than each growing a version of it. Takes the row rather than
    * reading `sel`, because on those two surfaces the selection is not the canvas selection.
    */
+  /**
+   * The numbers worth asking for by hand, which is every number until a platform connection can be
+   * asked instead. Four rather than fourteen: a form nobody finishes measures nothing, and
+   * socialMetrics is open-ended, so whatever a connected account returns later lands beside these
+   * without this list having to grow.
+   */
+  const LIVE_METRICS: { key: string; label: string }[] = [
+    { key: 'impressions', label: 'Impressions' },
+    { key: 'reach', label: 'Reach' },
+    { key: 'engagements', label: 'Engagements' },
+    { key: 'clicks', label: 'Clicks' },
+  ]
+
+  /**
+   * THE ASSET AS IT EXISTS IN THE WORLD.
+   *
+   * Three questions in the order you can answer them: where is it, what did it actually say, and
+   * what did it do. Everything here is typed in by hand for now, and that is the point rather than a
+   * placeholder — a pasted URL gives you copy on some platforms and metrics on none (see
+   * docs/live-asset-mode-plan.md), so the manual path is what makes this useful before a single
+   * platform app is registered, and it is what stays working when one is not connected.
+   */
+  const renderActiveFace = (selPost: TrafficRow) => {
+    const link = selPost.sourceUrl?.trim()
+    const draft = liveDraft?.id === selPost.id ? liveDraft : null
+    const fields = messagingFields(selPost.channel, selPost.assetType)
+    const lines = copyDiff(selPost, fields)
+    const stat = copyDiffStat(lines)
+    const live = selPost.live?.copy ?? {}
+    const metrics = selPost.socialMetrics ?? {}
+
+    const attach = () => {
+      const raw = draft?.url ?? ''
+      const verdict = readLinkFor(raw, selPost, allRows)
+      if (!verdict.link) {
+        setLiveDraft({ id: selPost.id, url: raw, note: 'That is not a link. Paste the address of the published post.' })
+        return
+      }
+      const r = verdict.refusal
+      // A duplicate is the one refusal with no "do it anyway": two rows carrying one URL means every
+      // count of that post doubles, and sourceUrl is the dedup key the whole import path turns on.
+      if (r?.kind === 'duplicate') {
+        setLiveDraft({ id: selPost.id, url: raw, note: `"${r.row.assetName}" is already this post. One asset per published post, or everything it did is counted twice.` })
+        return
+      }
+      // The other two are questions. Pressing again is the answer, because the person can see the
+      // link and the card and we cannot: a platform ships a URL shape we have not seen, or the
+      // card's channel is the thing that is wrong.
+      if (r && !draft?.note) {
+        const chan = (c: ChannelId) => CHANNELS[c]?.label ?? c
+        const note =
+          r.kind === 'not-a-post'
+            ? 'That looks like a profile or a feed rather than one post. Attach it anyway, or paste the post’s own link.'
+            : r.kind === 'wrong-channel'
+              ? `That is ${chan(r.linkChannel)} and this card is ${chan(r.cardChannel)}. Attach it anyway and the card moves to ${chan(r.linkChannel)}.`
+              : 'That is not a link. Paste the address of the published post.'
+        setLiveDraft({ id: selPost.id, url: raw, note })
+        return
+      }
+      const channel = r?.kind === 'wrong-channel' ? r.linkChannel : undefined
+      void attachLiveAsset(selPost.id, verdict.link.url, channel ? { channel } : undefined)
+      setLiveDraft(null)
+      setFaceOverride(null)
+    }
+
+    return (
+      <div className="flow-inspect">
+        {!link ? (
+          <>
+            <label className="flow-inspect-label">Where it went out</label>
+            <p className="flow-inspect-note">
+              Paste the link to the published post. That is what makes this card the record of a real
+              asset instead of a plan for one.
+            </p>
+            <BufferedInput
+              className="flow-inspect-input"
+              value={draft?.url ?? ''}
+              placeholder="https://…"
+              onCommit={(v) => setLiveDraft({ id: selPost.id, url: v })}
+            />
+            {draft?.note && <p className="flow-live-warn">{draft.note}</p>}
+            <button className="flow-insp-open" disabled={!draft?.url.trim()} onClick={attach}>
+              {draft?.note ? 'Attach it anyway' : 'Attach this post'}
+            </button>
+          </>
+        ) : (
+          <>
+            <label className="flow-inspect-label">Where it went out</label>
+            <a className="flow-live-link" href={link} target="_blank" rel="noreferrer noopener">{link}</a>
+            <p className="flow-inspect-note">
+              {selPost.publishedAt
+                ? `Published ${new Date(selPost.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}.`
+                : 'Published.'}{' '}
+              Taking it off puts the card back to a plan and keeps everything measured here.
+            </p>
+            <button className="flow-insp-open subtle" onClick={() => void detachLiveAsset(selPost.id)}>
+              Not this post
+            </button>
+
+            {/* WHAT IT ACTUALLY SAID, against what was planned. The plan is untouched: these are the
+                two things this face exists to hold next to each other. */}
+            <label className="flow-inspect-label" style={{ marginTop: 16 }}>What it ran with</label>
+            <p className="flow-inspect-note">
+              {stat.compared === 0
+                ? 'Paste the copy as it went out and it will be compared against the plan, component by component.'
+                : stat.changed === 0
+                  ? `It ran as planned, across ${stat.compared} ${stat.compared === 1 ? 'component' : 'components'}.`
+                  : `${stat.changed} of ${stat.compared} changed between the plan and the post.`}
+            </p>
+            <div className="flow-live-diff">
+              {lines.map((l) => (
+                <div key={l.key} className={`flow-live-line${l.changed && !l.empty ? ' changed' : ''}`}>
+                  <span className="flow-live-k">{l.label}</span>
+                  {/* The plan, read-only here. It is edited on the Planner face, where editing it
+                      means what it says. */}
+                  <span className="flow-live-planned">{l.planned || <em>Nothing planned</em>}</span>
+                  <BufferedTextarea
+                    className="flow-inspect-input flow-live-actual"
+                    rows={2}
+                    value={live[l.key] ?? ''}
+                    placeholder="As it went out"
+                    onCommit={(v) => void setLiveCopy(selPost.id, { ...live, [l.key]: v })}
+                  />
+                </div>
+              ))}
+            </div>
+            {/* Words on the creative rather than in a field. Its own box because nobody typed them
+                into a component and pretending otherwise would put them in the diff. */}
+            <label className="flow-inspect-label" style={{ marginTop: 14 }}>Words on the creative</label>
+            <BufferedTextarea
+              className="flow-inspect-input"
+              rows={2}
+              value={selPost.live?.extractedCopy ?? ''}
+              placeholder="Overlay text, on-image claims, anything the art says"
+              onCommit={(v) => void setLiveCopy(selPost.id, live, v)}
+            />
+
+            {/* WHAT IT DID. */}
+            <label className="flow-inspect-label" style={{ marginTop: 16 }}>What it did</label>
+            <p className="flow-inspect-note">
+              {selPost.metricsUpdatedAt
+                ? `Last updated ${new Date(selPost.metricsUpdatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Every reading is kept, so the trend survives the next one.`
+                : 'Type in what the platform reports. Every reading is kept, so a number here is a point on a trend rather than a value that overwrites the last.'}
+            </p>
+            <div className="flow-live-metrics">
+              {LIVE_METRICS.map((m) => (
+                <label key={m.key} className="flow-live-metric">
+                  <span className="flow-live-k">{m.label}</span>
+                  <BufferedInput
+                    className="flow-inspect-input"
+                    value={metrics[m.key] != null ? String(metrics[m.key]) : ''}
+                    placeholder="—"
+                    onCommit={(v) => {
+                      const n = Number(v.replace(/[^\d.-]/g, ''))
+                      const next = { ...metrics }
+                      if (v.trim() && Number.isFinite(n)) next[m.key] = n
+                      else delete next[m.key]
+                      void setLiveMetrics(selPost.id, next)
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
   const renderPostInspector = (selPost: TrafficRow) => (
     <>
       <div className="flow-panel-head">
         <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? GROUP_TONE.Paid : GROUP_TONE.Social} channel={selPost.channel as ChannelId} />
         <span className="flow-panel-title">{selPost.assetName}</span>
       </div>
+      {/**
+        * PLANNER OR ACTIVE — the first thing in the panel, because it governs everything under it.
+        *
+        * Buttons with a check on the active one, never a dropdown: the rule this surface has been
+        * held to since the deliverable plan. The face you get by default is whichever the asset
+        * actually IS; pressing Active on a planned card is how you attach the link that makes it one.
+        */}
+      <div className="flow-mode" role="group" aria-label="What this panel is showing">
+        {(['planner', 'active'] as const).map((m) => (
+          <button
+            key={m}
+            className={`flow-mode-opt ${m}${postFace(selPost) === m ? ' on' : ''}`}
+            aria-pressed={postFace(selPost) === m}
+            onClick={() => { setFaceOverride({ id: selPost.id, mode: m }); setLiveDraft(null) }}
+          >
+            <span className="flow-mode-dot" aria-hidden="true" />
+            {m === 'planner' ? 'Planner' : 'Active'}
+          </button>
+        ))}
+      </div>
+      {postFace(selPost) === 'active' ? renderActiveFace(selPost) : (
       <div className="flow-inspect">
         <p className="flow-inspect-desc">
           {CHANNELS[selPost.channel as ChannelId]?.label ?? selPost.channel}
@@ -9625,6 +9838,7 @@ export function FlowsView() {
             block above still says which pattern this asset is part of. */}
 
       </div>
+      )}
     </>
   )
 

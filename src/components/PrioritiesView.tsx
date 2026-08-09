@@ -8,6 +8,7 @@ import {
   signalRecommendations,
   type RecKind,
 } from '../domain/contentSignals'
+import { isLiveAsset } from '../domain/assetMode'
 import type { TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -22,8 +23,9 @@ import { BrandPicker } from './BrandPicker'
  * The compute + list are exported so the Overview can lead with the same five.
  */
 
-const isLibraryItem = (r: TrafficRow): boolean =>
-  r.status === 'posted' || !!r.postedAt || (!!r.sourceUrl && r.source !== 'generated')
+// Was its own statement of "has this gone out", which disagreed with contentSignals' isPlannedCard
+// about an imported row. One rule now, in domain/assetMode.ts.
+const isLibraryItem = isLiveAsset
 
 export type PKind = RecKind
 export interface Priority {
