@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { newAudience } from '../audiences'
-import { splitAudiencesByUse, splitRecordsByUse, type AudienceUsage } from '../audienceUsage'
+import { liveRecordUsage, splitAudiencesByUse, splitRecordsByUse, type AudienceUsage } from '../audienceUsage'
 
 /**
  * "UNUSED" IS A BOUNDARY, so it is pinned like one. A cleanup that removes an audience an asset
@@ -106,5 +106,67 @@ describe('splitRecordsByUse — messages', () => {
     }
     // Same ids, same labels — all of them audience-typed, none of them message claims.
     expect(splitRecordsByUse([msg('m1', 'Speed angle')], usage, MSG).unused.map((m) => m.id)).toEqual(['m1'])
+  })
+})
+
+/**
+ * THE DEAD DO NOT GET A VOTE. The first cut scanned archived rows, archived campaigns and every
+ * stored board, and a workspace that has generated for months holds ghosts of all three — boards
+ * outlive renamed and deleted campaigns — which between them reference nearly every record ever
+ * minted. A sweep that defers to ghosts sweeps nothing, which is precisely the complaint that
+ * prompted this: "tons of old messages still stored".
+ */
+describe('liveRecordUsage', () => {
+  const ref = (id: string) => [{ type: 'segment' as const, id, label: '' }]
+
+  it('drops archived rows and archived campaign records', () => {
+    const usage = liveRecordUsage({
+      rows: [
+        { campaign: 'Live', references: ref('a1') },
+        { campaign: 'Old', archivedAt: 1, references: ref('a2') },
+      ],
+      boards: [],
+      smartObjects: [],
+      campaigns: [
+        { name: 'Live', references: ref('a3') },
+        { name: 'Old', archivedAt: 1, references: ref('a4') },
+      ],
+    })
+    expect(usage.rows).toHaveLength(1)
+    expect(usage.campaigns).toHaveLength(1)
+  })
+
+  it('drops the board of a campaign that no longer exists, and keeps the living and the builder', () => {
+    // A board is keyed by campaign name and outlives a rename or a delete; the ghost's cards must
+    // not hold records on the shelf.
+    const usage = liveRecordUsage({
+      rows: [{ campaign: 'Row-only campaign' }],
+      boards: [
+        { key: 'Filed campaign', objects: [] },
+        { key: 'Row-only campaign', objects: [] },
+        { key: '__new-flow__', objects: [] },
+        { key: 'Big Buoy — BAU', objects: [] },
+      ],
+      smartObjects: [],
+      campaigns: [{ name: 'Filed campaign', references: [] }],
+    })
+    expect(usage.boards.map((b) => b.key)).toEqual([
+      'Filed campaign',
+      'Row-only campaign',
+      '__new-flow__',
+    ])
+  })
+
+  it('lets go of a record only the dead referenced, end to end', () => {
+    const shelf = [newAudience({ id: 'a1', name: 'Kept' }), newAudience({ id: 'a2', name: 'Ghost-held' })]
+    const usage = liveRecordUsage({
+      rows: [{ campaign: 'Live', references: ref('a1') }],
+      boards: [{ key: 'Big Buoy — BAU', objects: [{ kind: 'audience', refId: 'a2' }] }],
+      smartObjects: [],
+      campaigns: [{ name: 'Live', references: [] }],
+    })
+    const { used, unused } = splitAudiencesByUse(shelf, usage)
+    expect(used.map((a) => a.id)).toEqual(['a1'])
+    expect(unused.map((a) => a.id)).toEqual(['a2'])
   })
 })

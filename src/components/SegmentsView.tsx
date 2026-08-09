@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { splitAudiencesByUse } from '../domain/audienceUsage'
+import { liveRecordUsage, splitAudiencesByUse } from '../domain/audienceUsage'
 import { canvasBrandScope } from '../domain/brand'
 import { CHANNELS } from '../domain/channels'
 import { GENDERS, SENIORITIES, INDUSTRIES, COMPANY_SIZES, VALUE_TIERS, MARITAL_STATUSES } from '../domain/taxonomy'
@@ -126,22 +126,20 @@ export function SegmentsView() {
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const smartObjects = useTrafficStore((s) => s.smartObjects)
   const campaignList = useTrafficStore((s) => s.campaignList)
-  const { unused } = splitAudiencesByUse(audiences, {
-    rows: allRows,
-    boards: flowBoards,
-    smartObjects,
-    campaigns: campaignList,
-  })
+  // Only the LIVING workspace holds a record in place — see liveRecordUsage for why the dead
+  // (archived campaigns, boards outliving deleted campaigns) do not get a vote.
+  const { unused } = splitAudiencesByUse(
+    audiences,
+    liveRecordUsage({ rows: allRows, boards: flowBoards, smartObjects, campaigns: campaignList }),
+  )
   const [confirmSweep, setConfirmSweep] = useState(false)
   const runSweep = () => {
     // Live read, like every other write on this page: the confirm sat open while the store moved on.
     const live = useTrafficStore.getState()
-    const split = splitAudiencesByUse(live.clientAudiences[brand] ?? [], {
-      rows: live.rows,
-      boards: live.flowBoards,
-      smartObjects: live.smartObjects,
-      campaigns: live.campaignList,
-    })
+    const split = splitAudiencesByUse(
+      live.clientAudiences[brand] ?? [],
+      liveRecordUsage({ rows: live.rows, boards: live.flowBoards, smartObjects: live.smartObjects, campaigns: live.campaignList }),
+    )
     setClientAudiences(brand, split.used)
     setConfirmSweep(false)
     showToast(
