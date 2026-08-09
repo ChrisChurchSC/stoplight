@@ -323,7 +323,6 @@ const ASSETS_PER_REQUEST = 4
  */
 async function failureText(res: Response): Promise<string> {
   if (res.status === 401) return 'Your session expired. Sign in again.'
-  if (res.status === 501) return 'No AI model connected.'
   if (res.status === 429) return 'Too many requests. Wait a moment.'
   if (res.status === 504 || res.status === 502) return 'The request timed out. Generate again.'
   let detail = ''
@@ -332,6 +331,24 @@ async function failureText(res: Response): Promise<string> {
     if (typeof body?.error === 'string') detail = body.error
   } catch {
     // A body that is not JSON tells us nothing the status has not already said.
+  }
+  /**
+   * 501 IS TWO DIFFERENT PROBLEMS AND ONLY ONE OF THEM IS "NOT CONNECTED".
+   *
+   * apiRoute maps NO_KEY and NO_BUDGET to the same status deliberately — both mean "no model
+   * available, use the heuristic writer", and every client adapter turns on that one number. But the
+   * two are not the same thing to a person: one is a deployment that was never wired up, the other
+   * is an account that has been working fine and has run out of money. This said "No AI model
+   * connected" for both, so running out looked like a configuration fault nobody could act on, and
+   * the app went on quietly writing template copy under a notice pointing at the wrong thing.
+   *
+   * The code is already in the body (apiRoute sends `{ error: code }`); it was simply never read,
+   * because the status checks returned before the body was.
+   */
+  if (res.status === 501) {
+    return detail === 'NO_BUDGET'
+      ? 'Out of AI credits. Top up to generate with the model again.'
+      : 'No AI model connected.'
   }
   // An unrecognised failure is the one case where trying again is genuinely the best guess going.
   return detail ? `${detail.slice(0, 120)}. Generate again.` : `Server error ${res.status}. Generate again.`

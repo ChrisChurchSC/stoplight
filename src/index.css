@@ -7813,6 +7813,13 @@ button.mf-open:focus-visible,
   white-space: nowrap;
 }
 .flow-top-credits.low { color: var(--amber); }
+/* Empty reads as a problem rather than as a smaller number, and carries the underline that says the
+   words are a way out. Only the person who can top it up gets the link (see the render), so the
+   underline never appears on text that does nothing. */
+.flow-top-credits.out { color: var(--danger, #e5484d); }
+a.flow-top-credits { text-decoration: none; border-bottom: 1px solid currentColor; }
+a.flow-top-credits:hover { color: var(--text); }
+a.flow-top-credits.out:hover { color: var(--danger, #e5484d); opacity: 0.82; }
 .flow-tb-tools {
   display: flex;
   gap: 2px;

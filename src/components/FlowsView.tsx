@@ -9945,14 +9945,39 @@ export function FlowsView() {
               account rather than an app ledger, because there is no app ledger. Hidden entirely
               while unknown: a balance nobody can read is not zero. Turns warning-toned under $1,
               which is roughly a couple of full campaign generations. */}
-          {aiCredits && (
-            <span
-              className={`flow-top-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
-              title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} · 1 credit = $0.01`}
-            >
-              {aiCredits.remainingCredits.toLocaleString()} credits
-            </span>
-          )}
+          {/**
+            * EMPTY IS NOT "LOW", AND IT SAYS WHERE TO GO.
+            *
+            * A count that reads "0 credits" in the same amber as "80 credits" states the number and
+            * leaves the consequence to be discovered by generating — which does not fail, it falls
+            * back to the template writer. So the one state that stops the model working looked like
+            * the state just before it, and the way out was not written down anywhere in the app.
+            *
+            * The link is the honest fix rather than a purchase flow, because there is nothing here
+            * to purchase: what the readout shows is the provider account's own balance (see
+            * server/aiCredits.ts — "there is no app-level credit ledger"), so topping up happens
+            * where that account lives. Only for whoever can act on it: `billing` is the permission
+            * that already means "this person is the one who pays".
+            */}
+          {aiCredits && (() => {
+            const out = aiCredits.remaining <= 0
+            const label = out ? 'Out of credits' : `${aiCredits.remainingCredits.toLocaleString()} credits`
+            const title = `$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} · 1 credit = $0.01`
+            const cls = `flow-top-credits${out ? ' out' : aiCredits.remaining < 1 ? ' low' : ''}`
+            return can(role, 'billing') ? (
+              <a
+                className={cls}
+                href="https://openrouter.ai/credits"
+                target="_blank"
+                rel="noreferrer noopener"
+                title={`${title} · opens OpenRouter to top up`}
+              >
+                {label}
+              </a>
+            ) : (
+              <span className={cls} title={title}>{label}</span>
+            )
+          })()}
           {can(role, 'share') && (
             <button
               className="flow-share-btn"

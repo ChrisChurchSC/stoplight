@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.78',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Running out of AI credits says so, instead of saying nothing. Generating does not fail when the account is empty — it quietly falls back to writing the copy from templates — and the only mark of it was a note reading “No AI model connected”, which describes a deployment that was never wired up rather than an account that has been working all week and has run out. The two arrive as the same status on purpose (both mean “there is no model to use, write it offline”), and the difference between them was in the response the whole time and never read. It now names the cause, and what to do about it.',
+          'And the credits readout in the header stops treating empty as a smaller number. Zero reads “Out of credits” in the tone the rest of the app uses for a stop, rather than the same amber as eighty; for whoever holds billing it is a link straight to the account it is counting, since what it shows is that account’s own balance rather than a wallet inside the app. Everyone else sees the count, because sending someone to a page they cannot buy on is worse than not offering.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.77',
     dateLabel: 'August 9, 2026',
     groups: [
