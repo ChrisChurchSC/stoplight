@@ -6344,7 +6344,19 @@ export function FlowsView() {
      * — and the canvas already tells you how to leave it: wire a Brand card into the brief, which
      * files it and renames it to match (see bindBrandFromCard).
      */
-    setViewName(createDraftCampaign(DRAFTS_SPACE))
+    const started = createDraftCampaign(DRAFTS_SPACE)
+    setViewName(started)
+    /**
+     * AND IT GETS A TAB, like every other campaign you open.
+     *
+     * openView has done this since tabs existed — "opening a flow also opens a tab for it, so the
+     * top strip tracks the flow you're in" — and starting one never did, because starting one used
+     * to mean entering a builder that was not a campaign yet. It is a campaign now, from this line:
+     * registered, listed on the Campaigns page, holding its own board. It was the only way to be
+     * looking at a campaign with nothing in the strip saying so, and the strip is what you close it
+     * from, so a draft you navigated away from had no way back except the Campaigns page.
+     */
+    openProject(started)
     setNodes([])
     setObjects([])
     // Placements belong to the campaign you made them on, same as the cards and the chat thread.
@@ -6375,7 +6387,10 @@ export function FlowsView() {
     lastSubjectRef.current = ''
     setSel(null)
     setPickAt(null)
-    setCampaignFilter('all')
+    // The strip lights the campaign you are in, which is now this one — the same pair of calls
+    // openView makes. It was 'all' while starting a campaign meant standing in a builder that
+    // belonged to none of them.
+    setCampaignFilter(started)
     // A new campaign opens with Gretel COLLAPSED. It used to open expanded, on the reasoning that
     // Gretel was the front door and its empty state asked what you were launching. The cards are
     // the front door now: you start at a Brand card and connect your way to a brief, and the setup

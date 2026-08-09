@@ -61,6 +61,20 @@ export function isBrandless(brand?: string): boolean {
   return !brand || !brand.trim() || brand === UNASSIGNED
 }
 
+/**
+ * BOTH CATCH-ALLS, WHICH ARE THE TWO WAYS OF BEING NOBODY'S.
+ *
+ * isBrandless answers for Unassigned, which was the only one that mattered while everything landed
+ * on a brand by default. A campaign now STARTS in the Drafts space and stays there until a Brand
+ * card gives it one, so "is this filed under a real client" is asked constantly and the answer has
+ * two halves. Neither space is a brand: nothing generates from them, nothing is scoped to them, and
+ * a campaign sitting in one is not another brand's work — which is what makes it safe to show at
+ * every scope rather than at none.
+ */
+export function isCatchAllSpace(brand?: string): boolean {
+  return isBrandless(brand) || brand === DRAFTS_SPACE
+}
+
 export function isDraftBrand(brand: string, meta: BrandMetaMap): boolean {
   return !!meta[brand]?.draft
 }

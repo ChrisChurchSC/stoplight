@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { DRAFTS, folderName } from '../domain/campaignFolders'
 import { campaignShortName, clientForCampaign } from '../domain/clients'
+import { isCatchAllSpace } from '../domain/brand'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -103,7 +104,19 @@ export function CanvasProjectTabs() {
             count: assetCounts.get(c) ?? 0,
           }
         })
-        .filter((p) => browseScope === 'all' || p.client === browseScope),
+        /**
+         * A CAMPAIGN THAT IS NOBODY'S SHOWS AT EVERY SCOPE, because it cannot leak.
+         *
+         * The scope filter exists to keep one brand's work out of another brand's strip. A campaign
+         * filed under a catch-all — Drafts, or Unassigned — is not another brand's work; it is not
+         * anybody's yet, which is exactly the state a campaign now STARTS in. Held to the plain rule
+         * it matched no brand, so a campaign you had just started vanished from the one strip whose
+         * job is to say what you have open, and could only be reached again from the Campaigns page.
+         *
+         * It leaves the catch-all the moment a Brand card is wired in, and lands in that brand's
+         * scope with everything else of theirs.
+         */
+        .filter((p) => browseScope === 'all' || p.client === browseScope || isCatchAllSpace(p.client)),
     [openProjects, assetCounts, browseScope, folderOf],
   )
 
