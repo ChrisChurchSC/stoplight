@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.74',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A campaign card counts the channels it draws. The number said “channels” and counted channel-and-asset-type combinations, while the icons directly beneath it were the channels themselves, so a card could read “10 channels” above five icons and contradict itself by one row. Both counts come off the same list now.',
+          'And the audience pill is off the campaign title. It read as who the campaign is for and was not that: it showed the first audience someone had explicitly tagged on the campaign record, which most campaigns never have, while the copy for those campaigns is still written to the brand’s audiences. So one card in four wore a name and the rest looked like they were written for nobody, when the real difference was only in how each campaign had been set up.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.73',
     dateLabel: 'August 9, 2026',
     groups: [
