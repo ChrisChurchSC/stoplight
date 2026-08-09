@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.73',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Press a Made from chip on the grid and Delete takes it off the asset. It was already possible — open the ＋ drawer, find the row, press its ✕ — which is three gestures for the one thing you were already pointing at. The chip now takes a ring when you press it, and Delete (or Backspace, which is what the key on a Mac keyboard actually sends) removes it. Escape or a click anywhere else puts the selection away.',
+          'It says so when the answer is not the cell’s to give. A chip supplied by a card wired to the campaign brief looks exactly like one pinned on the asset, and taking that one off "this cell" could only mean doing nothing or quietly stripping it from every other asset in the campaign — so instead it says which it is and where to change it. The same for the brand, which belongs to the campaign rather than to one of its thirty assets. Where the record does belong to the asset — pinned here, or on a card wired to this asset alone — it goes, wire and all, so it cannot come straight back from a card nobody could see from the grid.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.72',
     dateLabel: 'August 9, 2026',
     groups: [
