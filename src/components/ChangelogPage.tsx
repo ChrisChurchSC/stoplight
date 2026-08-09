@@ -36,6 +36,18 @@ const RELEASES: Release[] = [
     ],
   },
   {
+    version: 'v1.70',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Point a card at a record you already wrote and the panel shows what it says. It used to go on asking: an empty box headed “Describe this audience”, sitting over an audience full of pains and objections it never mentioned. The card had flipped to the record and the panel had not, so the one surface whose job is to tell you what a card carries was the only one that did not know. It now reads the record’s own fields back — the same ones the copy writer is handed — above the box, and that box asks for what is still missing rather than for the whole thing again.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.69',
     dateLabel: 'August 9, 2026',
     groups: [

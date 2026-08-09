@@ -5235,6 +5235,31 @@ button.mf-open:focus-visible,
   border-radius: 10px;
   background: var(--surface-2);
 }
+/* WHAT THE RECORD ALREADY SAYS, above the box that offers to write it. Same frame as that box, so
+   the two read as one question answered twice: here is what it says, and here is where to add. */
+.flow-recordsays {
+  margin-bottom: 8px;
+  padding: 9px 10px 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+/* Label over value rather than beside it: the labels are phrases ("the one job it does better than
+   the alternative"), not words, and a two-column layout in a 360px panel gives both halves too
+   little to be read. */
+.flow-recordsays-row {
+  display: flex; flex-direction: column; gap: 1px;
+  margin-top: 7px;
+}
+.flow-recordsays-k {
+  font-size: 10px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.flow-recordsays-v {
+  font-size: 12px; line-height: 1.45; color: var(--text);
+  /* A pasted URL or a long list is one unbroken run; it must not widen the panel. */
+  overflow-wrap: anywhere;
+}
 .flow-fill-input {
   width: 100%;
   border: none; background: none; outline: none; resize: vertical;
