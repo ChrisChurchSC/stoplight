@@ -83,7 +83,6 @@ import { MiniSheet } from './MiniSheet'
 import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
-import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
 import type { ChannelId, TrafficRow } from '../domain/types'
@@ -1754,7 +1753,6 @@ export function FlowsView() {
   briefCollapsedRef.current = briefCollapsed
   const chatIdRef = useRef(0)
   const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
-  const [switcherOpen, setSwitcherOpen] = useState(false)
   // View-mode brief drafts: subject + budget buffered so a built flow's brief edits commit on
   // blur (reseeded whenever you open a different flow).
   const [viewBudgetDraft, setViewBudgetDraft] = useState('')
@@ -2880,16 +2878,6 @@ export function FlowsView() {
       </div>
     )
   }
-
-  // The brand's existing campaigns (for the switcher).
-  const brandCampaigns = useMemo(
-    () =>
-      canvases
-        .filter((c) => c.client === brand && c.name !== CONTENT_LIBRARY_CAMPAIGN)
-        .map((c) => ({ name: c.name, count: c.rows.filter((r) => !r.archivedAt).length }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [canvases, brand],
-  )
 
   const viewCanvas = viewName ? canvases.find((c) => c.name === viewName) : null
   const viewRows = useMemo(() => (viewCanvas ? viewCanvas.rows.filter((r) => !r.archivedAt) : []), [viewCanvas])
@@ -9904,18 +9892,23 @@ export function FlowsView() {
             </button>
           )}
           <span className="flow-crumb-sep">/</span>
-          {flowShareLock ? (
-            <span className="flow-switcher" style={{ cursor: 'default' }}>{viewing ? viewShort : name.trim() || 'Campaign'}</span>
-          ) : (
-            viewing || name.trim() ? (
-              <button className="flow-switcher" onClick={() => setSwitcherOpen((o) => !o)}>
-                {viewing ? viewShort : name.trim()}
-                <span className="flow-switcher-caret">▾</span>
-              </button>
-            ) : (
-              <span className="flow-switcher flow-switcher-flat">New campaign</span>
-            )
-          )}
+          {/**
+           * WHERE YOU ARE, WHICH IS NOT A CONTROL.
+           *
+           * This was a bordered pill with a caret, opening a menu of the brand's other campaigns and
+           * a "+ New campaign" above them. Three things were wrong with that and the last one is the
+           * reason it went. The menu was a second route to a page that is one crumb to the left and
+           * says the same thing better — Campaigns lists them with their channels, their assets and
+           * their state, where this listed a name and a count. Its "+ New campaign" was a second
+           * copy of the ＋ on that page. And the last segment of a breadcrumb is a statement of where
+           * you are: dressing it as the only button in the trail, heavier than the crumb that IS
+           * clickable, points the affordance exactly backwards.
+           *
+           * So it says the campaign's name. Switching is what the trail already does.
+           */}
+          <span className="flow-crumb-now">
+            {viewing ? viewShort : name.trim() || (flowShareLock ? 'Campaign' : 'New campaign')}
+          </span>
           {/* Inside a smart object: a third crumb segment, so the way back out is where you'd look
               for it rather than only on Escape. */}
           {openPlacement && (
@@ -9927,23 +9920,6 @@ export function FlowsView() {
                 </svg>
                 {placementName(openPlacement)}
               </button>
-            </>
-          )}
-          {!flowShareLock && switcherOpen && (
-            <>
-              <div className="flow-switch-scrim" onClick={() => setSwitcherOpen(false)} />
-              <div className="flow-switch-menu">
-                <button className="flow-switch-item flow-switch-new" onClick={() => { startNew(); setSwitcherOpen(false) }}>
-                  + New campaign
-                </button>
-                {brandCampaigns.length > 0 && <div className="flow-switch-sep" />}
-                {brandCampaigns.map((c) => (
-                  <button key={c.name} className={`flow-switch-item${viewName === c.name ? ' active' : ''}`} onClick={() => { openView(c.name); setSwitcherOpen(false) }}>
-                    <span className="flow-switch-name">{c.name.replace(`${brand} — `, '')}</span>
-                    <span className="flow-switch-count">{c.count}</span>
-                  </button>
-                ))}
-              </div>
             </>
           )}
         </div>
