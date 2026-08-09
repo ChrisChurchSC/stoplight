@@ -8446,8 +8446,13 @@ export function FlowsView() {
                     land somewhere only one campaign can see. */}
                 {ref && (
                   <div className="flow-doc-actions">
+                    {/* A BUTTON, not a link. Taking a file is the substantive act in this row and
+                        the only one that opens a file picker; the two beside it are the rare paths
+                        and stay quiet, which is the difference the styling should be carrying. As a
+                        link among links it read as a footnote to the document rather than the way to
+                        change it. */}
                     <button
-                      className="flow-doc-override-go"
+                      className="flow-fill-upload"
                       disabled={busy}
                       onClick={() => { docTargetRef.current = { cardId: nt.id, override: false }; docFileRef.current?.click() }}
                     >
