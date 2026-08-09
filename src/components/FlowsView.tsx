@@ -76,6 +76,7 @@ import { Hint } from './Hint'
 import { FlowSteps } from './FlowSteps'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
+import { flushPersistedState } from '../adapters/state/workspaceState'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
 import { MiniSheet } from './MiniSheet'
@@ -699,6 +700,18 @@ export function FlowsView() {
    * quietly disagree with every asset it fed and nothing said so. This is what the Apply bar reads.
    */
   const [dirtyCards, setDirtyCards] = useState<Record<string, number>>({})
+  /**
+   * THE SAVE BUTTON'S OWN STATE. 'saved' is held briefly so the press has an answer on screen.
+   *
+   * The board autosaves and always has, and the panel used to say so by having no Save at all. That
+   * reasoning is sound and it was still the wrong call: "is this saved" is the question people
+   * actually arrive with, an autosave answers it only by never being mentioned, and the one control
+   * that did exist here was labelled for regenerating copy. So there is a Save, it does the real
+   * work the debounce was going to do later, and it says when it is done.
+   */
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const savedTimer = useRef<number | null>(null)
+  useEffect(() => () => { if (savedTimer.current) window.clearTimeout(savedTimer.current) }, [])
   const markCardDirty = (id: string) => setDirtyCards((d) => (d[id] ? d : { ...d, [id]: Date.now() }))
   /**
    * The brief is not an object card, so it has no card id; it gets a reserved key. It needs the bar
@@ -6707,6 +6720,31 @@ export function FlowsView() {
   }, [boardKey, objects, placements, connectors, pos, detached, groups, boardsHydrated])
 
   /**
+   * SAVE NOW, rather than in the six hundred milliseconds the debounce was going to take.
+   *
+   * Real work, not a reassurance button: it cancels the pending board write and makes it now, then
+   * pushes every workspace value still sitting in its own debounce (flushPersistedState, the same
+   * call the tab-hide handler makes). After this the board and the records are as far along as this
+   * device can get them, which is exactly what somebody pressing Save is asking for.
+   *
+   * Gated on boardsHydrated for the reason every write here is: before the workspace has been read,
+   * writing the board back is not a save, it is this device's stale copy overwriting the real one.
+   */
+  const saveNow = async () => {
+    if (savedTimer.current) window.clearTimeout(savedTimer.current)
+    setSaveState('saving')
+    if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
+    if (boardsHydrated) saveFlowBoard(boardSnapshot(boardKey))
+    try {
+      await flushPersistedState()
+    } catch {
+      /* best effort by contract: it never rejects, and the save banner owns real failures */
+    }
+    setSaveState('saved')
+    savedTimer.current = window.setTimeout(() => setSaveState('idle'), 2000)
+  }
+
+  /**
    * The workspace arrived while a campaign was open, so put its board on screen.
    *
    * Without this the gate above only converts a wipe into a stall: openView had already loaded the
@@ -8137,6 +8175,22 @@ export function FlowsView() {
               the answer to "which card am I looking at" — which you need before anything below is
               worth reading. The fill box is still the first thing here that DOES anything.
               Blank is fine; the card then answers to the record it names, as it always did. */}
+          {/* SAVE, at the top of the panel and on every card.
+              The board has always autosaved, and the panel said so by having no Save at all, which
+              answers the question by never mentioning it. This one does the work the debounce was
+              going to do later (see saveNow) and reports when it is done, so "did that take?" has an
+              answer you can point at rather than a convention you have to know. */}
+          <div className="flow-insp-saverow">
+            <button
+              className="flow-insp-save"
+              disabled={saveState === 'saving'}
+              title="Write this board and your records now, instead of waiting for the autosave"
+              onClick={() => void saveNow()}
+            >
+              {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
+            </button>
+            <span className="flow-insp-saverow-note">Edits save on their own; this does it now.</span>
+          </div>
           <label className="flow-inspect-label">Name</label>
           <input
             className="flow-inspect-input"

@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.65',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A card’s inspector has a Save button. The board has always saved itself, and the panel said so by having no Save at all, which answers the question by never mentioning it. The button does the work the autosave was going to do six hundred milliseconds later: it writes the board now and pushes every record still waiting out its own delay, then says Saved. The line beside it still tells you edits save on their own, so it reads as “now” rather than as “or else”.',
+          'And “Save as a smart object” moved to where it can be seen. It went in under Applied to, which on a card with a document attached is below the name, the record, the whole document panel and the list of everything the card feeds: most of a screen down a narrow column, which is the same as not being there. It sits under the card’s name now.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.64',
     dateLabel: 'August 8, 2026',
     groups: [
