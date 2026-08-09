@@ -5286,9 +5286,14 @@ button.mf-open:focus-visible,
 .flow-fill-doc-from strong { font-weight: 650; color: var(--text); }
 /* The chip's own top margin, now that the line above it is carrying the gap. */
 .flow-fill-doc-from + .flow-fill-doc-head { margin-top: 5px; }
-/* THE OVERRIDE, under the document it departs from. A quiet link rather than a button: it sits
-   below the only destructive control on the panel and must not compete with it, and it is the rare
-   path by design — the common answer is the object's own document, which is already there. */
+/* THE WAYS TO CHANGE THE DOCUMENT, on one row under it. Quiet links rather than buttons: they sit
+   below the only destructive control on the panel and must not compete with it, and the common
+   answer is the object's own document, which is already there. Wrapped and gapped because two of
+   them can show at once and the column is narrow. */
+.flow-doc-actions {
+  margin: 7px 0 0;
+  display: flex; flex-wrap: wrap; gap: 4px 12px;
+}
 .flow-doc-override { margin: 7px 0 0; }
 .flow-doc-override-go {
   border: none; background: none; padding: 0; cursor: pointer;
@@ -5298,18 +5303,38 @@ button.mf-open:focus-visible,
 }
 .flow-doc-override-go:hover:not(:disabled) { color: var(--text); text-decoration-color: currentColor; }
 .flow-doc-override-go:disabled { opacity: 0.5; cursor: default; }
-/* THE NAME IS THE LID OF THE BOX HOLDING THE TEXT, so the two join: shared border, no seam, and the
-   document reads as one object rather than as a chip that happens to have prose under it.
+/* THE NAME IS A CHIP AGAIN, closed on all four sides. It used to be the lid of the always-open text
+   box below it — shared border, no seam — which was right while the two were one object. The text
+   now sits behind a disclosure, so a chip with its bottom edge rubbed out would be a lid on nothing.
    (--panel, which the chip asked for, is not a variable this stylesheet defines and resolved to
    nothing; --surface is the one that means "a page", which is what a document should look like
    sitting on the box's tint.) */
 .flow-fill-doc-head {
-  /* Under the button that produced it. */
   margin-top: 9px;
   margin-bottom: 0;
   background: var(--surface);
-  border-bottom-color: transparent;
-  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+/* READ THE DOCUMENT — the disclosure that holds its text. The summary is styled as the same quiet
+   link as the actions below it, because it belongs to the same row of things you can do to the
+   document; the marker goes because the word already says it opens. */
+.flow-doc-read { margin: 6px 0 0; }
+.flow-doc-read-sum {
+  display: inline-block;
+  cursor: pointer;
+  list-style: none;
+  font-size: 10.5px; color: var(--text-faint);
+  text-decoration: underline; text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--text-faint) 45%, transparent);
+}
+.flow-doc-read-sum::-webkit-details-marker { display: none; }
+.flow-doc-read-sum:hover { color: var(--text); text-decoration-color: currentColor; }
+.flow-doc-read-sum:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+/* Once open, the text is its own bordered page under the summary rather than a continuation of the
+   chip, so it needs the corners and the top edge the seam-joined version gave up. */
+.flow-doc-read[open] .flow-fill-doc-body {
+  margin-top: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 7px;
 }
 /* WHAT THE DOCUMENT ACTUALLY SAYS, exactly as the writer will receive it — hence pre-wrap and no
    rendering: the marks are part of what was uploaded. Bounded to about a screenful and scrolled,
