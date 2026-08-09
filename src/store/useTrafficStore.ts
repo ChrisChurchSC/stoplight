@@ -5161,10 +5161,60 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveFlights(flights)
       const openProjects = s.openProjects.map((p) => (p === from ? to : p))
       saveOpenProjects(openProjects)
+      /**
+       * 4) A CAMPAIGN'S NAME IS A KEY, NOT A LABEL, and everything filed under it comes along.
+       *
+       * The three lines above were the whole of this rename, and they are the half you can see: the
+       * record, the rows, the flights, the open tabs. The half you cannot see is every slice keyed by
+       * the name itself — the BOARD (flowBoards.key), the chat thread (flowChats.flowKey), which
+       * canvas was last open (activeCanvas, keyed "client|campaign"), the objects made on it
+       * (smartObjects.campaign), the fan conditions, and the campaign's RTBs. None of them moved, so a
+       * rename stood the campaign next to its own board instead of on it: the cards were gone, the
+       * thread was gone, and the originals sat under a name nothing would ask for again.
+       *
+       * Every one is a rekey rather than a merge. A name already in use is refused at the top of this
+       * function, so there is nothing at the destination to overwrite.
+       */
+      const flowBoards = s.flowBoards.map((b) => (b.key === from ? { ...b, key: to } : b))
+      saveFlowBoards(flowBoards)
+      const flowChats = s.flowChats.map((c) => (c.flowKey === from ? { ...c, flowKey: to } : c))
+      saveFlowChats(flowChats)
+      const smartObjects = s.smartObjects.map((o) => (o.campaign === from ? { ...o, campaign: to } : o))
+      saveSmartObjects(smartObjects)
+      // Keyed "client|campaign", so only the half after the bar is this campaign's; the client half is
+      // whatever it was filed under and is not this function's business to change.
+      const activeCanvas: Record<string, string> = {}
+      for (const [key, id] of Object.entries(s.activeCanvas)) {
+        const bar = key.indexOf('|')
+        activeCanvas[bar >= 0 && key.slice(bar + 1) === from ? `${key.slice(0, bar)}|${to}` : key] = id
+      }
+      saveActiveCanvas(activeCanvas)
+      const campaignConditions = { ...s.campaignConditions }
+      if (from in campaignConditions) {
+        campaignConditions[to] = campaignConditions[from] ?? []
+        delete campaignConditions[from]
+        saveConditions(campaignConditions)
+      }
+      // RTBs live in their own localStorage map AND an in-memory registry the resolver reads, so both
+      // halves move or the proof a campaign can draw on disappears at the next lookup.
+      const rtbStore = loadCampaignRtbs()
+      if (from in rtbStore) {
+        const list = rtbStore[from] ?? []
+        rtbStore[to] = list
+        delete rtbStore[from]
+        saveCampaignRtbs(rtbStore)
+        registerCampaignRtbs(to, list)
+        registerCampaignRtbs(from, [])
+      }
       return {
         campaignList,
         flights,
         openProjects,
+        flowBoards,
+        flowChats,
+        smartObjects,
+        activeCanvas,
+        campaignConditions,
         newCampaignParent: s.newCampaignParent === from ? to : s.newCampaignParent,
         campaignFilter: s.campaignFilter === from ? to : s.campaignFilter,
       }
@@ -7054,7 +7104,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   copyBlockerFor: (campaign) => {
     const client = clientForCampaign(campaign)
-    if (isBrandless(client) && !isDraftBrand(client, get().brandMeta)) {
+    /**
+     * DRAFTS IS NOT A BRAND EITHER, and this is the one place that had not been told.
+     *
+     * isBrandless answers for Unassigned, which was the only way to reach here without a brand while
+     * everything landed on a brand by default. Every other resolver already excludes the Drafts space
+     * by name — canvasBrandScope, the canvas's own brand, healCampaignBrand — because it is a shelf
+     * for work that is nobody's yet, not a client with a voice. Left out of this check it read as a
+     * brand exactly once: at the gate that decides whether there is a voice to write in. The copy
+     * would have been drawn from the Drafts bucket, which holds one placeholder audience and no proof.
+     *
+     * It matters more than it did: a new campaign now starts here rather than on whichever brand the
+     * rail happened to be pointing at, so this is the state every campaign passes through.
+     */
+    if ((isBrandless(client) || client === DRAFTS_SPACE) && !isDraftBrand(client, get().brandMeta)) {
       return `Bind "${campaign || 'this canvas'}" to a brand before generating. A brand-less canvas has no voice or proof to write from.`
     }
     if (!hasWiredContext(boardFor(get().flowBoards, campaign))) {

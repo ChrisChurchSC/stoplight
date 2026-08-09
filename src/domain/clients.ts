@@ -371,3 +371,24 @@ export function liveCampaignNames(
  */
 export const campaignShortName = (name: string, client?: string): string =>
   client && client !== UNASSIGNED ? name.replace(`${client} — `, '') : name
+
+/**
+ * THE INVERSE: the name a campaign is STORED under, given what somebody typed and the brand it
+ * belongs to. The one place the prefix rule lives, because it was three template strings — the
+ * builder's, the rename field's, and the brand rebind's — and they did not agree. One of them read a
+ * brand SCOPE rather than the campaign's own brand, so on a workspace holding a single brand every
+ * campaign was named after it whatever it was called and whoever it was for.
+ *
+ * NO BRAND IS A REAL ANSWER, and it produces no prefix. A campaign starts filed under nobody and
+ * picks up its prefix when a Brand card gives it one; the catch-all buckets are not brands, so
+ * neither Unassigned nor Drafts ever becomes one — the same rule campaignShortName reads back.
+ *
+ * Idempotent on a name that already carries the prefix, so re-binding the brand a campaign is
+ * already named for cannot stack a second copy of it on the front.
+ */
+export const campaignStoredName = (short: string, brand?: string): string => {
+  const typed = short.trim() || 'New campaign'
+  const b = (brand ?? '').trim()
+  if (!b || b === UNASSIGNED || b === DRAFTS_SPACE) return typed
+  return `${b} — ${campaignShortName(typed, b)}`
+}

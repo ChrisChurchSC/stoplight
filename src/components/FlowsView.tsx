@@ -41,7 +41,7 @@ import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
 import { canvasBrandScope, isBrandless, resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
-import { DRAFTS_SPACE, UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
+import { DRAFTS_SPACE, UNASSIGNED, campaignShortName, campaignStoredName, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, newAudience, type AudienceType } from '../domain/audiences'
 import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, INDUSTRIES, SENIORITIES } from '../domain/taxonomy'
 import { BufferedInput, BufferedTextarea } from './BufferedInput'
@@ -1452,6 +1452,21 @@ export function FlowsView() {
    */
   const browseBrand = canvasBrandScope(clientFilter, brandNames)
   const brand = !isBrandless(boundBrand) && boundBrand !== DRAFTS_SPACE ? boundBrand : browseBrand
+  /**
+   * THE BRAND THE CAMPAIGN ITSELF STATES — never one inferred from where you happen to be standing.
+   *
+   * `brand` above is a SCOPE: it answers "whose records should this canvas offer me", and to do that
+   * it is allowed to fall back to the rail, and through canvasBrandScope to the workspace's only
+   * brand when there is exactly one. That fallback is right for a picker and wrong for anything that
+   * WRITES the brand down, because it turns "I have one client" into "this campaign is theirs". In a
+   * one-brand workspace it filed every new campaign under that brand and prefixed its name with it,
+   * whatever the campaign was called and whoever it was for, with nothing on screen having asked.
+   *
+   * So naming and filing read this instead: the campaign's own record, or nothing. An empty string
+   * means the campaign has not been given a brand yet, which is a real and useful state — it is what
+   * a Brand card is for — rather than a gap to fill with the nearest guess.
+   */
+  const statedBrand = !isBrandless(boundBrand) && boundBrand !== DRAFTS_SPACE ? boundBrand : ''
   // The brand's data sets (the freeform spreadsheets), linkable from a Data source card on the canvas.
   const brandDatasets = useMemo(() => {
     // NEWEST FIRST. A brand accumulates data sets and the useful one is almost always the last one
@@ -3086,7 +3101,10 @@ export function FlowsView() {
   }, [rects, viewDelivs, viewRows, viewName, zoom])
   const viewAudiences = useMemo(() => [...new Set(viewRows.map((r) => (r.audience ?? '').trim()).filter(Boolean))], [viewRows])
   const viewFlight = campaignList.find((c) => c.name === viewName)?.durationWeeks
-  const viewShort = viewName ? viewName.replace(`${brand} — `, '') : ''
+  // The stored name minus its "Brand — " plumbing. Off the brand the campaign STATES, not the scope:
+  // stripping with an inferred brand takes the prefix off a name that never carried it, and puts one
+  // back on when the field commits.
+  const viewShort = viewName ? campaignShortName(viewName, statedBrand) : ''
 
   // The records this flow references, drawn from the Records pages (Companies / People /
   // Segments / Media mix). These references drive asset generation.
@@ -3412,24 +3430,57 @@ export function FlowsView() {
    * board keeps an edge the binding refused.
    */
   const attachToCampaign = (nodeId: string): boolean => {
+    // What the campaign was filed under before the wire, so the rename at the bottom can tell a
+    // binding that CHANGED the brand from one that restated it.
+    const filedBefore = viewName ? clientForCampaign(viewName) : ''
     // Before the refs, because a Brand card has none: it binds the campaign instead of contributing
     // to it, and that is the whole of what wiring one does.
     const refused = bindBrandFromCard(nodeId)
     if (refused) { useTrafficStore.getState().setBrandNotice(refused); return false }
     const refs = refsBehind(nodeId)
-    if (!refs.length) return true
-    const explicit = viewName !== null ? flowRefs : briefRefs
-    const firstSegment = refs.some((r) => r.type === 'segment') && explicit === null
-    const base = firstSegment ? [] : (explicit ?? [])
-    const next = [...base]
-    for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
-    if (viewName !== null) {
-      setCampaignReferences(viewName, next)
-      setRefsDirty(true)
-    } else {
-      commitBriefRefs(next)
+    if (refs.length) {
+      const explicit = viewName !== null ? flowRefs : briefRefs
+      const firstSegment = refs.some((r) => r.type === 'segment') && explicit === null
+      const base = firstSegment ? [] : (explicit ?? [])
+      const next = [...base]
+      for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
+      if (viewName !== null) {
+        setCampaignReferences(viewName, next)
+        setRefsDirty(true)
+      } else {
+        commitBriefRefs(next)
+      }
     }
+    renameOntoBrand(filedBefore)
     return true
+  }
+  /**
+   * THE NAME CATCHES UP WITH THE BINDING.
+   *
+   * Names are STORED brand-prefixed — "Big Buoy — Q3 Launch" — so two brands can each own a "Q3
+   * Launch" without colliding on the one key boards, chats, flights and tabs all hang off. A campaign
+   * now starts with no brand and no prefix, so the moment a Brand card gives it one, the stored name
+   * has to pick the prefix up or the campaign is filed under a brand its key has never heard of.
+   *
+   * LAST, AND ONLY LAST. Everything above writes against the name the campaign still has —
+   * setCampaignReferences would otherwise mint a fresh record under a name the rename had just
+   * retired, which is a phantom campaign holding the refs the real one asked for. The board is
+   * flushed first for the same reason in the other direction: renameCampaign moves the board to the
+   * new key, and a write still sitting in the 600ms debounce would land afterwards under the old one.
+   *
+   * The short name is stripped of BOTH the old prefix and the new one: an unbind leaves the old
+   * prefix in place (taking a brand away is not licence to rename somebody's campaign), so re-wiring
+   * the same Brand card afterwards would otherwise stack a second copy of it on the front.
+   */
+  const renameOntoBrand = (filedBefore: string) => {
+    if (!viewName) return
+    const filedNow = clientForCampaign(viewName)
+    if (filedNow === filedBefore || isBrandless(filedNow) || filedNow === DRAFTS_SPACE) return
+    const renamed = campaignStoredName(campaignShortName(viewName, filedBefore), filedNow)
+    if (renamed === viewName) return
+    if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
+    if (boardsHydrated) saveFlowBoard(boardSnapshot(boardKey))
+    void renameCampaign(viewName, renamed).then(() => setViewName(renamed))
   }
   /** Detaching drops the card's refs, unless another attached card still contributes the same one. */
   /** Returns whether the wire may be removed; see unbindBrandFromCard. */
@@ -6265,7 +6316,22 @@ export function FlowsView() {
      * A campaign with no assets yet already renders correctly: it opens on the same buildable canvas,
      * reads "0 channels · 0 assets" in the index, and Build fills it in from there.
      */
-    setViewName(createDraftCampaign(brand && brand !== UNASSIGNED ? brand : DRAFTS_SPACE))
+    /**
+     * A NEW CAMPAIGN STARTS WITH NO BRAND, and picks one up when you say so.
+     *
+     * This passed `brand`, the canvas SCOPE — which is the rail, and through canvasBrandScope the
+     * workspace's only brand when there is exactly one. So on a one-brand workspace every campaign
+     * started here was filed under that brand and named after it before a word had been typed, and
+     * the rename field could only ever edit the part after the prefix: there was no gesture anywhere
+     * that could say "this one is not theirs". Opening any campaign also points the rail at its brand
+     * and leaves it there, so on a workspace with several brands the last one you looked at claimed
+     * everything you started next.
+     *
+     * Drafts is the honest starting state — the campaign exists, it is listed, it is not yet anybody's
+     * — and the canvas already tells you how to leave it: wire a Brand card into the brief, which
+     * files it and renames it to match (see bindBrandFromCard).
+     */
+    setViewName(createDraftCampaign(DRAFTS_SPACE))
     setNodes([])
     setObjects([])
     // Placements belong to the campaign you made them on, same as the cards and the chat thread.
@@ -6660,8 +6726,14 @@ export function FlowsView() {
    *
    * campaignShortName already treats UNASSIGNED as no prefix when it shows a name; this is the
    * other half of that rule, applied where the name is made.
+   *
+   * AND THE PREFIX COMES OFF A BRAND CARD, NOT OFF THE SCOPE. This read `brand`, which falls back to
+   * the rail and then to the workspace's only brand — so in a one-brand workspace every campaign
+   * built here was named after that brand no matter what was typed or what it was for. The wire is
+   * the campaign's own statement of whose it is, and it is the same wire buildFlow binds from a few
+   * lines later, so the name and the record now come from one source instead of two that can differ.
    */
-  const campaignNameFor = (n: string) => `${brand && brand !== UNASSIGNED ? `${brand} — ` : ''}${n.trim() || 'New campaign'}`
+  const campaignNameFor = (n: string) => campaignStoredName(n, wiredBrandNames()[0])
   // The campaign name this flow builds into, used to scope the real Grid / Calendar to just
   // this flow's assets.
   const flowCampaign = viewName ?? campaignNameFor(name)
@@ -6897,7 +6969,12 @@ export function FlowsView() {
         `Two Brand cards are wired into this brief. "${campaignName}" is being built under ${wiredBrands[0]}; unwire ${wiredBrands.slice(1).join(', ')} so the board says what the campaign does.`,
       )
     }
-    const buildBrand = wiredBrands[0] || brand
+    // The wire, then the campaign's OWN record — and then nothing. This fell through to `brand`, the
+    // canvas scope, which is the rail and behind it the workspace's only brand: on a one-brand
+    // workspace a Build with no Brand card wired filed the campaign under that brand and named it
+    // after it, having asked nobody. Building without a brand is a supported state (the comment
+    // below is about exactly that), so the honest answer here is that there is not one yet.
+    const buildBrand = wiredBrands[0] || statedBrand
     try {
       /**
        * REGISTER THE CAMPAIGN EVEN WITH NO BRAND.
@@ -11352,7 +11429,10 @@ export function FlowsView() {
                         onCommit={(v) => {
                           const next = v.trim()
                           if (!next || !viewName || next === viewShort) return
-                          const full = brand ? `${brand} — ${next}` : next
+                          // statedBrand, not the scope: prefixing with an inferred brand renamed a
+                          // campaign into a brand it had never been filed under, on a workspace whose
+                          // only crime was having one brand in it.
+                          const full = campaignStoredName(next, statedBrand)
                           void renameCampaign(viewName, full).then(() => setViewName(full))
                         }}
                       />
