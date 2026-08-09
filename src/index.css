@@ -1488,6 +1488,20 @@ button {
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 
+/* THIS ROW HAS ACTUALLY GONE OUT. The same fact the canvas card wears a stripe for, off the same
+   predicate, so the two surfaces cannot disagree about which an asset is.
+
+   On the gutter's RIGHT edge, because .on above has already taken the left one and the two are
+   different facts that can be true at once: the inspector is open on this row, and this row shipped.
+   Sharing an edge would make one of them invisible about half the time. No mark for a planned row —
+   that is most of the sheet, and a mark on the majority is not a mark. */
+.sheet tr.data-row.live .gutter {
+  box-shadow: inset -3px 0 0 var(--green);
+}
+.sheet tr.data-row.live.on .gutter {
+  box-shadow: inset 3px 0 0 var(--accent), inset -3px 0 0 var(--green);
+}
+
 /* The cells that OPEN the asset say so with the cursor, the way the copy columns beside them already
    did. The asset name is the row's identity and the copy is what you came to fix; both are one
    click, and the pointer is what tells you before you spend it. */
@@ -6078,6 +6092,25 @@ button.mf-open:focus-visible,
 }
 .flow-brief-node:hover {
   border-color: var(--text-faint);
+}
+/* THIS ONE HAS ACTUALLY GONE OUT.
+
+   A stripe down the leading edge rather than a tinted border or a filled card: the border is already
+   carrying selection, the drop target and the generating state, and the fill is carrying the kind
+   chip's motion tone. A campaign part way through shipping is the normal state of a real campaign,
+   so this has to read at a glance across thirty cards without competing with any of that.
+
+   Green only. There is deliberately no planned-state mark: planning is what nearly every card on a
+   board is, and a mark on the majority is not a mark. */
+.flow-brief-node.live::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--green);
 }
 /* Post cards stack the icon above the headline. */
 .flow-brief-node .flow-node-main {

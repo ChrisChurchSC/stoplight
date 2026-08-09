@@ -93,7 +93,7 @@ import { CalendarView } from './CalendarView'
 import { FlowsHome } from './FlowsHome'
 import { apiFetch } from '../lib/apiFetch'
 import { AddRecordMenu, type ObjectCardOption } from './AddRecordMenu'
-import { assetMode, copyDiff, copyDiffStat, type AssetMode } from '../domain/assetMode'
+import { assetMode, copyDiff, copyDiffStat, isLiveAsset, type AssetMode } from '../domain/assetMode'
 import { readLinkFor } from '../domain/liveLink'
 
 /**
@@ -11189,8 +11189,15 @@ export function FlowsView() {
                                     to a single post. Builder subcards below stay out: their ids are
                                     `node:index` placeholders with no row behind them yet, so a wire
                                     to one would resolve to nothing. */}
+                                {/* LIVE READS FROM ACROSS THE BOARD, which is most of what the mode
+                                    is for. A campaign part way through shipping is the normal state
+                                    of a real campaign, and until now a board of thirty cards said
+                                    nothing about which of them had actually gone out — you opened
+                                    them one at a time to find out. One class, read off the same
+                                    predicate the inspector opens on, so the board and the panel
+                                    cannot disagree about which an asset is. */}
                                 <div
-                                  className={`flow-node flow-brief-node${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
+                                  className={`flow-node flow-brief-node${isLiveAsset(r) ? ' live' : ''}${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
                                   data-node-id={r.id}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
