@@ -296,7 +296,6 @@ export function SheetGrid({
    * to an asset that is no longer on screen.
    */
   const [addFor, setAddFor] = useState<string | null>(null)
-  const [addQuery, setAddQuery] = useState('')
   /**
    * THE CARET OPENS A DRAWER, not a native menu. A <select> can list records and nothing else: no
    * search, no detail line, and no way to manage the library you are picking from — so a record you
@@ -1218,7 +1217,6 @@ export function SheetGrid({
                               onClick={(ev) => {
                                 ev.stopPropagation()
                                 setAddFor(row.id)
-                                setAddQuery('')
                               }}
                             >
                               <span aria-hidden="true">＋</span>
@@ -1497,7 +1495,6 @@ export function SheetGrid({
       {addFor && (() => {
         const row = view.find((r) => r.id === addFor)
         if (!row) return null
-        const q = addQuery.trim().toLowerCase()
         const entries = madeFrom({
           kinds: MADE_FROM_KINDS,
           cards: cardsByRow.get(row.id) ?? [],
@@ -1506,7 +1503,6 @@ export function SheetGrid({
           rowAudience: rowAudienceFor(row),
           nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
         })
-        const on = new Set(entries.filter((e) => e.refId).map((e) => `${e.kind}:${e.refId}`))
         /**
          * One row, in the shape the canvas states an object in: mark and kind in the object's own
          * hue, its name, and the line under it saying what it contributes. `sub` is deliberately
@@ -1551,17 +1547,6 @@ export function SheetGrid({
             </div>
           )
         }
-        // Everything not already on the asset, in registry order. Each row says its own kind, so
-        // there are no group headings above them to say it a second time.
-        const addable = MADE_FROM_KINDS.filter(settable).flatMap((kind) =>
-          optsFor(kind)
-            .filter(
-              (o) =>
-                !on.has(`${kind}:${o.id}`) &&
-                (!q || o.label.toLowerCase().includes(q) || (o.detail ?? '').toLowerCase().includes(q)),
-            )
-            .map((o) => ({ kind, id: o.id, label: o.label, detail: o.detail })),
-        )
         /**
          * Making one, kept to the foot rather than sitting beside the kind it makes.
          *
@@ -1570,10 +1555,8 @@ export function SheetGrid({
          * list of things and started reading as a menu. Down here they are one row of the same
          * shape, and on a fresh brand with nothing in the library they are the whole drawer, which
          * is exactly right: there is nothing to pick and everything to make.
-         *
-         * Absent while searching: with a query on screen, "New voice…" reads as a result.
          */
-        const makeable = q || !onCreateObject ? [] : MADE_FROM_KINDS.filter((k) => settable(k) && CREATABLE.has(k))
+        const makeable = onCreateObject ? MADE_FROM_KINDS.filter((k) => settable(k) && CREATABLE.has(k)) : []
         return (
           <>
             <div className="flow-recdrawer-scrim" onClick={() => setAddFor(null)} />
@@ -1584,17 +1567,11 @@ export function SheetGrid({
                   ✕
                 </button>
               </header>
-              <input
-                className="flow-recdrawer-search"
-                placeholder="Search objects…"
-                value={addQuery}
-                onChange={(e) => setAddQuery(e.target.value)}
-                autoFocus
-              />
+              {/* NO SEARCH BOX. It existed to sift the hundreds-long add list, and filtered
+                  nothing else — with that list gone it would empty the drawer on the first
+                  keystroke. What remains is short enough to read. */}
               <div className="flow-recdrawer-list mf-objlist">
-                {/* Hidden while searching: a search is a question about what to add, and the answer
-                    to it is below rather than up here. */}
-                {!q && !!entries.length && (
+                {!!entries.length && (
                   <>
                     <div className="mf-objsec">On this asset</div>
                     {entries.map((e) =>
@@ -1625,19 +1602,14 @@ export function SheetGrid({
                     )}
                   </>
                 )}
-                {(!!addable.length || !makeable.length) && (
-                  <div className="mf-objsec">{q ? 'Objects' : 'Add an object'}</div>
-                )}
-                {!addable.length && !makeable.length && <div className="flow-recdrawer-empty">No objects match.</div>}
-                {addable.map((a) =>
-                  objRow({
-                    key: `add:${a.kind}:${a.id}`,
-                    kind: a.kind,
-                    name: a.label,
-                    sub: a.detail,
-                    title: `Make this asset from ${a.label}`,
-                    onOpen: () => setRowRecord(row, a.kind, a.id, a.label),
-                  }),
+                {/* NO "ADD AN OBJECT" LIST. It offered every record of every kind the asset does
+                    not already carry — on a brand with a real library, hundreds of rows of mixed
+                    kinds, which is the longest thing in the app and the least like a decision.
+                    Picking an existing record is what the chip's own caret does, one kind at a
+                    time, with the list scoped and searchable; this drawer is left with the two
+                    questions it answers well: what is on this asset, and what could be made for it. */}
+                {!entries.length && !makeable.length && (
+                  <div className="flow-recdrawer-empty">Nothing reaches this asset yet.</div>
                 )}
                 {!!makeable.length && <div className="mf-objsec">Make a new object</div>}
                 {makeable.map((kind) =>
