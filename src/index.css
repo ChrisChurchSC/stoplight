@@ -4763,7 +4763,11 @@ button.mf-open:focus-visible,
    change with the ground, and inheriting a token whose job does is how a chart goes quietly
    illegible in one mode. The fill is not carrying identity, so it is free to be quiet. */
 :root { --chart-line: #30a46c; }
-.spark { display: block; overflow: visible; }
+/* Fills its column. The width attribute on the element is only the viewBox's aspect: a flex column
+   stretches its children, so the drawn width is the cell's and saying otherwise in markup would be
+   a number nothing honours. overflow stays visible so the endpoint dot is not clipped in half by
+   sitting exactly on the edge, which is where the most recent reading always is. */
+.spark { display: block; width: 100%; overflow: visible; }
 .spark-line {
   fill: none;
   stroke: var(--chart-line);
