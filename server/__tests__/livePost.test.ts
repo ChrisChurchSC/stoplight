@@ -83,6 +83,55 @@ describe('reading a post back from its link', () => {
     })
   })
 
+  /** The counts on the public record, under the names the rest of the app uses. */
+  it('brings back the counts YouTube states publicly, on the same call as the words', async () => {
+    process.env.YOUTUBE_API_KEY = 'k'
+    let asked = ''
+    globalThis.fetch = vi.fn(async (url) => {
+      asked = String(url)
+      return {
+        ok: true,
+        json: async () => ({
+          items: [{
+            snippet: { title: 'Hurricane prep', description: 'What to do first.' },
+            statistics: { viewCount: '41200', likeCount: '830', commentCount: '52' },
+          }],
+        }),
+      }
+    }) as never
+    const out = await readLivePost('https://youtu.be/dQw4w9WgXcQ')
+    expect(out.metrics).toEqual({ views: 41200, likes: 830, comments: 52 })
+    // One request for both, because they are two fields of one resource and the quota counts calls.
+    expect(asked).toContain('part=snippet,statistics')
+  })
+
+  /**
+   * A channel that hides its like count OMITS the field rather than sending zero, and recording a
+   * hidden count as 0 is a measurement nobody took.
+   */
+  it('drops a count the channel does not publish rather than calling it zero', async () => {
+    process.env.YOUTUBE_API_KEY = 'k'
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ items: [{ snippet: { title: 'T' }, statistics: { viewCount: '10' } }] }),
+    })) as never
+    const out = await readLivePost('https://youtu.be/dQw4w9WgXcQ')
+    expect(out.metrics).toEqual({ views: 10 })
+    expect(out.metrics).not.toHaveProperty('likes')
+  })
+
+  /** "This source publishes none" and "it says zero" must stay different answers. */
+  it('omits metrics entirely for a source that publishes none', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => 'text/html' },
+      text: async () => '<html><head><title>A page</title></head><body><p>Words.</p></body></html>',
+    })) as never
+    const out = await readLivePost('https://bigbuoy.com/guides/hurricane-prep')
+    expect(out.available).toBe(true)
+    expect(out.metrics).toBeUndefined()
+  })
+
   it('reports a video YouTube does not have', async () => {
     process.env.YOUTUBE_API_KEY = 'k'
     globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ items: [] }) })) as never

@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.80',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A YouTube video reports its own numbers. Press "Pull what the platform states" on a live asset and its view, like and comment counts come back from YouTube itself — no account to connect, no key beyond the one already reading the words. Every pull is kept rather than replacing the last, so pressing it next week is how the trend gets drawn. Nothing else publishes its numbers: a web page has no view count of its own, and every social platform shows a post’s figures only to the account that owns it, so those still say which connection would do it and the boxes stay there to type into.',
+          'A count the platform does not state stays empty rather than reading zero. A channel that has hidden its likes does not report a nought, it reports nothing, and a nought here would be a measurement nobody took sitting on a chart. The same goes the other way: a figure you typed that the source has no opinion about survives a pull rather than being wiped by it.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.79',
     dateLabel: 'August 9, 2026',
     groups: [
