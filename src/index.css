@@ -24289,8 +24289,10 @@ table.aud-sheet td.stick .aud-cell {
 .nav-item.soon:hover {
   background: none;
 }
-/* The AI fill box's explainer. Above the field, because what a control does has to be readable
-   before you use it, and the placeholder it replaced disappeared on the first keystroke. */
+/* The AI fill box's label. Above the field, because what a control does has to be readable before
+   you use it, and the placeholder it replaced disappeared on the first keystroke. It ran a second
+   line of caveats until they were cut, which is why the head is still a column: one child now, and
+   the gap costs nothing if a second ever earns its place. */
 .flow-fill-head {
   display: flex;
   flex-direction: column;
@@ -24301,11 +24303,6 @@ table.aud-sheet td.stick .aud-cell {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
-}
-.flow-fill-help {
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--text-faint);
 }
 
 /* ============================================================================
