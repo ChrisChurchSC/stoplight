@@ -1179,6 +1179,7 @@ export function FlowsView() {
   const allRows = useTrafficStore((s) => s.rows)
   const attachLiveAsset = useTrafficStore((s) => s.attachLiveAsset)
   const detachLiveAsset = useTrafficStore((s) => s.detachLiveAsset)
+  const takeOverLiveAsset = useTrafficStore((s) => s.takeOverLiveAsset)
   const setLiveCopy = useTrafficStore((s) => s.setLiveCopy)
   const setLiveMetrics = useTrafficStore((s) => s.setLiveMetrics)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
@@ -4355,7 +4356,7 @@ export function FlowsView() {
   const [faceOverride, setFaceOverride] = useState<{ id: string; mode: AssetMode } | null>(null)
   const postFace = (r: TrafficRow): AssetMode => (faceOverride?.id === r.id ? faceOverride.mode : assetMode(r))
   /** What was typed into the Active face but not yet committed: the link, and the copy read back. */
-  const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string; blocked?: boolean } | null>(null)
+  const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string; blocked?: boolean; twinId?: string; twinName?: string } | null>(null)
   /**
    * The read in flight, and what it had to say — tagged with WHICH read, because the copy and the
    * numbers are pulled by two buttons in two sections and an answer printed under the other one
@@ -9580,7 +9581,9 @@ export function FlowsView() {
           id: selPost.id,
           url: raw,
           blocked: true,
-          note: `Already attached to "${r.row.assetName}"${where ? ` in ${campaignShortName(where, clientForCampaign(where))}` : ''}. One asset per published post, or everything it did is counted twice — work on that one, or paste a different link.`,
+          twinId: r.row.id,
+          twinName: r.row.assetName,
+          note: `Already attached to "${r.row.assetName}"${where ? ` in ${campaignShortName(where, clientForCampaign(where))}` : ''}. One asset per published post, or everything it did is counted twice.`,
         })
         return
       }
@@ -9630,9 +9633,33 @@ export function FlowsView() {
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); attach() } }}
             />
             {draft?.note && <p className="flow-live-warn">{draft.note}</p>}
-            {/* No button at all where the answer is no. "Attach it anyway" is offered only for the
-                two refusals that are questions — a shape we have not seen, or a channel one of the
-                two got wrong — and never for the one that cannot be overruled. */}
+            {/* THE WAY THROUGH, rather than a wall.
+                "It belongs to something else" was true and useless: the row already holding the link
+                is usually the site ingest's copy of the page — one nobody wrote, in a campaign
+                nobody opens — and this is the card the work is on. So the post moves here with
+                everything it earned, and the row it came from is archived rather than left claiming
+                to be published with nothing behind it. Said in full before it happens, because it
+                changes two assets and only one of them is on screen. */}
+            {draft?.blocked && draft.twinId && (
+              <button
+                className="flow-insp-open"
+                onClick={() => {
+                  void takeOverLiveAsset(draft.twinId!, selPost.id)
+                  setLiveDraft(null)
+                  setFaceOverride(null)
+                }}
+              >
+                Move it to this card
+              </button>
+            )}
+            {draft?.blocked && draft.twinId && (
+              <p className="flow-inspect-note">
+                The post, its copy and its numbers come here, and “{draft.twinName}” is archived. You
+                can restore it from the campaign it sits in.
+              </p>
+            )}
+            {/* "Attach it anyway" is offered only for the two refusals that are questions — a shape
+                we have not seen, or a channel one of the two got wrong. */}
             {!draft?.blocked && (
               <button className="flow-insp-open" disabled={!draft?.url.trim()} onClick={attach}>
                 {draft?.note ? 'Attach it anyway' : 'Attach this post'}
