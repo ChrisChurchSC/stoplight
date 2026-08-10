@@ -2487,6 +2487,12 @@ interface TrafficState {
   attachLiveAsset: (id: string, url: string, opts?: { channel?: ChannelId; publishedAt?: string }) => Promise<void>
   /** Back to a plan. Keeps the copy and metrics learned while it was live — see the body. */
   detachLiveAsset: (id: string) => Promise<void>
+  /**
+   * Move a published post, and everything measured with it, from the asset holding it onto another —
+   * the way past the duplicate refusal when the row already carrying the link is an ingest artifact
+   * rather than the card the work is on. The old row is archived, which is recoverable.
+   */
+  takeOverLiveAsset: (fromId: string, toId: string) => Promise<void>
   /** The copy the post actually went out with, beside the plan rather than over it. */
   setLiveCopy: (id: string, copy: Record<string, string>, extractedCopy?: string) => Promise<void>
   /** Latest numbers onto the row, and every reading into the append-only snapshot store. */
@@ -6222,6 +6228,61 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // was asked which of the two was wrong and this is their answer.
       ...(opts?.channel ? { channel: opts.channel } : {}),
     })
+  },
+
+  /**
+   * MOVE A PUBLISHED POST FROM ONE CARD TO ANOTHER, taking everything measured with it.
+   *
+   * The way out of the duplicate refusal, and the reason that refusal stopped being a dead end.
+   *
+   * The common way to reach it is not a mistake at all: the site ingest imports a brand's own pages
+   * into its content library, so the page you are attaching to a planned card is very often ALREADY
+   * an asset — one nobody wrote, sitting in a campaign nobody opens. Refusing the link protects the
+   * counts and leaves the person with a card that cannot become the thing it plainly became, and
+   * "go and work on the other one" is not an answer when this is the card the work is on.
+   *
+   * So the link moves, and everything the post earned moves with it: what it said, what it did, when
+   * it went out. Anything else would leave the numbers behind on a row nobody looks at.
+   *
+   * THE OLD ROW IS ARCHIVED, not deleted, and not left holding a hollow copy. It was a second record
+   * of one post; once the post is here, it is a row claiming to be published with nothing behind it,
+   * which is the state that made this confusing in the first place. Archived is recoverable, and the
+   * caller says so before it happens.
+   */
+  takeOverLiveAsset: async (fromId, toId) => {
+    const s = get()
+    const from = s.rows.find((r) => r.id === fromId)
+    const to = s.rows.find((r) => r.id === toId)
+    if (!from || !to || fromId === toId) return
+    await get().updateRows([
+      {
+        id: toId,
+        patch: {
+          sourceUrl: from.sourceUrl,
+          source: from.source ?? 'social-live',
+          publishedAt: from.publishedAt,
+          mediaRefs: from.mediaRefs,
+          live: from.live,
+          socialMetrics: from.socialMetrics,
+          metricsUpdatedAt: from.metricsUpdatedAt,
+          engagement: from.engagement,
+          status: 'posted',
+          postedAt: from.postedAt ?? Date.now(),
+          reconciledAt: Date.now(),
+        },
+      },
+      {
+        id: fromId,
+        patch: {
+          sourceUrl: undefined,
+          live: undefined,
+          socialMetrics: undefined,
+          metricsUpdatedAt: undefined,
+          engagement: undefined,
+          archivedAt: Date.now(),
+        },
+      },
+    ])
   },
 
   /**

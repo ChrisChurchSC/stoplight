@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.82',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A link that already belongs to another asset now has somewhere to go. Attaching your own site’s page to a planned card was refused, correctly — one asset per published post, or everything it did is counted twice — and then left you there, because the row already holding that link is almost always the site ingest’s copy of the page: one nobody wrote, in a campaign nobody opens. "Go and work on that one" is not an answer when this is the card the work is on. So the post moves here instead, with the words it ran and the numbers it earned, and the row it came from is archived rather than left claiming to be published with nothing behind it. Archived, not deleted: it restores from the campaign it sits in.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.81',
     dateLabel: 'August 9, 2026',
     groups: [
