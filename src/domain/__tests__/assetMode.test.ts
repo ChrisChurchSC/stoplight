@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { assetMode, copyDiff, copyDiffStat, effectiveMessaging, isLiveAsset, isPlannedAsset } from '../assetMode'
+import { assetMode, effectiveMessaging, isLiveAsset, isPlannedAsset } from '../assetMode'
 import { reconciliationStat } from '../contentSignals'
-import type { MessagingField } from '../messaging'
 import type { TrafficRow } from '../types'
 
 /**
@@ -68,63 +67,6 @@ describe('is this asset a plan or a fact', () => {
 })
 
 /**
- * THE DIFF IS THE FEATURE. "We planned to lead with the guarantee and shipped the discount" is a
- * sentence nothing in here could produce while the live copy was being written over the plan.
- */
-const FIELDS: MessagingField[] = [
-  { key: 'headline', label: 'Headline' },
-  { key: 'body', label: 'Body' },
-  { key: 'cta', label: 'CTA' },
-]
-
-describe('the plan against what actually ran', () => {
-  it('marks the components that changed and leaves the rest alone', () => {
-    const r = row({
-      messaging: { headline: 'Built for storms', body: 'Same body', cta: 'Book a demo' },
-      live: { copy: { headline: 'Made for rough water', body: 'Same body', cta: 'Book a demo' } },
-    })
-    const lines = copyDiff(r, FIELDS)
-    expect(lines.map((l) => [l.key, l.changed])).toEqual([
-      ['headline', true],
-      ['body', false],
-      ['cta', false],
-    ])
-    expect(copyDiffStat(lines)).toEqual({ compared: 3, changed: 1 })
-  })
-
-  /** Planned and not shipped is a real finding, so the line is reported rather than dropped. */
-  it('reports a component that was planned and never ran', () => {
-    const r = row({ messaging: { cta: 'Book a demo' }, live: { copy: {} } })
-    const cta = copyDiff(r, FIELDS).find((l) => l.key === 'cta')
-    expect(cta).toMatchObject({ planned: 'Book a demo', live: '', changed: true, empty: false })
-  })
-
-  /** Neither side has anything: not a change, and the caller is told so rather than shown a row. */
-  it('does not call an empty component a change', () => {
-    const lines = copyDiff(row(), FIELDS)
-    expect(lines.every((l) => l.empty && !l.changed)).toBe(true)
-    expect(copyDiffStat(lines)).toEqual({ compared: 0, changed: 0 })
-  })
-
-  /** Case is a real change (a headline in title case IS a different headline); whitespace is not. */
-  it('ignores whitespace and respects case', () => {
-    const r = row({
-      messaging: { headline: 'Built for storms  ' },
-      live: { copy: { headline: 'Built for storms' } },
-    })
-    expect(copyDiff(r, FIELDS)[0].changed).toBe(false)
-    const cased = row({ messaging: { headline: 'built for storms' }, live: { copy: { headline: 'Built For Storms' } } })
-    expect(copyDiff(cased, FIELDS)[0].changed).toBe(true)
-  })
-
-  /** With nothing read back, every planned component reads as changed, which is the honest answer. */
-  it('treats a post nothing has been read back from as all-changed', () => {
-    const r = row({ messaging: { headline: 'Built for storms' } })
-    expect(copyDiffStat(copyDiff(r, FIELDS))).toEqual({ compared: 1, changed: 1 })
-  })
-})
-
-/**
  * WHICH WORDS A READER GETS, and why it is not the same answer the diff gives.
  *
  * Two jobs read an asset's copy. "What is this going to say" is reading a plan and must keep reading
@@ -160,16 +102,10 @@ describe('the copy a reader should be looking at', () => {
     expect(effectiveMessaging(r).cta).toBe('Book a demo')
   })
 
-  /**
-   * THE DIFFERENCE FROM copyDiff, stated. The same unrecorded CTA is a gap in the record and the
-   * plan's text: the diff reports completeness, this reports the best available words, and neither
-   * should answer the other's question.
-   */
-  it('reads an unrecorded component as the plan, where the diff reads it as a gap', () => {
+  /** An unrecorded component reads as the plan, which is what "recorded where it changed" means. */
+  it('reads an unrecorded component as the plan', () => {
     const r = row({ status: 'posted', messaging: { cta: 'Book a demo' }, live: { copy: {} } })
     expect(effectiveMessaging(r).cta).toBe('Book a demo')
-    const line = copyDiff(r, [{ key: 'cta', label: 'CTA' }])[0]
-    expect(line).toMatchObject({ live: '', changed: true })
   })
 
   /** A draft carrying live copy from somewhere is not a record of anything. */
