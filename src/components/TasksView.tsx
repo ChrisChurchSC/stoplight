@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useAssetTasks } from '../lib/assetTasks'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
 
 /**
  * Tasks — a standalone, Attio-style task list for the workspace: a row per task with its due date,
@@ -27,13 +29,16 @@ interface Task {
   createdAt: number
   brand: string // which brand this task belongs to (scoped by the rail)
   notes: string // free-form details, shown in the task detail drawer
+  /** The campaign this task belongs to (campaign name), or '' when it hangs off no campaign.
+   *  First-class on every task: a derived task inherits its asset's campaign, and a manual one
+   *  picks from the brand's campaigns — so both row types populate the same column. */
+  campaign?: string
   // ---- Derived asset-tasks (a flow's built asset, surfaced here as a to-do) ----
   /** True when this task is derived from an asset rather than hand-created. Read-mostly:
    *  its name/date come from the asset, it opens the flow, and "done" is tracked per-asset. */
   derived?: boolean
-  /** For a derived task: the asset's row id (tracks done) and its campaign (opens the flow). */
+  /** For a derived task: the asset's row id (tracks done). */
   rowId?: string
-  campaign?: string
 }
 
 const KEY = 'stoplight.tasks.v1'
@@ -46,7 +51,7 @@ const load = (): Task[] => {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '[]')
     if (!Array.isArray(raw)) return []
-    return (raw as Task[]).map((t) => ({ ...t, record: normRecord(t.record), brand: t.brand ?? '', notes: t.notes ?? '' }))
+    return (raw as Task[]).map((t) => ({ ...t, record: normRecord(t.record), brand: t.brand ?? '', notes: t.notes ?? '', campaign: t.campaign ?? '' }))
   } catch {
     return []
   }
@@ -88,10 +93,20 @@ export function TasksView() {
   // The rail always lands on a real brand now, but guard against a transient 'all'.
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   const { assetTasks, toggleAssetDone } = useAssetTasks(brand)
+  const { canvases } = useHomeCanvases()
   const [tasks, setTasks] = useState<Task[]>(() => load())
   const [editDue, setEditDue] = useState<string | null>(null)
   const [pickRec, setPickRec] = useState<string | null>(null)
+  const [pickCamp, setPickCamp] = useState<string | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  // The brand's campaigns, for the Campaign picker. The ingested content-library backfill is not a
+  // campaign you'd assign work to, so it stays out of the list.
+  const campaigns = useMemo(
+    () => canvases.filter((c) => (brand ? c.client === brand : true) && c.name !== CONTENT_LIBRARY_CAMPAIGN).map((c) => c.name),
+    [canvases, brand],
+  )
+  // Campaign names are stored brand-qualified ("Acme — Fall Launch"); show just the campaign part.
+  const shortCampaign = (name: string) => (brand ? name.replace(`${brand} — `, '') : name)
   const today = localDate()
   // The signed-in user's name, used as the default assignee for a new task. It has to come from
   // the session: a name written into this file would be that one person assigned to every task in
@@ -150,7 +165,7 @@ export function TasksView() {
   const remove = (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id))
   const addTask = () => {
     const id = freshId()
-    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: me, done: false, createdAt: Date.now(), brand, notes: '' }])
+    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: me, done: false, createdAt: Date.now(), brand, notes: '', campaign: '' }])
     // Open the detail drawer for the fresh task so it can be named and filled in.
     setOpenTaskId(id)
   }
@@ -186,12 +201,19 @@ export function TasksView() {
         </span>
       </div>
       <div className="task-cell task-rec-cell">
-        <button className="task-chip task-chip-set" onClick={() => openFlow(t.campaign ?? '', 'flow')} title={`Open ${t.campaign ?? 'campaign'}`}>
-          <span className="task-chip-name">{(t.campaign ?? '').replace(`${brand} — `, '') || 'Campaign'}</span>
-        </button>
+        {t.campaign ? (
+          <button className="task-chip task-chip-set" onClick={() => openFlow(t.campaign!, 'flow')} title={`Open ${shortCampaign(t.campaign)}`}>
+            <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
+          </button>
+        ) : (
+          <span className="task-chip empty"><span className="task-chip-name muted">—</span></span>
+        )}
       </div>
       <div className="task-cell">
         <span className="task-chip empty"><span className="task-chip-name muted">Asset</span></span>
+      </div>
+      <div className="task-cell">
+        <span className="task-chip empty"><span className="task-chip-name muted">—</span></span>
       </div>
     </div>
   )
@@ -239,6 +261,58 @@ export function TasksView() {
           >
             {t.due ? `Due ${fmtDue(t.due)}` : 'Set date'}
           </button>
+        )}
+      </div>
+      <div className="task-cell task-rec-cell">
+        {t.campaign ? (
+          <span className="task-chip task-chip-set">
+            <button className="task-chip-open" onClick={() => openFlow(t.campaign!, 'flow')} title={`Open ${shortCampaign(t.campaign)}`}>
+              <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
+            </button>
+            <button className="task-chip-edit" onClick={() => setPickCamp(t.id)} title="Change campaign" aria-label="Change campaign">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+          </span>
+        ) : (
+          <button className="task-chip task-chip-btn empty" onClick={() => setPickCamp(t.id)} title="Link a campaign">
+            <span className="task-chip-name muted">—</span>
+          </button>
+        )}
+        {pickCamp === t.id && (
+          <>
+            <div className="task-pick-scrim" onClick={() => setPickCamp(null)} />
+            <div className="task-pick-menu" role="menu">
+              <div className="task-pick-head">Campaigns</div>
+              {campaigns.length === 0 && <div className="task-pick-empty">No campaigns yet</div>}
+              {campaigns.map((name) => (
+                <button
+                  key={name}
+                  className={`task-pick-item${t.campaign === name ? ' on' : ''}`}
+                  role="menuitem"
+                  onClick={() => {
+                    patch(t.id, { campaign: name })
+                    setPickCamp(null)
+                  }}
+                >
+                  <span className="task-pick-name">{shortCampaign(name)}</span>
+                </button>
+              ))}
+              {t.campaign && (
+                <button
+                  className="task-pick-item task-pick-clear"
+                  role="menuitem"
+                  onClick={() => {
+                    patch(t.id, { campaign: '' })
+                    setPickCamp(null)
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
       <div className="task-cell task-rec-cell">
@@ -329,6 +403,7 @@ export function TasksView() {
       <div className="task-grid task-colhead">
         <div className="task-cell task-cell-name">Task</div>
         <div className="task-cell">Due date</div>
+        <div className="task-cell">Campaign</div>
         <div className="task-cell">Record</div>
         <div className="task-cell">Assigned to</div>
       </div>
@@ -381,7 +456,7 @@ export function TasksView() {
               </div>
               <div style={fieldRow}>
                 <span style={fieldLabel}>Campaign</span>
-                <span style={fieldControl}>{(openTask.campaign ?? '').replace(`${brand} — `, '') || 'Campaign'}</span>
+                <span style={fieldControl}>{openTask.campaign ? shortCampaign(openTask.campaign) : '—'}</span>
               </div>
               <div style={fieldRow}>
                 <span style={fieldLabel} />
@@ -415,6 +490,25 @@ export function TasksView() {
               <span style={fieldLabel}>Due date</span>
               <input type="date" value={openTask.due} onChange={(e) => patch(openTask.id, { due: e.target.value })} style={fieldControl} />
             </div>
+
+            <div style={fieldRow}>
+              <span style={fieldLabel}>Campaign</span>
+              <select value={openTask.campaign ?? ''} onChange={(e) => patch(openTask.id, { campaign: e.target.value })} style={fieldControl}>
+                <option value="">—</option>
+                {/* A campaign the task already points at but that is no longer in the list (renamed
+                    or removed) still shows, so the link is never silently dropped. */}
+                {openTask.campaign && !campaigns.includes(openTask.campaign) && (
+                  <option value={openTask.campaign}>{shortCampaign(openTask.campaign)}</option>
+                )}
+                {campaigns.map((name) => (<option key={name} value={name}>{shortCampaign(name)}</option>))}
+              </select>
+            </div>
+            {openTask.campaign && (
+              <div style={fieldRow}>
+                <span style={fieldLabel} />
+                <button onClick={() => { openFlow(openTask.campaign!, 'flow'); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {shortCampaign(openTask.campaign)} ↗</button>
+              </div>
+            )}
 
             <div style={fieldRow}>
               <span style={fieldLabel}>Company</span>
