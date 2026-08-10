@@ -93,7 +93,7 @@ import { CalendarView } from './CalendarView'
 import { FlowsHome } from './FlowsHome'
 import { apiFetch } from '../lib/apiFetch'
 import { AddRecordMenu, type ObjectCardOption } from './AddRecordMenu'
-import { assetMode, copyDiff, copyDiffStat, isLiveAsset, type AssetMode } from '../domain/assetMode'
+import { assetMode, isLiveAsset, type AssetMode } from '../domain/assetMode'
 import { readLinkFor } from '../domain/liveLink'
 import { assetTrend, type MetricTrend } from '../domain/assetTrend'
 import { listSnapshots } from '../adapters/metrics/metricSnapshots'
@@ -9468,20 +9468,11 @@ export function FlowsView() {
     const trends = liveTrend?.id === selPost.id ? liveTrend.trends : []
     const trendOf = (metric: string) => trends.find((t) => t.metric === metric)
     const draft = liveDraft?.id === selPost.id ? liveDraft : null
-    const fields = messagingFields(selPost.channel, selPost.assetType)
-    const lines = copyDiff(selPost, fields)
-    const stat = copyDiffStat(lines)
+    // `live` survives the diff going: the creative box writes through setLiveCopy, which takes the
+    // copy map alongside it and would blank whatever is stored under it otherwise.
     const live = selPost.live?.copy ?? {}
     const metrics = selPost.socialMetrics ?? {}
 
-    /**
-     * Fill the "as it ran" boxes from the post itself.
-     *
-     * ONLY WHAT IS EMPTY. Same rule generation works to: a person who has typed the caption in is not
-     * having it replaced by a reader that may have found a page title instead. The title lands on
-     * whichever component this format leads with, because that is what a headline IS on a page and
-     * on a video, and the body on the first multiline one.
-     */
     /**
      * PULL WHAT THE PLATFORM STATES PUBLICLY.
      *
@@ -9515,40 +9506,6 @@ export function FlowsView() {
         setReadNote({ of: 'metrics', text: `Pulled ${Object.keys(got).join(', ')}. Every pull is kept, so the trend grows.` })
       } catch {
         setReadNote({ of: 'metrics', text: 'Could not reach the reader. Type them in below.' })
-      } finally {
-        setReading(false)
-      }
-    }
-
-    const readBack = async () => {
-      if (!link || reading) return
-      setReading(true)
-      setReadNote(null)
-      try {
-        const res = await apiFetch('/api/read-live-post', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ url: link }),
-        })
-        const d = (await res.json()) as { available?: boolean; reason?: string; title?: string; body?: string; publishedAt?: string }
-        if (!res.ok || !d?.available) {
-          setReadNote({ of: 'copy', text: readBackNote(d?.reason) })
-          return
-        }
-        const head = fields[0]?.key
-        const long = fields.find((f) => f.multiline)?.key ?? fields[1]?.key
-        const next = { ...live }
-        if (head && d.title && !next[head]?.trim()) next[head] = d.title
-        if (long && d.body && !next[long]?.trim()) next[long] = d.body
-        if (!Object.keys(next).length) {
-          setReadNote({ of: 'copy', text: 'Nothing came back from that link.' })
-          return
-        }
-        await setLiveCopy(selPost.id, next, selPost.live?.extractedCopy)
-        if (d.publishedAt && !selPost.publishedAt) await updateRow(selPost.id, { publishedAt: d.publishedAt })
-        setReadNote({ of: 'copy', text: 'Filled what was empty. Anything you had typed is untouched.' })
-      } catch {
-        setReadNote({ of: 'copy', text: 'Could not reach the reader. Type it in below.' })
       } finally {
         setReading(false)
       }
@@ -9680,70 +9637,6 @@ export function FlowsView() {
               Not this post
             </button>
 
-            {/* WHAT IT ACTUALLY SAID, against what was planned. The plan is untouched: these are the
-                two things this face exists to hold next to each other. */}
-            <label className="flow-inspect-label" style={{ marginTop: 16 }}>What it ran with</label>
-            <p className="flow-inspect-note">
-              {stat.compared === 0
-                ? 'Paste the copy as it went out and it will be compared against the plan, component by component.'
-                : stat.changed === 0
-                  ? `It ran as planned, across ${stat.compared} ${stat.compared === 1 ? 'component' : 'components'}.`
-                  : `${stat.changed} of ${stat.compared} changed between the plan and the post.`}
-            </p>
-            {/* READ IT BACK, where the platform allows it: a YouTube video and any web page, neither
-                of which needs an account connected. Everything else says which connection would do
-                it rather than spinning and failing — and the boxes below always work, which is what
-                makes this an accelerator rather than the only way in. */}
-            <div className="flow-live-read">
-              <button className="flow-insp-open subtle" disabled={reading} onClick={() => void readBack()}>
-                {reading ? 'Reading…' : 'Read it back from the post'}
-              </button>
-              {readNote?.of === 'copy' && <span className="flow-live-readnote">{readNote.text}</span>}
-            </div>
-            <div className="flow-live-diff">
-              {lines.map((l) => (
-                <div key={l.key} className={`flow-live-line${l.changed && !l.empty ? ' changed' : ''}`}>
-                  <span className="flow-live-k">{l.label}</span>
-                  {/* The plan, read-only here. It is edited on the Planner face, where editing it
-                      means what it says. */}
-                  <span className="flow-live-planned">{l.planned || <em>Nothing planned</em>}</span>
-                  <BufferedTextarea
-                    className="flow-inspect-input flow-live-actual"
-                    rows={2}
-                    value={live[l.key] ?? ''}
-                    placeholder="As it went out"
-                    onCommit={(v) => void setLiveCopy(selPost.id, { ...live, [l.key]: v })}
-                  />
-                </div>
-              ))}
-            </div>
-            {/* COPY THAT RAN UNDER A COMPONENT THIS FORMAT DOES NOT HAVE.
-                The diff walks the FORMAT's components, so anything recorded under another key —
-                copy read back before the channel was changed, or arriving with an import — is
-                dropped from it silently. The Planner face has said this about the plan since it was
-                built ("Not part of this format"); saying it about the actual is the same rule, and
-                the alternative is a panel that quietly holds words it never shows. */}
-            {(() => {
-              const known = new Set(fields.map((f) => f.key))
-              const strays = Object.entries(live).filter(([k, v]) => !known.has(k) && v?.trim())
-              if (!strays.length) return null
-              return (
-                <>
-                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>Not part of this format</label>
-                  <p className="flow-inspect-note">
-                    This ran under a component {CHANNELS[selPost.channel as ChannelId]?.label ?? selPost.channel} does not have, so it is not in the comparison above.
-                  </p>
-                  <div className="flow-live-diff">
-                    {strays.map(([k, v]) => (
-                      <div key={k} className="flow-live-line">
-                        <span className="flow-live-k">{k}</span>
-                        <span className="flow-live-planned">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )
-            })()}
             {/* Words on the creative rather than in a field. Its own box because nobody typed them
                 into a component and pretending otherwise would put them in the diff. */}
             <label className="flow-inspect-label" style={{ marginTop: 14 }}>Words on the creative</label>
