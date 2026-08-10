@@ -73,23 +73,31 @@ describe('reading a pasted link', () => {
 describe('attaching it to a card', () => {
   const other = row({ id: 'r2', assetName: 'The one already attached', sourceUrl: 'https://instagram.com/p/abc' })
 
-  /** The one refusal with no "do it anyway": every count of that post would double. */
-  it('refuses a post another card already carries, and names it', () => {
+  /**
+   * ONE PAGE, MANY CARDS. This used to be a hard refusal, on the reasoning that two rows carrying
+   * one URL doubles every count of it — a fault the app does not have, since metrics are read per
+   * row rather than summed into a total. What it did have was a blocked user: one page is the
+   * destination of ten posts, and a brand's own pages are in the library already because the site
+   * ingest put them there, so an asset could not be told what it plainly was.
+   */
+  it('reports the other assets on the same link, and does not refuse it', () => {
     const v = readLinkFor('https://www.instagram.com/p/abc/?igshid=1', row(), [row(), other])
-    expect(v.refusal).toMatchObject({ kind: 'duplicate' })
-    expect(v.refusal?.kind === 'duplicate' && v.refusal.row.assetName).toBe('The one already attached')
-  })
-
-  /** An archived twin is not a live record of anything, so it does not block. */
-  it('ignores an archived twin', () => {
-    const v = readLinkFor('https://instagram.com/p/abc', row(), [row(), { ...other, archivedAt: 1 }])
     expect(v.refusal).toBeUndefined()
+    expect(v.link && v.alsoOn.map((r) => r.assetName)).toEqual(['The one already attached'])
   })
 
-  /** Re-pasting the same link onto the card that already has it is not a duplicate. */
-  it('does not refuse the card its own link', () => {
+  /** An archived twin is not a record of anything, so it is not worth mentioning either. */
+  it('leaves an archived twin out of the count', () => {
+    const v = readLinkFor('https://instagram.com/p/abc', row(), [row(), { ...other, archivedAt: 1 }])
+    expect(v.link && v.alsoOn).toEqual([])
+  })
+
+  /** The card's own link is not another asset. */
+  it('does not count the card itself', () => {
     const self = row({ sourceUrl: 'https://instagram.com/p/abc' })
-    expect(readLinkFor('https://instagram.com/p/abc', self, [self]).refusal).toBeUndefined()
+    const v = readLinkFor('https://instagram.com/p/abc', self, [self])
+    expect(v.refusal).toBeUndefined()
+    expect(v.link && v.alsoOn).toEqual([])
   })
 
   /** One of the card and the link is wrong and only the person knows which, so it asks. */

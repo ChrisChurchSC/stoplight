@@ -98,7 +98,6 @@ export function readLiveLink(raw: string): LiveLink | null {
 
 export type LinkRefusal =
   | { kind: 'unreadable' }
-  | { kind: 'duplicate'; row: TrafficRow }
   | { kind: 'not-a-post'; link: LiveLink }
   | { kind: 'wrong-channel'; link: LiveLink; linkChannel: ChannelId; cardChannel: ChannelId }
 
@@ -106,15 +105,29 @@ export interface LinkVerdict {
   link: LiveLink
   /** What to say before writing anything. Absent when the link is unambiguous. */
   refusal?: LinkRefusal
+  /**
+   * THE OTHER ASSETS ON THIS SAME URL. Reported, never refused.
+   *
+   * This was a hard refusal, on the reasoning that two rows carrying one URL doubles every count of
+   * it. That reasoning was about a fault the app does not actually have — metrics are read per row,
+   * for sorting and for one asset's own panel, not summed into a brand total — and it was blocking
+   * the ordinary case: one page is the destination of ten posts, a landing page serves every
+   * campaign that points at it, and a brand's own pages are already in the library because the site
+   * ingest put them there. An asset could not be told what it plainly was.
+   *
+   * So it is context now. Knowing the page is also on four other cards is worth saying; deciding on
+   * somebody's behalf that it may not be on a fifth is not.
+   */
+  alsoOn: TrafficRow[]
 }
 
 /**
  * Read a pasted link against the campaign it is being attached inside.
  *
- * A refusal here is a QUESTION, not a wall — except for a duplicate, which is the one case where
- * proceeding is never what anybody meant. The other two are overrulable because both have honest
- * reasons to be wrong: a platform ships a URL shape we have not seen, or the card's channel is what
- * needs correcting rather than the link.
+ * EVERY REFUSAL HERE IS A QUESTION. Both are overrulable because both have honest reasons to be
+ * wrong: a platform ships a URL shape we have not seen, or the card's channel is the thing that
+ * needs correcting rather than the link. Nothing here is a wall — the one thing that was, the
+ * duplicate, is reported as `alsoOn` instead. See the note on it.
  */
 export function readLinkFor(
   raw: string,
@@ -124,13 +137,12 @@ export function readLinkFor(
   const link = readLiveLink(raw)
   if (!link) return { link: null, refusal: { kind: 'unreadable' } }
 
-  const twin = rows.find((r) => r.id !== card.id && !r.archivedAt && r.sourceUrl?.trim() === link.url)
-  if (twin) return { link, refusal: { kind: 'duplicate', row: twin } }
+  const alsoOn = rows.filter((r) => r.id !== card.id && !r.archivedAt && r.sourceUrl?.trim() === link.url)
 
-  if (!link.looksLikePost) return { link, refusal: { kind: 'not-a-post', link } }
+  if (!link.looksLikePost) return { link, alsoOn, refusal: { kind: 'not-a-post', link } }
 
   if (link.channel && link.channel !== card.channel) {
-    return { link, refusal: { kind: 'wrong-channel', link, linkChannel: link.channel, cardChannel: card.channel as ChannelId } }
+    return { link, alsoOn, refusal: { kind: 'wrong-channel', link, linkChannel: link.channel, cardChannel: card.channel as ChannelId } }
   }
-  return { link }
+  return { link, alsoOn }
 }
