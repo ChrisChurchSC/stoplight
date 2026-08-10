@@ -29,7 +29,8 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
-          'A link that already belongs to another asset now has somewhere to go. Attaching your own site’s page to a planned card was refused, correctly — one asset per published post, or everything it did is counted twice — and then left you there, because the row already holding that link is almost always the site ingest’s copy of the page: one nobody wrote, in a campaign nobody opens. "Go and work on that one" is not an answer when this is the card the work is on. So the post moves here instead, with the words it ran and the numbers it earned, and the row it came from is archived rather than left claiming to be published with nothing behind it. Archived, not deleted: it restores from the campaign it sits in.',
+          'A page can be attached to as many cards as it belongs to. Pasting your own site’s link was refused on the grounds that another asset already had it — which was wrong twice over. One page really is the destination of ten posts, a landing page really does serve every campaign pointing at it, and a brand’s own pages are in the library already because the site ingest put them there, so the refusal fired on the ordinary case and an asset could not be told what it plainly was. And the count it was protecting does not exist: a post’s numbers are read on its own card, never summed into a total, so nothing was ever going to be counted twice. It attaches now, and says which other assets share the link, because that is worth knowing and was never worth forbidding.',
+          'And a live card says one thing in one colour. Its green edge means the post went out; the reach under it meant the same thing in a purple that matched nothing else on the card, which was a third unrelated hue on a face already carrying two. Measured performance now wears the live tone. The purple stays where it means money.',
         ],
       },
     ],

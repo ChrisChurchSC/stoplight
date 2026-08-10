@@ -1179,7 +1179,6 @@ export function FlowsView() {
   const allRows = useTrafficStore((s) => s.rows)
   const attachLiveAsset = useTrafficStore((s) => s.attachLiveAsset)
   const detachLiveAsset = useTrafficStore((s) => s.detachLiveAsset)
-  const takeOverLiveAsset = useTrafficStore((s) => s.takeOverLiveAsset)
   const setLiveCopy = useTrafficStore((s) => s.setLiveCopy)
   const setLiveMetrics = useTrafficStore((s) => s.setLiveMetrics)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
@@ -4356,7 +4355,7 @@ export function FlowsView() {
   const [faceOverride, setFaceOverride] = useState<{ id: string; mode: AssetMode } | null>(null)
   const postFace = (r: TrafficRow): AssetMode => (faceOverride?.id === r.id ? faceOverride.mode : assetMode(r))
   /** What was typed into the Active face but not yet committed: the link, and the copy read back. */
-  const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string; blocked?: boolean; twinId?: string; twinName?: string } | null>(null)
+  const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string; alsoOn?: string[] } | null>(null)
   /**
    * The read in flight, and what it had to say — tagged with WHICH read, because the copy and the
    * numbers are pulled by two buttons in two sections and an answer printed under the other one
@@ -9562,32 +9561,8 @@ export function FlowsView() {
         return
       }
       const r = verdict.refusal
-      /**
-       * A DUPLICATE IS THE ONE REFUSAL WITH NO "DO IT ANYWAY", and it has to LOOK like one.
-       *
-       * It did not. The button's label keyed off "is there a note", so a refusal that cannot be
-       * overruled still offered "Attach it anyway" — and pressing it ran this check again, set the
-       * same note, and did nothing, forever. A button that states an action it will never perform is
-       * worse than no button.
-       *
-       * So the draft carries whether it is blocked, and the message says where the other one IS. The
-       * common way to hit this is the site ingest: a brand's own pages are imported into its content
-       * library, so the page you are attaching is very often already an asset somewhere you did not
-       * think to look, and "it exists" without "it is over there" is a dead end.
-       */
-      if (r?.kind === 'duplicate') {
-        const where = (r.row.campaign ?? '').trim()
-        setLiveDraft({
-          id: selPost.id,
-          url: raw,
-          blocked: true,
-          twinId: r.row.id,
-          twinName: r.row.assetName,
-          note: `Already attached to "${r.row.assetName}"${where ? ` in ${campaignShortName(where, clientForCampaign(where))}` : ''}. One asset per published post, or everything it did is counted twice.`,
-        })
-        return
-      }
-      // The other two are questions. Pressing again is the answer, because the person can see the
+      const alsoOn = verdict.alsoOn.map((x) => x.assetName)
+      // Both refusals are questions. Pressing again is the answer, because the person can see the
       // link and the card and we cannot: a platform ships a URL shape we have not seen, or the
       // card's channel is the thing that is wrong.
       if (r && !draft?.note) {
@@ -9598,7 +9573,7 @@ export function FlowsView() {
             : r.kind === 'wrong-channel'
               ? `That is ${chan(r.linkChannel)} and this card is ${chan(r.cardChannel)}. Attach it anyway and the card moves to ${chan(r.linkChannel)}.`
               : 'That is not a link. Paste the address of the published post.'
-        setLiveDraft({ id: selPost.id, url: raw, note })
+        setLiveDraft({ id: selPost.id, url: raw, note, alsoOn })
         return
       }
       const channel = r?.kind === 'wrong-channel' ? r.linkChannel : undefined
@@ -9633,38 +9608,18 @@ export function FlowsView() {
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); attach() } }}
             />
             {draft?.note && <p className="flow-live-warn">{draft.note}</p>}
-            {/* THE WAY THROUGH, rather than a wall.
-                "It belongs to something else" was true and useless: the row already holding the link
-                is usually the site ingest's copy of the page — one nobody wrote, in a campaign
-                nobody opens — and this is the card the work is on. So the post moves here with
-                everything it earned, and the row it came from is archived rather than left claiming
-                to be published with nothing behind it. Said in full before it happens, because it
-                changes two assets and only one of them is on screen. */}
-            {draft?.blocked && draft.twinId && (
-              <button
-                className="flow-insp-open"
-                onClick={() => {
-                  void takeOverLiveAsset(draft.twinId!, selPost.id)
-                  setLiveDraft(null)
-                  setFaceOverride(null)
-                }}
-              >
-                Move it to this card
-              </button>
-            )}
-            {draft?.blocked && draft.twinId && (
+            {/* WHERE ELSE THIS PAGE ALREADY IS. Context, not a gate.
+                One page is the destination of ten posts, a landing page serves every campaign
+                pointing at it, and a brand's own pages are in the library already because the site
+                ingest put them there. Worth knowing; not this panel's business to forbid. */}
+            {!!draft?.alsoOn?.length && (
               <p className="flow-inspect-note">
-                The post, its copy and its numbers come here, and “{draft.twinName}” is archived. You
-                can restore it from the campaign it sits in.
+                Also on {draft.alsoOn.length === 1 ? `"${draft.alsoOn[0]}"` : `${draft.alsoOn.length} other assets`}.
               </p>
             )}
-            {/* "Attach it anyway" is offered only for the two refusals that are questions — a shape
-                we have not seen, or a channel one of the two got wrong. */}
-            {!draft?.blocked && (
-              <button className="flow-insp-open" disabled={!draft?.url.trim()} onClick={attach}>
-                {draft?.note ? 'Attach it anyway' : 'Attach this post'}
-              </button>
-            )}
+            <button className="flow-insp-open" disabled={!draft?.url.trim()} onClick={attach}>
+              {draft?.note ? 'Attach it anyway' : 'Attach this post'}
+            </button>
           </>
         ) : (
           <>
@@ -11561,7 +11516,9 @@ export function FlowsView() {
                                     </div>
                                   ) : null}
                                   {isIngestedPost(r) ? (
-                                    <div className="flow-spend-foot" title="Live post metrics">
+                                    /* Toned live, not spend: this is what the post earned, which is
+                                       the same fact the stripe down this card's edge states. */
+                                    <div className="flow-spend-foot live" title="Live post metrics">
                                       <span className="flow-spend-dot" aria-hidden="true" />
                                       {ingestedMetricsText(r)}
                                     </div>

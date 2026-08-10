@@ -6190,6 +6190,14 @@ button.mf-open:focus-visible,
   background: #8a34d6;
   flex: 0 0 auto;
 }
+/* MEASURED PERFORMANCE WEARS THE LIVE TONE, not the spend one.
+   This footer serves two different facts through one style: money committed to a placement, and
+   numbers a published post actually earned. The second is the same fact the stripe down the card's
+   edge states, so a live card was saying "this shipped" in green and "here is what it did" in a
+   purple that matched nothing else on it — three unrelated hues on one card, one of them for a
+   thing already coloured. The purple stays where it means money. */
+.flow-spend-foot.live { color: var(--green); }
+.flow-spend-foot.live .flow-spend-dot { background: var(--green); }
 .flow-brief-focus {
   flex: 1;
   min-width: 0;
