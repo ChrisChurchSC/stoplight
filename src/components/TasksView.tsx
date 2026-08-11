@@ -10,8 +10,16 @@ import { useHomeCanvases } from '../lib/useHomeCanvases'
 
 /**
  * Tasks — an Attio-style task list for the workspace: a row per task with its due date, the
- * campaign it belongs to, the record it relates to, and who it's assigned to. Grouped either by
- * due date (Overdue / Today / Upcoming / No date) or by campaign.
+ * campaign it belongs to, and who it's assigned to. Grouped either by due date (Overdue / Today /
+ * Upcoming / No date) or by campaign.
+ *
+ * A derived asset-task is assignable like any other. It used to be the read-only kind, which left
+ * the whole "Assigned to" column empty on a page where every row was one — a task list where
+ * nothing could be owned. Its owner is stored per-asset (see useAssetTasks), the same way done is.
+ *
+ * The linked COMPANY lives in the detail drawer rather than the table: it was a column reading
+ * "Asset" on every derived row and "—" on nearly every other, spending a fifth of the width to say
+ * nothing. The campaign is the link that earns a column.
  *
  * The tasks themselves are still self-contained — they live in localStorage, with no store slice
  * or backend of their own. What it does read from the store is the campaigns to link them TO
@@ -104,11 +112,10 @@ export function TasksView() {
   // auto-picks a brand when Brand records exist, so a workspace of campaigns with no Brand card
   // sits on 'all' indefinitely.
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
-  const { assetTasks, toggleAssetDone } = useAssetTasks(brand)
+  const { assetTasks, toggleAssetDone, setAssetAssignee } = useAssetTasks(brand)
   const { canvases } = useHomeCanvases()
   const [tasks, setTasks] = useState<Task[]>(() => load())
   const [editDue, setEditDue] = useState<string | null>(null)
-  const [pickRec, setPickRec] = useState<string | null>(null)
   const [pickCamp, setPickCamp] = useState<string | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [groupBy, setGroupBy] = useState<GroupBy>('due')
@@ -158,7 +165,7 @@ export function TasksView() {
   // Derived asset-tasks (shared with Home via useAssetTasks) shaped as full tasks so they merge
   // with manual ones. Read-mostly: the row's check toggles per-asset done and it opens the flow.
   const allTasks = useMemo<Task[]>(
-    () => [...brandTasks, ...assetTasks.map((a): Task => ({ ...a, record: null, assignee: '', notes: '' }))],
+    () => [...brandTasks, ...assetTasks.map((a): Task => ({ ...a, record: null, notes: '' }))],
     [brandTasks, assetTasks],
   )
   const openCount = allTasks.filter((t) => !t.done).length
@@ -248,10 +255,15 @@ export function TasksView() {
         )}
       </div>
       <div className="task-cell">
-        <span className="task-chip empty"><span className="task-chip-name muted">Asset</span></span>
-      </div>
-      <div className="task-cell">
-        <span className="task-chip empty"><span className="task-chip-name muted">—</span></span>
+        <span className={`task-chip${t.assignee ? '' : ' empty'}`}>
+          {t.assignee && <Avatar name={t.assignee} />}
+          <input
+            className="task-input task-chip-input"
+            value={t.assignee}
+            placeholder="Unassigned"
+            onChange={(e) => setAssetAssignee(t.rowId!, e.target.value)}
+          />
+        </span>
       </div>
     </div>
   )
@@ -353,60 +365,6 @@ export function TasksView() {
           </>
         )}
       </div>
-      <div className="task-cell task-rec-cell">
-        {t.record ? (
-          <span className="task-chip task-chip-set">
-            <button className="task-chip-open" onClick={() => openCompany(t.record!.id)} title={`Open ${t.record.name}`}>
-              <Avatar name={t.record.name} />
-              <span className="task-chip-name">{t.record.name}</span>
-            </button>
-            <button className="task-chip-edit" onClick={() => setPickRec(t.id)} title="Change company" aria-label="Change company">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </button>
-          </span>
-        ) : (
-          <button className="task-chip task-chip-btn empty" onClick={() => setPickRec(t.id)} title="Link a company">
-            <span className="task-chip-name muted">—</span>
-          </button>
-        )}
-        {pickRec === t.id && (
-          <>
-            <div className="task-pick-scrim" onClick={() => setPickRec(null)} />
-            <div className="task-pick-menu" role="menu">
-              <div className="task-pick-head">Companies</div>
-              {companies.length === 0 && <div className="task-pick-empty">No companies yet</div>}
-              {companies.map((c) => (
-                <button
-                  key={c.id}
-                  className={`task-pick-item${t.record?.id === c.id ? ' on' : ''}`}
-                  role="menuitem"
-                  onClick={() => {
-                    patch(t.id, { record: { id: c.id, name: c.name } })
-                    setPickRec(null)
-                  }}
-                >
-                  <Avatar name={c.name} />
-                  <span className="task-pick-name">{c.name}</span>
-                </button>
-              ))}
-              {t.record && (
-                <button
-                  className="task-pick-item task-pick-clear"
-                  role="menuitem"
-                  onClick={() => {
-                    patch(t.id, { record: null })
-                    setPickRec(null)
-                  }}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </>
-        )}
-      </div>
       <div className="task-cell">
         <span className={`task-chip${t.assignee ? '' : ' empty'}`}>
           {t.assignee && <Avatar name={t.assignee} />}
@@ -456,7 +414,6 @@ export function TasksView() {
         <div className="task-cell task-cell-name">Task</div>
         <div className="task-cell">Due date</div>
         <div className="task-cell">Campaign</div>
-        <div className="task-cell">Record</div>
         <div className="task-cell">Assigned to</div>
       </div>
 

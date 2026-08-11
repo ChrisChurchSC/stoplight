@@ -120,7 +120,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     const headers = cells(host.querySelector('.task-colhead')!).map((c) => c.textContent)
-    expect(headers).toEqual(['Task', 'Due date', 'Campaign', 'Record', 'Assigned to'])
+    expect(headers).toEqual(['Task', 'Due date', 'Campaign', 'Assigned to'])
 
     // The derived asset-task (from the seeded row) and the manual one agree on the grid.
     const derived = rowNamed('Teaser post')!
@@ -159,6 +159,45 @@ describe('TasksView', () => {
 
     expect(rowNamed('Teaser post')).toBeTruthy()
     expect(rowNamed('Spring teaser'), 'the other brand’s asset stays out').toBeFalsy()
+  })
+
+  /**
+   * A DERIVED TASK IS WORK SOMEONE DOES, SO IT TAKES AN OWNER. Assets arrived as the read-only kind
+   * of task, which left "Assigned to" empty down a page where every row was one — a task list on
+   * which nothing could be owned. The owner is kept per-asset, beside `done`, rather than on the
+   * row: the row belongs to the flow, and who is writing the post is not a fact about the post.
+   */
+  it('assigns an owner to an asset-task, and keeps it', () => {
+    act(() => root.render(<TasksView />))
+
+    const input = cells(rowNamed('Teaser post')!)[3].querySelector('input')
+    expect(input, 'the derived row has an assignee field like any other').toBeTruthy()
+
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(input, 'Ryan')
+      input!.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    const stored = JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1') ?? '{}')
+    expect(stored['row-1']).toBe('Ryan')
+  })
+
+  it('does not say the channel twice when the asset already names it', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-lp', assetName: 'Landing page', channel: 'landing-page' }),
+        row({ id: 'row-ig', assetName: 'Teaser post', channel: 'instagram' }),
+      ],
+      clientFilter: BRAND,
+    })
+    act(() => root.render(<TasksView />))
+
+    const label = (t: string) => rowNamed(t)!.querySelector('.task-name-open')!.textContent
+    // "Landing page · Landing page" was the old rendering of a self-naming asset.
+    expect(label('Landing page')).toBe('Landing page')
+    // A name that does not already carry its channel still gets it.
+    expect(label('Teaser post')).toBe('Instagram · Teaser post')
   })
 
   it('regroups by campaign, gathering each campaign’s tasks under its own head', () => {

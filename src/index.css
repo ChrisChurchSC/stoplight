@@ -19246,7 +19246,7 @@ textarea.library-input {
 }
 .task-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px 190px 190px 170px;
+  grid-template-columns: minmax(0, 1fr) 150px 210px 190px;
   align-items: center;
 }
 .task-colhead {
