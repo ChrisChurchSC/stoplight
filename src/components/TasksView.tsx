@@ -401,6 +401,8 @@ export function TasksView() {
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
   }, [visible, today, groupBy])
   const doneTasks = useMemo(() => visible.filter((t) => t.done), [visible])
+  const visibleOpen = visible.filter((t) => !t.done).length
+  const filtered = Boolean(filterWho || filterCampaign || filterChannel)
   // The task whose detail drawer is open — from allTasks so derived asset-tasks open their own detail
   // too (read live so edits to a manual task reflect immediately).
   const openTask = allTasks.find((t) => t.id === openTaskId) ?? null
@@ -608,7 +610,16 @@ export function TasksView() {
     <div className="mtx tasks-view">
       <header className="mtx-head tasks-head">
         <h2>Tasks</h2>
-        <span className="mtx-sub">{openCount > 0 ? `${openCount} open${brand ? ` · ${brand}` : ''}` : `A running to-do list for ${brand || 'this workspace'}`}</span>
+        <span className="mtx-sub">
+          {/* When a filter is on, the count has to be the count of what is ON SCREEN — it read
+              "31 open" over a single row, and over no rows at all, which makes it a number about
+              nothing you can see. The whole is still worth saying, as the thing being sliced. */}
+          {filtered
+            ? `${visibleOpen} of ${openCount} open${brand ? ` · ${brand}` : ''}`
+            : openCount > 0
+              ? `${openCount} open${brand ? ` · ${brand}` : ''}`
+              : `A running to-do list for ${brand || 'this workspace'}`}
+        </span>
         <button className="tasks-new" onClick={addTask}>
           ＋ New task
         </button>
@@ -774,6 +785,15 @@ export function TasksView() {
 
       {allTasks.length === 0 ? (
         <div className="mtx-empty">No tasks for {brand || 'this workspace'} yet. Build a campaign, or add one with “＋ New task”.</div>
+      ) : visible.length === 0 ? (
+        // Matching nothing is a normal thing for a filter to do, and it used to render as an empty
+        // page under a header still claiming thirty-one — indistinguishable from broken.
+        <div className="mtx-empty">
+          Nothing matches these filters.{' '}
+          <button className="tasks-filter-clear" onClick={() => { setFilterWho(''); setFilterCampaign(''); setFilterChannel('') }}>
+            Clear filters
+          </button>
+        </div>
       ) : (
         <>
           {groups.map(([bucket, list]) => {

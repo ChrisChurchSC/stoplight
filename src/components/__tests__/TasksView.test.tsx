@@ -365,6 +365,33 @@ describe('TasksView', () => {
     expect(after['row-2']).toBeUndefined()
   })
 
+  /**
+   * A FILTER THAT MATCHES NOTHING HAS TO SAY SO. Matching nothing is an ordinary thing for a filter
+   * to do; it rendered as column headers over a blank page, under a header still claiming
+   * thirty-one open — which is indistinguishable from the page having broken.
+   */
+  it('says so when the filters match nothing, and counts what is on screen', () => {
+    useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+    expect(host.querySelector('.mtx-sub')?.textContent).toContain('1 open')
+
+    // Filter to somebody with nothing.
+    act(() => host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    act(() => {
+      ;[...host.querySelectorAll('.task-pick-item')]
+        .find((b) => b.textContent?.includes('Unassigned'))!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(rows(), 'nothing matches').toHaveLength(0)
+    expect(host.querySelector('.mtx-empty')?.textContent, 'and it says why rather than going blank').toContain(
+      'Nothing matches these filters',
+    )
+    // The count is about what you can see, with the whole named as the thing being sliced.
+    expect(host.querySelector('.mtx-sub')?.textContent).toContain('0 of 1 open')
+  })
+
   it('gives two owners two colours, where the shared hash gave them one', () => {
     useTrafficStore.setState({
       rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
