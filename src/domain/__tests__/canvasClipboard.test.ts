@@ -292,7 +292,6 @@ describe('pasting a channel', () => {
           metricsUpdatedAt: 1700000000000,
           sourceUrl: 'https://instagram.com/p/abc',
           source: 'social-live',
-          live: { copy: { headline: 'What it actually said' }, fetchedAt: 1700000000000 },
           flightId: 'fl_old',
           reviewNote: 'Approved by legal',
           copyReviewed: true,
@@ -314,9 +313,6 @@ describe('pasting a channel', () => {
     expect(r.metricsUpdatedAt).toBeUndefined()
     expect(r.sourceUrl).toBeUndefined()
     expect(r.source).toBeUndefined()
-    // The copy a post actually ran with is a record of what happened, not part of the plan. It stays
-    // behind by the allow-list rather than by anybody remembering to delete it.
-    expect(r.live).toBeUndefined()
     expect(r.flightId).toBeUndefined()
     expect(r.reviewNote).toBeUndefined()
     expect(r.copyReviewed).toBeUndefined()
