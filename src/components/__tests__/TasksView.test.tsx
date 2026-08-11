@@ -265,6 +265,43 @@ describe('TasksView', () => {
     expect(rowNamed('Book the photographer'), 'and a task with no channel is not on one').toBeFalsy()
   })
 
+  /**
+   * A hand-made task is not a post and belongs to no channel, so a channel filter used to be the
+   * one question it could never answer — findable only by clearing every filter, which on a board
+   * of thirty posts is not findable. It is its own kind of work, so it has its own entry.
+   */
+  it('collects the hand-made tasks under an entry of their own', () => {
+    useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
+    localStorage.setItem(KEY, JSON.stringify([manualTask()]))
+    act(() => root.render(<TasksView />))
+
+    const open = () => {
+      const btn = [...host.querySelectorAll('.tasks-filter-btn')].find(
+        (b) => b.textContent?.includes('All channels') || b.textContent?.includes('Custom tasks'),
+      )
+      act(() => btn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    }
+    open()
+    const entry = [...host.querySelectorAll('.task-pick-item')].find((b) => b.textContent === 'Custom tasks')
+    expect(entry, 'the entry is offered because there is a hand-made task').toBeTruthy()
+
+    act(() => entry!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    expect(rowNamed('Book the photographer'), 'the hand-made one').toBeTruthy()
+    expect(rowNamed('Teaser post'), 'and none of the posts').toBeFalsy()
+  })
+
+  it('does not offer the entry when nothing is hand-made', () => {
+    useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
+    act(() => root.render(<TasksView />))
+
+    const btn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All channels'))
+    act(() => btn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    const labels = [...host.querySelectorAll('.task-pick-item')].map((b) => b.textContent)
+    expect(labels).not.toContain('Custom tasks')
+  })
+
   it('gives two owners two colours, where the shared hash gave them one', () => {
     useTrafficStore.setState({
       rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],

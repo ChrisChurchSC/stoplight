@@ -115,6 +115,11 @@ const NO_CAMPAIGN = 'No campaign'
 const NO_ASSIGNEE = 'Unassigned'
 /** Filter sentinel for "has nobody on it" — distinct from '' , which is the no-filter state. */
 const UNASSIGNED = '\u0000unassigned'
+/** The channel filter's entry for work that is not a post at all. A hand-made task has no channel,
+ *  and used to just fall out of a channel filter — findable by no filter, which on a board of
+ *  thirty posts means not findable. It is its own kind of work, so it gets its own answer. */
+const CUSTOM_TASKS = '\u0000custom'
+const CUSTOM_TASKS_LABEL = 'Custom tasks'
 
 /** The one mark on the row, and only on an overdue date. Colour alone cannot carry "late" — it
  *  says nothing to a colourblind reader and nothing in a greyscale print — so the state that
@@ -233,13 +238,6 @@ export function TasksView() {
     () => canvases.filter((c) => (brand ? c.client === brand : true) && c.name !== CONTENT_LIBRARY_CAMPAIGN).map((c) => c.name),
     [canvases, brand],
   )
-  // The channels actually on the board, so the filter only ever offers work that exists. Hand-made
-  // tasks have no channel and are not counted here.
-  const channels = useMemo(() => {
-    const seen = new Map<string, string>()
-    for (const t of assetTasks) if (t.channel && !seen.has(t.channel)) seen.set(t.channel, CHANNELS[t.channel as keyof typeof CHANNELS]?.label ?? t.channel)
-    return [...seen.entries()].sort(([, a], [, b]) => a.localeCompare(b))
-  }, [assetTasks])
   // Campaign names are stored brand-qualified ("Acme — Fall Launch"); show just the campaign part.
   // Keyed off the campaign's OWN brand rather than the selected one, so an unscoped list drops the
   // prefix too — otherwise a brand-qualified name renders as "Arbitrum — Arbitrum Campaign 1" and
@@ -285,6 +283,19 @@ export function TasksView() {
   )
   const openCount = allTasks.filter((t) => !t.done).length
 
+  // The channels actually on the board, so the filter only ever offers work that exists. Hand-made
+  // tasks have no channel and are not counted here.
+  const channels = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const t of assetTasks) if (t.channel && !seen.has(t.channel)) seen.set(t.channel, CHANNELS[t.channel as keyof typeof CHANNELS]?.label ?? t.channel)
+    const list = [...seen.entries()].sort(([, a], [, b]) => a.localeCompare(b))
+    // Hand-made tasks last, and only when there are some — the same shape as "No campaign" and
+    // "Unassigned": the named things in order, then the ones that are none of them.
+    if (brandTasks.length) list.push([CUSTOM_TASKS, CUSTOM_TASKS_LABEL])
+    return list
+  }, [assetTasks, brandTasks])
+
+
   // THE NAMES IN USE, with how many tasks each carries. There is no roster to keep: a name exists
   // because something is assigned to it, appears the moment it is first typed, and goes when the
   // last task holding it is reassigned. That is also why a rename has to rewrite every task at once
@@ -313,7 +324,7 @@ export function TasksView() {
         (t) =>
           (!filterWho || (filterWho === UNASSIGNED ? !t.assignee : t.assignee === filterWho)) &&
           (!filterCampaign || (t.campaign || '') === filterCampaign) &&
-          (!filterChannel || t.channel === filterChannel),
+          (!filterChannel || (filterChannel === CUSTOM_TASKS ? !t.derived : t.channel === filterChannel)),
       ),
     [allTasks, filterWho, filterCampaign, filterChannel],
   )
@@ -657,7 +668,7 @@ export function TasksView() {
               className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
               onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
             >
-              {filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All channels'}
+              {filterChannel === CUSTOM_TASKS ? CUSTOM_TASKS_LABEL : filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All channels'}
               <span className="tasks-filter-caret">▾</span>
             </button>
             {openFilter === 'channel' && (
