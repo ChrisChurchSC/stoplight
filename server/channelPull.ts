@@ -18,14 +18,21 @@ import type { PullWindow } from '../src/domain/aggregator.js'
  * and YouTube with `columnHeaders[]` and positional `rows[][]`. Three different shapes, one grid out.
  *
  * WHAT IT CANNOT DO. Nothing here is verified against a live Google account: no Google credentials
- * exist in this environment. Everything up to the socket is covered by tests that replay these
- * shapes; the socket is not.
+ * exist in this environment. The coverage probe is covered by tests that replay these shapes
+ * (channelCoverage.test.ts); the three pull builders and the socket are not.
  */
 
 export interface ChannelGrid {
   columns: string[]
   rows: string[][]
   truncated: boolean
+  /**
+   * WHAT THE ROWS ACTUALLY COVER, as opposed to when we asked for them.
+   *
+   * Absent when the probe could not answer. That is a real state and it is said out loud rather
+   * than filled in with the window we requested.
+   */
+  coverage?: { from: string; to: string }
 }
 
 /** Which Google service answers each question, and so which id has to resolve for it to be offered. */
@@ -175,6 +182,95 @@ async function ytPull(channelId: string, token: string, days: PullWindow): Promi
   }
 }
 
+/**
+ * WHAT THE ROWS COVER, asked of the same API that returned them.
+ *
+ * WHY A SECOND REQUEST. The named pulls are dimensioned by page, query or video and drop the date
+ * entirely, so the grid cannot answer this, and adding date as a second dimension would multiply
+ * every row by the window and blow the row cap on the first day. The window we asked for is not a
+ * substitute either: Search Console lags two to three days behind, GA4's "today" is a partial day,
+ * and neither says so in the response to a dimensioned report. Until this existed, every table
+ * pulled straight from Google had no coverage at all, so it could not say what it spanned and its
+ * staleness counted from the moment of the REQUEST rather than from the end of the data.
+ *
+ * ONE REQUEST PER PULL, dimensioned by date and nothing else, so it comes back at most one row per
+ * day of the window. Best effort by construction: every caller runs it inside a try and keeps the
+ * table when it fails, because a pull that lands its rows and cannot date them is far better than
+ * one that throws.
+ */
+export async function googleCoverage(
+  service: 'ga4' | 'gsc' | 'yt',
+  target: string,
+  token: string,
+  days: PullWindow,
+): Promise<{ from: string; to: string } | undefined> {
+  const auth = { authorization: `Bearer ${token}` }
+  let dates: string[] = []
+
+  if (service === 'gsc') {
+    const res = await fetch(
+      `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(target)}/searchAnalytics/query`,
+      {
+        method: 'POST',
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          startDate: isoDaysAgo(days),
+          endDate: isoDaysAgo(0),
+          dimensions: ['date'],
+          rowLimit: MAX_ROWS,
+        }),
+      },
+    )
+    if (!res.ok) throw new Error(`search console coverage ${res.status}`)
+    const j = (await res.json()) as { rows?: { keys?: string[] }[] }
+    dates = (j.rows ?? []).map((r) => r.keys?.[0] ?? '')
+  } else if (service === 'ga4') {
+    const property = target.replace(/^properties\//, '')
+    const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`, {
+      method: 'POST',
+      headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+        dimensions: [{ name: 'date' }],
+        // A report needs a metric even when the metric is not what is being asked for. Sessions is
+        // present on every property; which one it is does not matter, only which days come back.
+        metrics: [{ name: 'sessions' }],
+        limit: MAX_ROWS,
+      }),
+    })
+    if (!res.ok) throw new Error(`ga4 coverage ${res.status}`)
+    const j = (await res.json()) as { rows?: { dimensionValues?: { value?: string }[] }[] }
+    // GA4's date dimension is YYYYMMDD with no separators, unlike every other date in this file.
+    dates = (j.rows ?? []).map((r) => {
+      const v = r.dimensionValues?.[0]?.value ?? ''
+      return /^\d{8}$/.test(v) ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}` : v
+    })
+  } else {
+    const res = await fetch(
+      `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==${encodeURIComponent(target)}` +
+        `&startDate=${isoDaysAgo(days)}&endDate=${isoDaysAgo(0)}&dimensions=day&metrics=views&sort=day&maxResults=${MAX_ROWS}`,
+      { headers: auth },
+    )
+    if (!res.ok) throw new Error(`youtube coverage ${res.status}`)
+    const j = (await res.json()) as { columnHeaders?: { name?: string }[]; rows?: (string | number)[][] }
+    const i = (j.columnHeaders ?? []).findIndex((h) => h.name === 'day')
+    dates = i >= 0 ? (j.rows ?? []).map((r) => String(r[i] ?? '')) : []
+  }
+
+  /**
+   * VALIDATED, NOT TRUSTED BY POSITION. The warehouse route learned this the hard way: reading a
+   * probe's cells blind turned an unexpected response into coverage {from: 'world with', to: '443'},
+   * which would then have been rendered as a date and used to decide staleness. A made up date
+   * presented as fact is the exact failure coverage exists to prevent, so every value has to parse
+   * as a real date or there is no coverage at all.
+   */
+  const dated = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v))
+  // ISO dates sort correctly as strings, which is the whole reason this format is worth insisting on.
+  const valid = dates.filter(dated).sort()
+  if (!valid.length) return undefined
+  return { from: valid[0], to: valid[valid.length - 1] }
+}
+
 const GA4_SPECS: Record<string, { dimension: string; metrics: string[]; columns: string[] }> = {
   'ga4-channels': {
     dimension: 'sessionDefaultChannelGroup',
@@ -205,11 +301,26 @@ export async function runGooglePull(
   const target = targets[service]
   if (!target) throw new Error('NOT_CONNECTED')
 
-  if (service === 'gsc') return gscPull(target, token, pullId === 'gsc-queries' ? 'query' : 'page', days)
-  if (service === 'yt') return ytPull(target, token, days)
-  const spec = GA4_SPECS[pullId]
-  if (!spec) throw new Error('UNKNOWN_PULL')
-  return ga4Pull(target, token, spec, days)
+  let grid: ChannelGrid
+  if (service === 'gsc') grid = await gscPull(target, token, pullId === 'gsc-queries' ? 'query' : 'page', days)
+  else if (service === 'yt') grid = await ytPull(target, token, days)
+  else {
+    const spec = GA4_SPECS[pullId]
+    if (!spec) throw new Error('UNKNOWN_PULL')
+    grid = await ga4Pull(target, token, spec, days)
+  }
+
+  /**
+   * Best effort, and deliberately after the rows have landed. A table nobody can date is worth
+   * having; a probe that throws must never cost the user the pull it was describing.
+   */
+  try {
+    const coverage = await googleCoverage(service, target, token, days)
+    if (coverage) grid = { ...grid, coverage }
+  } catch {
+    // Leave it absent. An unknown span is a real state and a better answer than a guess.
+  }
+  return grid
 }
 
 /** Which questions this brand's Google connection can actually answer, as service ids. */

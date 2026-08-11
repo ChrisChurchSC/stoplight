@@ -309,7 +309,15 @@ export async function runAggregator(body: unknown): Promise<unknown> {
       if (!pullId || !src) throw new Error('BAD_REQUEST')
       const window: PullWindow = isPullWindow(days) ? days : 90
       const grid = await runGooglePull(pullId, src, window, ctx)
-      const result: AggregatorPullResult = { columns: grid.columns, rows: grid.rows, truncated: grid.truncated }
+      // coverage rides along with the rows. Building this result without it was how every table
+      // pulled straight from Google ended up unable to say what it spanned, while the warehouse
+      // route two branches down had answered that question since the day it shipped.
+      const result: AggregatorPullResult = {
+        columns: grid.columns,
+        rows: grid.rows,
+        truncated: grid.truncated,
+        coverage: grid.coverage,
+      }
       return result
     }
 

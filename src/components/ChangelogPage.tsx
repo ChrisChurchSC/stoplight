@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.84',
+    dateLabel: 'August 10, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A table pulled straight from Google now says what it covers. Pull through a warehouse and the data set has always known the stretch of days it actually holds; pull the same question straight from Search Console, Analytics or YouTube and it knew nothing, so it said so — “we asked for 90 days, what came back does not say what it covers” — and, worse, it counted its own age from the moment you clicked rather than from the last day in the data. That gap is not hypothetical: Search Console runs two to three days behind, Analytics counts today as a partial day, and a connection that quietly stopped returning anything last month still answers a request made this morning. The pull now asks the same API one more question, day by day, and keeps the first and last day it gets back.',
+          'Which means a Google table expires when its own data does. A 30-day pull goes stale 30 days after the last day it holds, not 30 days after you fetched it, and a stale table holds its numbers back from the copy writer until you pull it again. Where the extra question cannot be answered the table still lands, still reads, and still says plainly that it does not know what it spans, because an unknown stretch of time is a real answer and a guessed one is the thing this card exists to avoid.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.83',
     dateLabel: 'August 10, 2026',
     groups: [
