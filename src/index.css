@@ -23856,6 +23856,24 @@ table.aud-sheet td.stick .aud-cell {
 }
 .flow-note-mini-note { color: var(--text-muted); }
 
+/* WHAT THE TABLE SAYS, on the card face, in the space the mini sheet used to hold.
+   min-height matches .bds-mini so a card is the same height whether its table can be read or not,
+   and so zooming out past the point where the reading is dropped does not resize the box. */
+.flow-note-mini-read {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 50px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+/* An amber provenance is a table you cannot quote, so its reading is quiet rather than assertive:
+   the number is still true of the rows in front of you, and it is not evidence. */
+.flow-note-mini-read.quiet { color: var(--text-muted); }
+
 /* Sketch-a-data-set, on the Data source card. Sits under the mini sheet; the warning is part of the
    control rather than a tooltip, because it is the thing that decides whether the result is usable. */
 .flow-compose { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
