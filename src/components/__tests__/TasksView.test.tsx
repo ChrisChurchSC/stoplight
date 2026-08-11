@@ -325,6 +325,46 @@ describe('TasksView', () => {
     expect(stored['row-2'], 'and not the other one Ryan is on').toBe('Ryan')
   })
 
+  /**
+   * THE MENU'S ✕ ASKS FIRST. It reaches every task the person holds, and it is one small glyph
+   * away from the row's ✕, which reaches one — the same shape doing something an order of
+   * magnitude larger. A single click is not enough authority for that.
+   */
+  it('asks before taking someone off every task, and does nothing if you decline', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
+      clientFilter: BRAND,
+    })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan', 'row-2': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const openMenu = () =>
+      act(() => host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    const pressX = () =>
+      act(() => {
+        ;[...host.querySelectorAll('.tasks-filter-act')]
+          .find((b) => b.getAttribute('title')?.includes('every task'))!
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+    openMenu()
+    pressX()
+
+    // Armed, not done: it says what it is about to do, and how much of it.
+    expect(host.querySelector('.tasks-filter-confirm-text')?.textContent).toContain('Take Ryan off 2 tasks?')
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-1'], 'nothing yet').toBe('Ryan')
+
+    act(() => host.querySelector<HTMLElement>('.tasks-filter-confirm-no')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-1'], 'declining leaves it alone').toBe('Ryan')
+
+    pressX()
+    act(() => host.querySelector<HTMLElement>('.tasks-filter-confirm-yes')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    const after = JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)
+    expect(after['row-1'], 'and confirming takes them off both').toBeUndefined()
+    expect(after['row-2']).toBeUndefined()
+  })
+
   it('gives two owners two colours, where the shared hash gave them one', () => {
     useTrafficStore.setState({
       rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],

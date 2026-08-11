@@ -19355,6 +19355,42 @@ textarea.library-input {
   color: var(--text);
   background: var(--surface-2);
 }
+ /* The armed state of a destructive ✕ — it replaces the row it is about, so the thing being
+    confirmed stays where the click happened rather than opening over the top of it. */
+.tasks-filter-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tasks-filter-confirm-text {
+  flex: 1 1 100%;
+  font-size: 12px;
+  color: var(--text);
+}
+.tasks-filter-confirm-no,
+.tasks-filter-confirm-yes {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.tasks-filter-confirm-no:hover {
+  color: var(--text);
+}
+.tasks-filter-confirm-yes {
+  border-color: var(--due-late);
+  color: var(--due-late);
+}
+.tasks-filter-confirm-yes:hover {
+  background: var(--due-late);
+  color: #fff;
+}
 .tasks-filter-edit .task-input {
   flex: 1;
   min-width: 0;

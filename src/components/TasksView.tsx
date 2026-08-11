@@ -6,7 +6,7 @@ import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useAssetTasks } from '../lib/assetTasks'
-import { assigneeTints } from '../lib/assigneeTint'
+import { assignTints, loadTintStore, renameTint, ASSIGNEE_TINT_KEY } from '../lib/assigneeTint'
 import { CHANNELS } from '../domain/channels'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 
@@ -256,6 +256,9 @@ export function TasksView() {
   // The name currently being corrected in the Assignee menu, and the text being typed for it.
   const [editWho, setEditWho] = useState<string | null>(null)
   const [editWhoDraft, setEditWhoDraft] = useState('')
+  // The person whose ✕ has been pressed but not yet confirmed. This one reaches every task they
+  // hold, which is not something to do on a single click of a small glyph.
+  const [confirmWho, setConfirmWho] = useState<string | null>(null)
   // The brand's campaigns, for the Campaign picker. The ingested content-library backfill is not a
   // campaign you'd assign work to, so it stays out of the list.
   const campaigns = useMemo(
@@ -330,14 +333,29 @@ export function TasksView() {
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [allTasks])
   const knownAssignees = useMemo(() => assigneeCounts.map(([n]) => n), [assigneeCounts])
-  // One colour each, resolved over the whole set at once — see assigneeTint for why a hash cannot
-  // make that promise. assigneeCounts is already sorted, which is what keeps it stable.
-  const tints = useMemo(() => assigneeTints(knownAssignees), [knownAssignees])
+  // One colour each, decided on first sight of a name and then kept — see assigneeTint for why it
+  // is remembered rather than derived. Resolving is pure; the write happens in the effect below.
+  const [tintStore, setTintStore] = useState(loadTintStore)
+  const { tints, store: nextTintStore, changed: tintsChanged } = useMemo(
+    () => assignTints(knownAssignees, tintStore),
+    [knownAssignees, tintStore],
+  )
+  useEffect(() => {
+    if (!tintsChanged) return
+    persistState(ASSIGNEE_TINT_KEY, nextTintStore)
+    setTintStore(nextTintStore)
+  }, [tintsChanged, nextTintStore])
 
   /** Rename an owner across both kinds of task at once (to '' unassigns them everywhere). */
   const renameAssignee = (from: string, to: string) => {
     setTasks((prev) => prev.map((t) => (t.assignee === from ? { ...t, assignee: to.trim() } : t)))
     renameAssetAssignee(from, to)
+    // Correcting a spelling should not recolour the person.
+    const moved = renameTint(tintStore, from, to.trim())
+    if (moved !== tintStore) {
+      persistState(ASSIGNEE_TINT_KEY, moved)
+      setTintStore(moved)
+    }
     if (filterWho === from) setFilterWho(to.trim())
   }
 
@@ -609,7 +627,7 @@ export function TasksView() {
           </button>
           {openFilter === 'who' && (
             <>
-              <div className="task-pick-scrim" onClick={() => { setOpenFilter(null); setEditWho(null) }} />
+              <div className="task-pick-scrim" onClick={() => { setOpenFilter(null); setEditWho(null); setConfirmWho(null) }} />
               <div className="task-pick-menu tasks-filter-menu" role="menu">
                 <button className={`task-pick-item${filterWho ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterWho(''); setOpenFilter(null) }}>
                   <span className="task-pick-name">Everyone</span>
@@ -638,6 +656,23 @@ export function TasksView() {
                       <button className="tasks-filter-act" title="Save" onClick={() => { renameAssignee(name, editWhoDraft); setEditWho(null) }}>✓</button>
                     </div>
                   ) : (
+                    confirmWho === name ? (
+                      <div key={name} className="task-pick-item tasks-filter-confirm">
+                        <span className="tasks-filter-confirm-text">
+                          Take {name} off {n} {n === 1 ? 'task' : 'tasks'}?
+                        </span>
+                        <button className="tasks-filter-confirm-no" onClick={() => setConfirmWho(null)}>Cancel</button>
+                        <button
+                          className="tasks-filter-confirm-yes"
+                          onClick={() => {
+                            renameAssignee(name, '')
+                            setConfirmWho(null)
+                          }}
+                        >
+                          Unassign
+                        </button>
+                      </div>
+                    ) : (
                     <div key={name} className={`task-pick-item tasks-filter-person${filterWho === name ? ' on' : ''}`}>
                       <button className="tasks-filter-pick" role="menuitem" onClick={() => { setFilterWho(name); setOpenFilter(null) }}>
                         <Avatar name={name} tint={tints.get(name)} />
@@ -645,8 +680,11 @@ export function TasksView() {
                         <span className="tasks-filter-count">{n}</span>
                       </button>
                       <button className="tasks-filter-act" title={`Rename ${name} everywhere`} onClick={() => { setEditWho(name); setEditWhoDraft(name) }}>✎</button>
-                      <button className="tasks-filter-act" title={`Unassign ${name} from everything`} onClick={() => renameAssignee(name, '')}>✕</button>
+                      {/* Asks first. The row's ✕ takes one task; this one takes every task they
+                          hold, and the two are a glyph apart in a menu. */}
+                      <button className="tasks-filter-act" title={`Unassign ${name} from every task`} onClick={() => setConfirmWho(name)}>✕</button>
                     </div>
+                    )
                   ),
                 )}
               </div>
