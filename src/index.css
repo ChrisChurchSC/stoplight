@@ -19269,20 +19269,15 @@ textarea.library-input {
   background: var(--surface-2);
   color: var(--text);
 }
-.task-colhead-caret {
-  font-size: 8px;
-  opacity: 0;
-}
-.task-colhead-btn:hover .task-colhead-caret,
-.task-colhead-btn:focus-visible .task-colhead-caret {
-  opacity: 0.7;
-}
+/* Grouped: the header fills in. Body text on the soft tint measures 15:1, where the accent on its
+   own tint is 4.15 — under AA for a label this size, which is why the fill carries the state and
+   the text stays the normal colour. */
 .task-colhead-cell.grouped .task-colhead-btn {
+  background: var(--accent-2-soft);
   color: var(--text);
 }
-.task-colhead-mark {
-  font-size: 11px;
-  color: var(--accent-2);
+.task-colhead-cell.grouped .task-colhead-btn:hover {
+  background: var(--accent-2-soft);
 }
 /* Segmented control, matching the Timeline's range picker (.ccal-range) — the same kind of
    choice, so it reads as the same control. Kept as its own class rather than shared with the
@@ -19551,12 +19546,21 @@ textarea.library-input {
   color: var(--due-late);
   font-weight: 600;
 }
+.task-due-text {
+  position: relative;
+}
+/* Hangs in the margin, left of the column, so the dates themselves stay flush with each other and
+   the dot is the only thing that breaks the edge — put it in the text flow instead and every late
+   row indents by the width of the mark. */
 .task-due-mark {
-  width: 12px;
-  height: 12px;
-  margin-right: 5px;
-  vertical-align: -1.5px;
-  flex: 0 0 auto;
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .task-due-text.empty {
   color: var(--text-faint);

@@ -83,17 +83,19 @@ const stored = () => JSON.parse(localStorage.getItem(KEY) ?? '[]') as { id: stri
 const rows = () => [...host.querySelectorAll('.task-grid.task-row')]
 const cells = (el: Element) => [...el.querySelectorAll('.task-cell')]
 const rowNamed = (text: string) => rows().find((r) => r.textContent?.includes(text))
-/** Group by a column the way the page does now: open that header's menu, choose the entry. */
+/** Group by a column the way the page does: click its header. Clicking again stops. */
 const groupByColumn = (label: string) => {
   act(() => {
     ;[...host.querySelectorAll('.task-colhead-btn')]
       .find((b) => b.querySelector('.task-colhead-label')?.textContent === label)!
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
-  act(() => {
-    host.querySelector('.task-colhead-cell .task-pick-item')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  })
 }
+/** Whether a column header is showing itself as the current grouping. */
+const headerGrouped = (label: string) =>
+  [...host.querySelectorAll('.task-colhead-cell')].some(
+    (c) => c.querySelector('.task-colhead-label')?.textContent === label && c.className.includes('grouped'),
+  )
 /** The column labels, in header order. */
 const headerLabels = () =>
   cells(host.querySelector('.task-colhead')!).map((c) => c.querySelector('.task-colhead-label')?.textContent ?? c.textContent)
@@ -319,6 +321,35 @@ describe('TasksView', () => {
     // The cells still render — CSS drops them as a set, so the grid and the header stay in step.
     expect(host.querySelector('.tasks-view')!.className).toContain('grouped-campaign')
     expect(host.querySelectorAll('.task-cell-campaign').length).toBeGreaterThan(0)
+  })
+
+  /**
+   * The header IS the switch, so it has to say so and it has to turn itself off. Grouping by
+   * campaign is the case that cannot rely on the header alone: that column hides itself, taking
+   * the control with it, which is what the toolbar chip is for.
+   */
+  it('marks the header it is grouping by, and ungroups when clicked again', () => {
+    act(() => root.render(<TasksView />))
+    expect(headerGrouped('Assigned to')).toBe(false)
+
+    groupByColumn('Assigned to')
+    expect(headerGrouped('Assigned to'), 'the header shows it is the grouping').toBe(true)
+
+    groupByColumn('Assigned to')
+    expect(headerGrouped('Assigned to'), 'and clicking it again lets go').toBe(false)
+    expect(headerGrouped('Due date'), 'falling back to the default grouping').toBe(true)
+  })
+
+  it('leaves a way back when the grouped column is the one that hides', () => {
+    act(() => root.render(<TasksView />))
+    groupByColumn('Campaign')
+
+    // The Campaign header is still in the DOM but hidden by CSS, so the chip is the real way out.
+    const chip = host.querySelector<HTMLElement>('.tasks-grouped-chip')
+    expect(chip?.textContent).toContain('Grouped by Campaign')
+
+    act(() => chip!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(host.querySelector('.tasks-view')!.className).not.toContain('grouped-campaign')
   })
 
   it('regroups by campaign, gathering each campaign’s tasks under its own head', () => {

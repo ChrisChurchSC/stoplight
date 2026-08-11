@@ -112,18 +112,13 @@ const NO_ASSIGNEE = 'Unassigned'
 /** Filter sentinel for "has nobody on it" — distinct from '' , which is the no-filter state. */
 const UNASSIGNED = '\u0000unassigned'
 
-/** The one glyph on the row, and only on an overdue date. Colour alone cannot carry "late" — it
- *  says nothing to a colourblind reader and nothing in a screenshot printed in grey — so the state
- *  that matters most gets a shape as well. Everything else stays unmarked, because a mark on every
- *  row is a mark you stop seeing. */
+/** The one mark on the row, and only on an overdue date. Colour alone cannot carry "late" — it
+ *  says nothing to a colourblind reader and nothing in a greyscale print — so the state that
+ *  matters most gets a shape as well. It hangs in the margin rather than sitting in the text, so
+ *  every due date in the column still starts on the same left edge and the dot is what breaks it.
+ *  Everything else stays unmarked, because a mark on every row is a mark you stop seeing. */
 function LateMark() {
-  return (
-    <svg className="task-due-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path d="M8 1.6 15 14H1L8 1.6Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M8 6v3.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <circle cx="8" cy="11.6" r="0.9" fill="currentColor" />
-    </svg>
-  )
+  return <span className="task-due-mark" aria-hidden="true" />
 }
 
 // A small tinted-initial avatar used for both the Record and Assigned-to chips.
@@ -224,8 +219,6 @@ export function TasksView() {
   const [filterWho, setFilterWho] = useState('')
   const [filterCampaign, setFilterCampaign] = useState('')
   const [openFilter, setOpenFilter] = useState<null | 'who' | 'campaign'>(null)
-  // Which column header has its menu open.
-  const [openHead, setOpenHead] = useState<GroupBy | null>(null)
   // The name currently being corrected in the Assignee menu, and the text being typed for it.
   const [editWho, setEditWho] = useState<string | null>(null)
   const [editWhoDraft, setEditWhoDraft] = useState('')
@@ -507,37 +500,26 @@ export function TasksView() {
   )
 
   /**
-   * A column header, and the control for grouping by it. Clicking opens a menu rather than
-   * grouping outright: a header click means SORT nearly everywhere else, so doing something else
-   * silently would surprise every time — and it would spend the gesture sort will want later.
-   * The Task column has no head of its own; there is nothing sensible to group a name by.
+   * A column header, and the control for grouping by it: click to group, click again to stop. The
+   * header fills in while it is the grouping, which is the whole indicator — no glyph, because the
+   * fill already says it and a mark beside it would say it twice.
+   *
+   * Clicking groups outright rather than opening a menu. That does spend the gesture a sort would
+   * want later; if sorting arrives, it needs its own affordance rather than taking this one back.
+   * The Task column is not a header of this kind — there is nothing sensible to group a name by.
    */
   const ColHead = ({ label, col, className = '' }: { label: string; col: GroupBy; className?: string }) => {
     const on = groupBy === col
     return (
       <div className={`task-cell task-colhead-cell${on ? ' grouped' : ''} ${className}`}>
-        <button className="task-colhead-btn" onClick={() => setOpenHead(openHead === col ? null : col)} title={`Group by ${label}`}>
+        <button
+          className="task-colhead-btn"
+          aria-pressed={on}
+          onClick={() => setGroupBy(on ? 'due' : col)}
+          title={on ? `Stop grouping by ${label}` : `Group by ${label}`}
+        >
           <span className="task-colhead-label">{label}</span>
-          {on && <span className="task-colhead-mark" aria-label="grouped by this">≡</span>}
-          <span className="task-colhead-caret">▾</span>
         </button>
-        {openHead === col && (
-          <>
-            <div className="task-pick-scrim" onClick={() => setOpenHead(null)} />
-            <div className="task-pick-menu" role="menu">
-              <button
-                className={`task-pick-item${on ? ' on' : ''}`}
-                role="menuitem"
-                onClick={() => {
-                  setGroupBy(on ? 'due' : col)
-                  setOpenHead(null)
-                }}
-              >
-                <span className="task-pick-name">{on ? 'Ungroup' : 'Group by this'}</span>
-              </button>
-            </div>
-          </>
-        )}
       </div>
     )
   }
