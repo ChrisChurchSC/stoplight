@@ -25,6 +25,8 @@ import type { TrafficRow } from '../../domain/types'
 const KEY = 'stoplight.tasks.v1'
 const BRAND = 'Acme'
 const CAMPAIGN = 'Acme — Fall Launch'
+const OTHER_BRAND = 'Globex'
+const OTHER_CAMPAIGN = 'Globex — Spring Push'
 
 const row = (over: Partial<TrafficRow> = {}): TrafficRow => ({
   id: 'row-1',
@@ -61,6 +63,7 @@ let root: Root
 
 beforeEach(() => {
   registerCampaign(CAMPAIGN, BRAND)
+  registerCampaign(OTHER_CAMPAIGN, OTHER_BRAND)
   localStorage.clear()
   host = document.createElement('div')
   document.body.appendChild(host)
@@ -125,5 +128,60 @@ describe('TasksView', () => {
     expect(cells(derived)).toHaveLength(headers.length)
     expect(cells(manual)).toHaveLength(headers.length)
     expect(cells(derived)[2].textContent).toContain('Fall Launch')
+  })
+
+  /**
+   * WITH NO BRAND PICKED THE LIST IS EVERY BRAND'S, NOT NOBODY'S. The rail only lands on a brand
+   * when Brand records exist, so a workspace whose campaigns carry brand folders but no Brand card
+   * leaves the filter on 'all' — which used to empty the page: thirty-odd assets across five
+   * campaigns rendered as no tasks at all, on a page whose whole job is to list them.
+   */
+  it('lists every brand’s work when no brand is picked', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Spring teaser', campaign: OTHER_CAMPAIGN })],
+      clientFilter: 'all',
+    })
+    localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: CAMPAIGN })]))
+    act(() => root.render(<TasksView />))
+
+    expect(rowNamed('Teaser post'), 'the first brand’s asset').toBeTruthy()
+    expect(rowNamed('Spring teaser'), 'the second brand’s asset').toBeTruthy()
+    // The brand-tagged manual task is shown too, rather than filtered out by a brand nobody picked.
+    expect(rowNamed('Book the photographer')).toBeTruthy()
+  })
+
+  it('still scopes to one brand once a brand is picked', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Spring teaser', campaign: OTHER_CAMPAIGN })],
+      clientFilter: BRAND,
+    })
+    act(() => root.render(<TasksView />))
+
+    expect(rowNamed('Teaser post')).toBeTruthy()
+    expect(rowNamed('Spring teaser'), 'the other brand’s asset stays out').toBeFalsy()
+  })
+
+  it('regroups by campaign, gathering each campaign’s tasks under its own head', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Spring teaser', campaign: OTHER_CAMPAIGN })],
+      clientFilter: 'all',
+    })
+    // One task on a campaign, one on none — the second proves the unlinked bucket exists.
+    localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: CAMPAIGN }), manualTask({ id: 'task-2', text: 'Unfiled errand' })]))
+    act(() => root.render(<TasksView />))
+
+    const heads = () => [...host.querySelectorAll('.task-group-head')].map((h) => h.firstChild?.textContent?.trim())
+    // Every heading is a due-date bucket until the control is touched (which bucket depends on
+    // where the fixture's dates fall relative to the day the suite runs).
+    expect(heads().every((h) => ['Overdue', 'Today', 'Upcoming', 'No date'].includes(h!))).toBe(true)
+
+    const campaignBtn = [...host.querySelectorAll('.tasks-groupby-btn')].find((b) => b.textContent === 'Campaign')
+    act(() => {
+      campaignBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    // Campaigns alphabetically, with whatever has no campaign last rather than sorted among them.
+    // Each heading drops its own brand prefix, so an unscoped list is not "Acme — Acme Fall Launch".
+    expect(heads()).toEqual(['Fall Launch', 'Spring Push', 'No campaign'])
   })
 })

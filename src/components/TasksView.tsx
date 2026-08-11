@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
+import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -8,10 +9,13 @@ import { useAssetTasks } from '../lib/assetTasks'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 
 /**
- * Tasks — a standalone, Attio-style task list for the workspace: a row per task with its due date,
- * the record it relates to, and who it's assigned to, grouped by due date (Overdue / Today /
- * Upcoming / No date). Deliberately self-contained — tasks live in localStorage, so this page owns
- * its own data with no store slice or backend.
+ * Tasks — an Attio-style task list for the workspace: a row per task with its due date, the
+ * campaign it belongs to, the record it relates to, and who it's assigned to. Grouped either by
+ * due date (Overdue / Today / Upcoming / No date) or by campaign.
+ *
+ * The tasks themselves are still self-contained — they live in localStorage, with no store slice
+ * or backend of their own. What it does read from the store is the campaigns to link them TO
+ * (useHomeCanvases) and the assets that derive into tasks (useAssetTasks).
  */
 // A task's linked record — a Companies row, by id + name (name cached so the chip renders even if
 // the company is later renamed/removed). Null when the task isn't tied to a company.
@@ -75,6 +79,12 @@ const bucketOf = (due: string, today: string): Bucket => {
   return 'Upcoming'
 }
 
+// How the list is grouped. By due date it answers "what is late and what is next"; by campaign,
+// "what is still outstanding on this piece of work" — the same tasks, cut the two ways they get
+// asked about. The heading a campaign-less task groups under.
+type GroupBy = 'due' | 'campaign'
+const NO_CAMPAIGN = 'No campaign'
+
 // A small tinted-initial avatar used for both the Record and Assigned-to chips.
 function Avatar({ name }: { name: string }) {
   const ch = (name.trim()[0] ?? '?').toUpperCase()
@@ -90,7 +100,9 @@ export function TasksView() {
   const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const openFlow = useTrafficStore((s) => s.openFlow)
-  // The rail always lands on a real brand now, but guard against a transient 'all'.
+  // '' means unscoped — every brand — and it is a routine state, not a transient one: the rail only
+  // auto-picks a brand when Brand records exist, so a workspace of campaigns with no Brand card
+  // sits on 'all' indefinitely.
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   const { assetTasks, toggleAssetDone } = useAssetTasks(brand)
   const { canvases } = useHomeCanvases()
@@ -99,6 +111,7 @@ export function TasksView() {
   const [pickRec, setPickRec] = useState<string | null>(null)
   const [pickCamp, setPickCamp] = useState<string | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  const [groupBy, setGroupBy] = useState<GroupBy>('due')
   // The brand's campaigns, for the Campaign picker. The ingested content-library backfill is not a
   // campaign you'd assign work to, so it stays out of the list.
   const campaigns = useMemo(
@@ -106,7 +119,13 @@ export function TasksView() {
     [canvases, brand],
   )
   // Campaign names are stored brand-qualified ("Acme — Fall Launch"); show just the campaign part.
-  const shortCampaign = (name: string) => (brand ? name.replace(`${brand} — `, '') : name)
+  // Keyed off the campaign's OWN brand rather than the selected one, so an unscoped list drops the
+  // prefix too — otherwise a brand-qualified name renders as "Arbitrum — Arbitrum Campaign 1" and
+  // truncates in the chip, saying the brand twice and the campaign not at all.
+  const shortCampaign = (name: string) => {
+    const owner = clientForCampaign(name)
+    return owner && name.startsWith(`${owner} — `) ? name.slice(owner.length + 3) : name
+  }
   const today = localDate()
   // The signed-in user's name, used as the default assignee for a new task. It has to come from
   // the session: a name written into this file would be that one person assigned to every task in
@@ -132,8 +151,10 @@ export function TasksView() {
     window.dispatchEvent(new Event('stoplight:tasks'))
   }, [tasks])
   // Everything below is scoped to the brand selected in the rail. Any untagged task (e.g. created
-  // before scoping) shows under every brand rather than silently disappearing.
-  const brandTasks = useMemo(() => tasks.filter((t) => !t.brand || t.brand === brand), [tasks, brand])
+  // before scoping) shows under every brand rather than silently disappearing — and with no brand
+  // selected at all the list is unscoped, so a brand-tagged task is shown rather than hidden. See
+  // useAssetTasks for why 'no brand' is a routine state and not a transient one.
+  const brandTasks = useMemo(() => tasks.filter((t) => !brand || !t.brand || t.brand === brand), [tasks, brand])
   // Derived asset-tasks (shared with Home via useAssetTasks) shaped as full tasks so they merge
   // with manual ones. Read-mostly: the row's check toggles per-asset done and it opens the flow.
   const allTasks = useMemo<Task[]>(
@@ -142,16 +163,33 @@ export function TasksView() {
   )
   const openCount = allTasks.filter((t) => !t.done).length
 
-  // Group the open tasks into due-date buckets (done tasks fall to their own section at the end).
+  // Group the open tasks — into due-date buckets, or by the campaign they belong to (done tasks
+  // fall to their own section at the end either way). Soonest-due first within every group, so a
+  // campaign's group reads as its own running order.
   const groups = useMemo(() => {
     const open = allTasks.filter((t) => !t.done)
+    const byDue = (a: Task, b: Task) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt
+
+    if (groupBy === 'campaign') {
+      const map = new Map<string, Task[]>()
+      for (const t of open) {
+        const key = t.campaign || NO_CAMPAIGN
+        if (!map.has(key)) map.set(key, [])
+        map.get(key)!.push(t)
+      }
+      for (const list of map.values()) list.sort(byDue)
+      // Campaigns alphabetically; whatever belongs to no campaign sits last rather than under "N".
+      return [...map.entries()]
+        .sort(([a], [b]) => (a === NO_CAMPAIGN ? 1 : b === NO_CAMPAIGN ? -1 : shortCampaign(a).localeCompare(shortCampaign(b))))
+        .map(([key, list]) => [key === NO_CAMPAIGN ? NO_CAMPAIGN : shortCampaign(key), list] as const)
+    }
+
     const map = new Map<Bucket, Task[]>()
     for (const b of BUCKETS) map.set(b, [])
     for (const t of open) map.get(bucketOf(t.due, today))!.push(t)
-    for (const list of map.values())
-      list.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt)
+    for (const list of map.values()) list.sort(byDue)
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
-  }, [allTasks, today])
+  }, [allTasks, today, groupBy])
   const doneTasks = useMemo(() => allTasks.filter((t) => t.done), [allTasks])
   // The task whose detail drawer is open — from allTasks so derived asset-tasks open their own detail
   // too (read live so edits to a manual task reflect immediately).
@@ -398,7 +436,21 @@ export function TasksView() {
         </button>
       </header>
 
-      <div className="tasks-toolbar">Sorted by Due date</div>
+      <div className="tasks-toolbar">
+        <span className="tasks-toolbar-label">Group by</span>
+        <div className="tasks-groupby" role="group" aria-label="Group tasks by">
+          {(['due', 'campaign'] as const).map((g) => (
+            <button
+              key={g}
+              className={`tasks-groupby-btn${groupBy === g ? ' on' : ''}`}
+              aria-pressed={groupBy === g}
+              onClick={() => setGroupBy(g)}
+            >
+              {g === 'due' ? 'Due date' : 'Campaign'}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="task-grid task-colhead">
         <div className="task-cell task-cell-name">Task</div>

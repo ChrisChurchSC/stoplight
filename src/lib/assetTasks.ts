@@ -9,6 +9,13 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * surfaces them in the Tasks page and on Home without any extra step. "Done" is tracked per-asset
  * (persisted + workspace-synced), independent of the asset's own status — a posted asset also
  * reads as done. Shared by TasksView and HomeAgenda so the two never disagree.
+ *
+ * An empty `brand` means UNSCOPED — every brand's assets — and not "no brand, so nothing". The rail
+ * only lands on a brand when Brand records exist (BrandRail auto-selects the first one); a workspace
+ * whose campaigns carry brand folders but no Brand card leaves the filter on 'all', and this hook
+ * used to answer that with an empty list, so a workspace of five campaigns and thirty-odd assets
+ * showed no tasks anywhere. Each task carries the brand of its own campaign, so an unscoped list
+ * still says who each one belongs to.
  */
 export const ASSET_DONE_KEY = 'stoplight.assetTaskDone.v1'
 
@@ -65,17 +72,17 @@ export function useAssetTasks(brand: string): {
   }
 
   const assetTasks = useMemo<AssetTask[]>(() => {
-    if (!brand) return []
     const done = new Set(assetDone)
     return rows
-      .filter((r) => !r.archivedAt && clientForCampaign(r.campaign) === brand)
+      .filter((r) => !r.archivedAt && (!brand || clientForCampaign(r.campaign) === brand))
       .map((r) => ({
         id: `asset:${r.id}`,
         text: `${CHANNELS[r.channel]?.label ?? r.channel} · ${r.assetName || 'Untitled asset'}`,
         due: r.scheduledAt ? ymd(new Date(r.scheduledAt)) : '',
         done: done.has(r.id) || r.status === 'posted',
         createdAt: r.scheduledAt ? Date.parse(r.scheduledAt) : 0,
-        brand,
+        // The asset's own brand, not the filter's — unscoped, the two are not the same.
+        brand: clientForCampaign(r.campaign),
         rowId: r.id,
         campaign: r.campaign ?? '',
         derived: true as const,
