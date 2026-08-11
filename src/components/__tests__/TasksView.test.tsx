@@ -83,6 +83,20 @@ const stored = () => JSON.parse(localStorage.getItem(KEY) ?? '[]') as { id: stri
 const rows = () => [...host.querySelectorAll('.task-grid.task-row')]
 const cells = (el: Element) => [...el.querySelectorAll('.task-cell')]
 const rowNamed = (text: string) => rows().find((r) => r.textContent?.includes(text))
+/** Group by a column the way the page does now: open that header's menu, choose the entry. */
+const groupByColumn = (label: string) => {
+  act(() => {
+    ;[...host.querySelectorAll('.task-colhead-btn')]
+      .find((b) => b.querySelector('.task-colhead-label')?.textContent === label)!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+  act(() => {
+    host.querySelector('.task-colhead-cell .task-pick-item')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+/** The column labels, in header order. */
+const headerLabels = () =>
+  cells(host.querySelector('.task-colhead')!).map((c) => c.querySelector('.task-colhead-label')?.textContent ?? c.textContent)
 
 describe('TasksView', () => {
   it('links a hand-made task to a campaign, and keeps the link in storage', () => {
@@ -119,7 +133,7 @@ describe('TasksView', () => {
     localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: CAMPAIGN })]))
     act(() => root.render(<TasksView />))
 
-    const headers = cells(host.querySelector('.task-colhead')!).map((c) => c.textContent)
+    const headers = headerLabels()
     expect(headers).toEqual(['Task', 'Due date', 'Campaign', 'Assigned to'])
 
     // The derived asset-task (from the seeded row) and the manual one agree on the grid.
@@ -292,11 +306,7 @@ describe('TasksView', () => {
     expect(due('Later post')).not.toMatch(/late|soon/)
 
     // Grouped by campaign the buckets are gone, so the group itself has to report what has slipped.
-    act(() => {
-      ;[...host.querySelectorAll('.tasks-groupby-btn')]
-        .find((b) => b.textContent === 'Campaign')!
-        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    groupByColumn('Campaign')
     expect(host.querySelector('.task-group-late')?.textContent).toBe('1 late')
   })
 
@@ -304,11 +314,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
     expect(host.querySelector('.tasks-view')!.className).not.toContain('grouped-campaign')
 
-    act(() => {
-      ;[...host.querySelectorAll('.tasks-groupby-btn')]
-        .find((b) => b.textContent === 'Campaign')!
-        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    groupByColumn('Campaign')
 
     // The cells still render — CSS drops them as a set, so the grid and the header stay in step.
     expect(host.querySelector('.tasks-view')!.className).toContain('grouped-campaign')
@@ -329,10 +335,7 @@ describe('TasksView', () => {
     // where the fixture's dates fall relative to the day the suite runs).
     expect(heads().every((h) => ['Overdue', 'Today', 'Upcoming', 'No date'].includes(h!))).toBe(true)
 
-    const campaignBtn = [...host.querySelectorAll('.tasks-groupby-btn')].find((b) => b.textContent === 'Campaign')
-    act(() => {
-      campaignBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    groupByColumn('Campaign')
 
     // Campaigns alphabetically, with whatever has no campaign last rather than sorted among them.
     // Each heading drops its own brand prefix, so an unscoped list is not "Acme — Acme Fall Launch".

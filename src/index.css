@@ -43,6 +43,11 @@
   /* stoplight status palette */
   --red: #e5484d;
   --amber: #f5a623;
+  /* Due-date text tones. Their own tokens because --red/--amber are tuned for fills and chips: as
+     13px text on white those measure 3.91:1 and 2.03:1, both under the 4.5:1 body text needs. These
+     are measured at 6.47:1 and 5.18:1. */
+  --due-late: #b91c1c;
+  --due-soon: #c2410c;
   --green: #30a46c;
   --blue: #6fb3ff;
 
@@ -178,6 +183,8 @@
 
     --red: #f2555a;
     --amber: #f5b544;
+    --due-soon: #f5b544;
+    --due-late: #f2555a;
     --green: #3fb883;
     --blue: #7cbcff;
 
@@ -221,6 +228,9 @@
 
   --red: #f2555a;
   --amber: #f5b544;
+  /* Dark already clears AA on the shared tones (5.22 and 9.70), so these track them. */
+  --due-late: #f2555a;
+  --due-soon: #f5b544;
   --green: #3fb883;
   --blue: #7cbcff;
 
@@ -19214,37 +19224,70 @@ textarea.library-input {
 .tasks-toolbar-label {
   font-weight: 600;
 }
-/* Segmented control, matching the Timeline's range picker (.ccal-range) — the same kind of
-   choice, so it reads as the same control. Kept as its own class rather than shared with the
-   Gantt's, which is scoped to that view. */
-.tasks-groupby {
+/* Grouping is set on the column headers, so the toolbar only reports it — and offers the way out,
+   which matters because grouping by campaign hides the very header you would click to undo it. */
+.tasks-grouped-chip {
   display: inline-flex;
-  padding: 2px;
-  gap: 2px;
-  background: var(--surface-2);
+  align-items: center;
+  gap: 7px;
   border: 1px solid var(--border);
-  border-radius: 9px;
-}
-.tasks-groupby-btn {
-  border: 0;
-  background: none;
+  border-radius: 8px;
+  background: var(--surface-2);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-muted);
-  padding: 4px 11px;
-  border-radius: 7px;
+  color: var(--text);
+  padding: 5px 10px;
   cursor: pointer;
 }
-.tasks-groupby-btn:hover {
+.tasks-grouped-chip:hover {
+  border-color: var(--text-faint);
+}
+.tasks-grouped-x {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+/* A column header that is also the grouping control. It stays looking like a header until hovered:
+   the affordance is worth having, a row of buttons across the top is not. */
+.task-colhead-cell {
+  position: relative;
+}
+.task-colhead-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  padding: 2px 5px;
+  margin: -2px -5px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.task-colhead-btn:hover {
+  background: var(--surface-2);
   color: var(--text);
 }
-.tasks-groupby-btn.on {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
+.task-colhead-caret {
+  font-size: 8px;
+  opacity: 0;
 }
-/* Separates the grouping control from the filters — same row, different job. */
+.task-colhead-btn:hover .task-colhead-caret,
+.task-colhead-btn:focus-visible .task-colhead-caret {
+  opacity: 0.7;
+}
+.task-colhead-cell.grouped .task-colhead-btn {
+  color: var(--text);
+}
+.task-colhead-mark {
+  font-size: 11px;
+  color: var(--accent-2);
+}
+/* Segmented control, matching the Timeline's range picker (.ccal-range) — the same kind of
+   choice, so it reads as the same control. Kept as its own class rather than shared with the
+   Gantt's, which is scoped to that view. */
+/* Separates the grouping state from the filters — same row, different job. */
 .tasks-toolbar-gap {
   width: 1px;
   height: 18px;
@@ -19493,14 +19536,27 @@ textarea.library-input {
 .task-due-text:hover {
   background: var(--surface);
 }
+/* Due-date tones are their own tokens rather than --amber / --red, which are tuned for fills and
+   chips. As text at 13px on white those two measure 2.03:1 and 3.91:1 — both under the 4.5:1 that
+   body text needs, the amber by less than half. These are measured: 5.18:1 and 6.47:1 on #ffffff.
+   Dark mode already passes on the shared tokens (9.70 and 5.22), so it keeps them. Defined with
+   the other colour tokens at the top of the file, in all three theme blocks. */
 .task-due-text.soon {
-  color: var(--amber, #d97706);
+  color: var(--due-soon);
 }
-/* Late is the one that needs chasing, so it carries the weight as well as the colour — the two
-   used to share a class and a red, which made "due today" look exactly as bad as "a week late". */
+/* Late is the one that needs chasing, so it carries the weight and the glyph as well as the colour
+   — all three, because the two used to share one class and one red, and because colour on its own
+   says nothing to a reader who cannot separate the hues. */
 .task-due-text.late {
-  color: var(--red);
+  color: var(--due-late);
   font-weight: 600;
+}
+.task-due-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+  vertical-align: -1.5px;
+  flex: 0 0 auto;
 }
 .task-due-text.empty {
   color: var(--text-faint);

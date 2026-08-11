@@ -87,6 +87,13 @@ const bucketOf = (due: string, today: string): Bucket => {
   return 'Upcoming'
 }
 
+/** What a due date says. "Due today" rather than the date it happens to be: the row is telling you
+ *  when to act, and today is the answer, not August 11th. Late keeps its date — how late matters. */
+const dueText = (due: string, today: string, blank: string): string => {
+  if (!due) return blank
+  return due === today ? 'Due today' : `Due ${fmtDue(due)}`
+}
+
 /** How a due date reads on the row. Late and due-today used to share one class, so both came out
  *  the same red — readable under a "Overdue" heading, and not readable at all once grouping by
  *  campaign or assignee took those headings away and left the colour to say it alone. */
@@ -104,6 +111,20 @@ const NO_CAMPAIGN = 'No campaign'
 const NO_ASSIGNEE = 'Unassigned'
 /** Filter sentinel for "has nobody on it" — distinct from '' , which is the no-filter state. */
 const UNASSIGNED = '\u0000unassigned'
+
+/** The one glyph on the row, and only on an overdue date. Colour alone cannot carry "late" — it
+ *  says nothing to a colourblind reader and nothing in a screenshot printed in grey — so the state
+ *  that matters most gets a shape as well. Everything else stays unmarked, because a mark on every
+ *  row is a mark you stop seeing. */
+function LateMark() {
+  return (
+    <svg className="task-due-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M8 1.6 15 14H1L8 1.6Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M8 6v3.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="8" cy="11.6" r="0.9" fill="currentColor" />
+    </svg>
+  )
+}
 
 // A small tinted-initial avatar used for both the Record and Assigned-to chips.
 function Avatar({ name }: { name: string }) {
@@ -203,6 +224,8 @@ export function TasksView() {
   const [filterWho, setFilterWho] = useState('')
   const [filterCampaign, setFilterCampaign] = useState('')
   const [openFilter, setOpenFilter] = useState<null | 'who' | 'campaign'>(null)
+  // Which column header has its menu open.
+  const [openHead, setOpenHead] = useState<GroupBy | null>(null)
   // The name currently being corrected in the Assignee menu, and the text being typed for it.
   const [editWho, setEditWho] = useState<string | null>(null)
   const [editWhoDraft, setEditWhoDraft] = useState('')
@@ -360,7 +383,8 @@ export function TasksView() {
       </div>
       <div className="task-cell">
         <span className={`task-due-text${dueTone(t, today)}${t.due ? '' : ' empty'}`}>
-          {t.due ? `Due ${fmtDue(t.due)}` : 'No date'}
+          {dueTone(t, today) === ' late' && <LateMark />}
+          {dueText(t.due, today, 'No date')}
         </span>
       </div>
       <div className="task-cell task-rec-cell task-cell-campaign">
@@ -419,7 +443,8 @@ export function TasksView() {
             className={`task-due-text${dueTone(t, today)}${t.due ? '' : ' empty'}`}
             onClick={() => setEditDue(t.id)}
           >
-            {t.due ? `Due ${fmtDue(t.due)}` : 'Set date'}
+            {dueTone(t, today) === ' late' && <LateMark />}
+            {dueText(t.due, today, 'Set date')}
           </button>
         )}
       </div>
@@ -481,6 +506,42 @@ export function TasksView() {
     </div>
   )
 
+  /**
+   * A column header, and the control for grouping by it. Clicking opens a menu rather than
+   * grouping outright: a header click means SORT nearly everywhere else, so doing something else
+   * silently would surprise every time — and it would spend the gesture sort will want later.
+   * The Task column has no head of its own; there is nothing sensible to group a name by.
+   */
+  const ColHead = ({ label, col, className = '' }: { label: string; col: GroupBy; className?: string }) => {
+    const on = groupBy === col
+    return (
+      <div className={`task-cell task-colhead-cell${on ? ' grouped' : ''} ${className}`}>
+        <button className="task-colhead-btn" onClick={() => setOpenHead(openHead === col ? null : col)} title={`Group by ${label}`}>
+          <span className="task-colhead-label">{label}</span>
+          {on && <span className="task-colhead-mark" aria-label="grouped by this">≡</span>}
+          <span className="task-colhead-caret">▾</span>
+        </button>
+        {openHead === col && (
+          <>
+            <div className="task-pick-scrim" onClick={() => setOpenHead(null)} />
+            <div className="task-pick-menu" role="menu">
+              <button
+                className={`task-pick-item${on ? ' on' : ''}`}
+                role="menuitem"
+                onClick={() => {
+                  setGroupBy(on ? 'due' : col)
+                  setOpenHead(null)
+                }}
+              >
+                <span className="task-pick-name">{on ? 'Ungroup' : 'Group by this'}</span>
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
   const fieldRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12 }
   const fieldLabel: CSSProperties = { width: 92, flex: '0 0 auto', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }
   const fieldControl: CSSProperties = { flex: 1, minWidth: 0, padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13 }
@@ -497,21 +558,17 @@ export function TasksView() {
       </header>
 
       <div className="tasks-toolbar">
-        <span className="tasks-toolbar-label">Group by</span>
-        <div className="tasks-groupby" role="group" aria-label="Group tasks by">
-          {(['due', 'campaign', 'assignee'] as const).map((g) => (
-            <button
-              key={g}
-              className={`tasks-groupby-btn${groupBy === g ? ' on' : ''}`}
-              aria-pressed={groupBy === g}
-              onClick={() => setGroupBy(g)}
-            >
-              {g === 'due' ? 'Due date' : g === 'campaign' ? 'Campaign' : 'Assignee'}
+        {/* Grouping is chosen on the column headers. This states the result and takes it back —
+            and it is the ONLY way back when the grouped column is the one that hides itself. */}
+        {groupBy !== 'due' && (
+          <>
+            <button className="tasks-grouped-chip" onClick={() => setGroupBy('due')} title="Back to due date">
+              Grouped by {groupBy === 'campaign' ? 'Campaign' : 'Assignee'}
+              <span className="tasks-grouped-x">✕</span>
             </button>
-          ))}
-        </div>
-
-        <span className="tasks-toolbar-gap" />
+            <span className="tasks-toolbar-gap" />
+          </>
+        )}
 
         {/* Assignee: filters the list, and is also where a name gets corrected or cleared —
             renaming here rewrites every task holding it, manual and derived alike. */}
@@ -609,9 +666,9 @@ export function TasksView() {
 
       <div className="task-grid task-colhead">
         <div className="task-cell task-cell-name">Task</div>
-        <div className="task-cell">Due date</div>
-        <div className="task-cell task-cell-campaign">Campaign</div>
-        <div className="task-cell">Assigned to</div>
+        <ColHead label="Due date" col="due" />
+        <ColHead label="Campaign" col="campaign" className="task-cell-campaign" />
+        <ColHead label="Assigned to" col="assignee" />
       </div>
 
       {allTasks.length === 0 ? (
