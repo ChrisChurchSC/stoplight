@@ -5723,16 +5723,31 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const flightEnd = new Date(start)
     flightEnd.setDate(flightEnd.getDate() + flightDays)
     const flightEndIso = flightEnd.toISOString()
-    // Business days (Mon–Fri) across the flight — content + brand builds land on
-    // these, never a weekend.
+    // Business days (Mon–Fri) available to THIS run — content + brand builds land on these, never a
+    // weekend.
+    //
+    // A SECOND RUN RESUMES; IT DOES NOT REPLAY THE FLIGHT. Every run used to spread its own batch
+    // from today across the whole flight, so adding the same channel twice put the second batch on
+    // the very same dates as the first — two assets stacked on each day, and a series that read
+    // 1, 4, 2, 5, 3, 6 down the calendar. Work starts after whatever the campaign already has
+    // scheduled, so a continued series runs in the order it is numbered.
+    const dayMs = 86_400_000
+    const lastScheduledAt = get()
+      .rows.filter((r) => !r.archivedAt && (r.campaign ?? '').trim() === campaign.trim() && r.scheduledAt)
+      .reduce((max, r) => Math.max(max, Date.parse(r.scheduledAt) || 0), 0)
+    const resumeFrom = new Date(lastScheduledAt ? Math.max(start.getTime(), lastScheduledAt + dayMs) : start.getTime())
+    resumeFrom.setHours(0, 0, 0, 0)
     const businessDays: Date[] = []
-    for (let i = 0; i <= flightDays; i++) {
-      const dt = new Date(start)
-      dt.setDate(dt.getDate() + i)
-      const wd = dt.getDay()
-      if (wd !== 0 && wd !== 6) businessDays.push(dt)
+    // Walks forward one day at a time, keeping weekdays. Reused to carry past the flight's end for
+    // a campaign that already runs to it — see the top-up before the content is laid out.
+    const cursor = new Date(resumeFrom)
+    const pushBusinessDay = () => {
+      const wd = cursor.getDay()
+      if (wd !== 0 && wd !== 6) businessDays.push(new Date(cursor))
+      cursor.setDate(cursor.getDate() + 1)
     }
-    if (businessDays.length === 0) businessDays.push(new Date(start))
+    while (cursor <= flightEnd) pushBusinessDay()
+    while (businessDays.length === 0) pushBusinessDay()
     // A weekday `n` business-days into the flight, at the channel's first best hour.
     const bizSlotIso = (channel: ChannelId, n: number): string => {
       const slot = businessDays[Math.min(businessDays.length - 1, Math.max(0, n))]
@@ -5828,6 +5843,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         if (it) interleaved.push(it)
       }
     }
+    // A campaign already running to the end of its flight has no room left inside it. Carry on past
+    // the end rather than stacking the whole batch onto the final day.
+    while (businessDays.length < interleaved.length) pushBusinessDay()
     interleaved.forEach((it, i) => {
       const slot =
         businessDays[

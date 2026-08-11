@@ -51,6 +51,15 @@ const names = () =>
     .rows.filter((r) => !r.archivedAt && (r.campaign ?? '').trim() === CAMPAIGN)
     .map((r) => r.assetName)
 
+/** The campaign's live assets in CALENDAR order — the order someone actually reads them in. */
+const namesByDate = () =>
+  useTrafficStore
+    .getState()
+    .rows.filter((r) => !r.archivedAt && (r.campaign ?? '').trim() === CAMPAIGN)
+    .slice()
+    .sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))
+    .map((r) => r.assetName)
+
 beforeEach(() => {
   registerCampaign(CAMPAIGN, 'Acme')
   window.localStorage.clear()
@@ -78,6 +87,35 @@ describe('seedCampaignAssets naming', () => {
     // The bare name holds the "#1" slot, so the second reads as #2 rather than standing beside an
     // identical twin.
     expect(names()).toEqual(['Landing page', 'Landing page #2'])
+  })
+
+  /**
+   * UNIQUE NAMES ARE NOT ENOUGH IF THE CALENDAR SHUFFLES THEM. Each run spread its own batch from
+   * today across the whole flight, so a second run reproduced the first run's dates exactly — two
+   * assets stacked on each day, and a series that read 1, 4, 2, 5, 3, 6 down the calendar. A run
+   * resumes after whatever the campaign already has scheduled, so the numbers and the dates agree.
+   */
+  it('schedules a continued series after the one it continues, not back over it', async () => {
+    await useTrafficStore.getState().seedCampaignAssets(CAMPAIGN, [story], { flightWeeks: 4 })
+    // The first run has already used the flight, so this one has to carry past its end rather than
+    // pile onto the last day.
+    await useTrafficStore.getState().seedCampaignAssets(CAMPAIGN, [story], { flightWeeks: 4 })
+
+    expect(namesByDate()).toEqual([
+      'Instagram story #1',
+      'Instagram story #2',
+      'Instagram story #3',
+      'Instagram story #4',
+      'Instagram story #5',
+      'Instagram story #6',
+    ])
+
+    // And no two land on the same day, which is what stacking looked like before.
+    const days = useTrafficStore
+      .getState()
+      .rows.filter((r) => !r.archivedAt && (r.campaign ?? '').trim() === CAMPAIGN)
+      .map((r) => r.scheduledAt.slice(0, 10))
+    expect(new Set(days).size).toBe(days.length)
   })
 
   it('joins an existing series rather than standing an unnumbered sibling beside it', async () => {
