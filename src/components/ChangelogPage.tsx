@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.86',
+    dateLabel: 'August 13, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A Data source card says what its table found, on the board. The most informative thing on the card was a 50-pixel grid of grey blocks meaning “there is data in here”, which is all it said, on a wall of twenty cards, at the zoom a board is actually read at. The reading already existed: open the card and the panel tells you 12,481 clicks, and that the top ten pages are 58% of them, worked out from the rows themselves with no model involved and no key required. It had simply never made it out to the face. The card now leads with it, keeping its name above and where the table came from below, so you can tell which of twenty tables is worth opening without opening any of them.',
+          'The spreadsheet preview stays wherever it is the honest picture. A blank sheet, one you typed, and a sketched table all have nothing to read (a headline is itself a reading, and a number nobody measured has no business at the top of a card), so those keep the grid. Zoom out past the point where a sentence is legible and every card falls back to it as well, rather than shrinking a figure away from the window it covers and the age it carries, which is the one thing this card is built not to do.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.85',
     dateLabel: 'August 12, 2026',
     groups: [

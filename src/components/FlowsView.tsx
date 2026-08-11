@@ -71,6 +71,7 @@ import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
 import { DatasetRead } from './DatasetRead'
+import { DataSourceFace } from './DataSourceFace'
 import { CopyFields } from './CopyFields'
 import { Hint } from './Hint'
 import { FlowSteps } from './FlowSteps'
@@ -79,7 +80,6 @@ import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import { flushPersistedState } from '../adapters/state/workspaceState'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
-import { MiniSheet } from './MiniSheet'
 import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
@@ -11111,51 +11111,21 @@ export function FlowsView() {
                   {nt.kind === 'data-source' ? (
                     // DISPLAY ONLY. Choosing a source is authoring, and authoring happens in the
                     // inspector like it does for every other kind; the card shows what was chosen.
-                    // It previews the linked set as a mini spreadsheet; double-click opens it.
+                    // What it shows is the READING when the table has one, and the mini spreadsheet
+                    // when it does not; double-click opens the sheet either way.
                     (() => {
                       const linkedDs = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : null
                       return (
-                        <div
-                          className={`flow-note-mini${linkedDs ? ' linked' : ''}`}
-                          title={
-                            linkedDs
-                              ? `${linkedDs.name || 'Untitled data set'} · double-click to open`
-                              : nt.refId
-                                ? 'That data set was deleted. Pick another one in the inspector.'
-                                : 'Link or create a data set, then double-click to open it'
-                          }
-                        >
-                          <MiniSheet columns={linkedDs?.columns ?? ['', '', '', '']} rows={linkedDs?.rows ?? []} bodyRows={3} />
-                          <span className="flow-note-mini-label">
-                            {/* The platform's mark sits with the NAME, so a card read at a glance
-                                says what the data is before the provenance line is read at all. */}
-                            {linkedDs?.source?.kind === 'aggregator' && linkedDs.source.service && (
-                              <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.service} /></span>
-                            )}
-                            {linkedDs
-                              ? linkedDs.name || 'Untitled data set'
-                              : nt.refId
-                                ? 'That data set was deleted'
-                                : 'No data set linked yet'}
-                          </span>
-                          {/* WHERE IT CAME FROM, from the one function that decides it.
-                              These were four inline branches reading source.kind directly, which is
-                              how a table typed over by hand went on presenting itself as measured:
-                              the edit was invisible to every one of them. datasetProvenance holds
-                              the precedence (sketched, then edited, then how it arrived) and six
-                              surfaces now read it, so they cannot disagree. */}
-                          {linkedDs && (() => {
-                            const prov = datasetProvenance(linkedDs)
-                            return (
-                              <span className={`flow-note-mini-src${prov.tone === 'amber' ? ' sketched' : ''}`} title={prov.detail}>
-                                {linkedDs.source?.kind === 'aggregator' && (
-                                  <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.provider} /></span>
-                                )}
-                                {prov.badge}
-                              </span>
-                            )
-                          })()}
-                        </div>
+                        <DataSourceFace
+                          ds={linkedDs ?? null}
+                          dangling={!!nt.refId && !linkedDs}
+                          /**
+                           * FAR ZOOM, where a sentence is a grey smear and a bare number is a
+                           * hazard. 55% is where the 11px name line stops being legible, so it is
+                           * where the reading stops being worth the space it takes from the badge.
+                           */
+                          far={zoom < 55}
+                        />
                       )
                     })()
                   ) : (() => {
