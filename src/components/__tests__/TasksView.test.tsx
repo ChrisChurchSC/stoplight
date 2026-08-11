@@ -241,6 +241,45 @@ describe('TasksView', () => {
     expect(JSON.parse(localStorage.getItem(KEY)!)[0].assignee).toBe('Ryan')
   })
 
+  it('narrows to one channel, and leaves hand-made tasks out of that question', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Launch page', channel: 'landing-page' })],
+      clientFilter: BRAND,
+    })
+    // A hand-made task is not a post, so it has no channel to be filtered on.
+    localStorage.setItem(KEY, JSON.stringify([manualTask()]))
+    act(() => root.render(<TasksView />))
+    expect(rows()).toHaveLength(3)
+
+    const channelBtn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All channels'))
+    expect(channelBtn, 'the channels on the board are offered').toBeTruthy()
+    act(() => channelBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    act(() => {
+      ;[...host.querySelectorAll('.task-pick-item')]
+        .find((b) => b.textContent === 'Instagram')!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(rowNamed('Teaser post'), 'the Instagram asset').toBeTruthy()
+    expect(rowNamed('Launch page'), 'the landing page is another channel').toBeFalsy()
+    expect(rowNamed('Book the photographer'), 'and a task with no channel is not on one').toBeFalsy()
+  })
+
+  it('gives two owners two colours, where the shared hash gave them one', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
+      clientFilter: BRAND,
+    })
+    // The pair that prompted this: both sum into the same slot under recordTint.
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Laura', 'row-2': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const tintOf = (name: string) =>
+      cells(rowNamed(name)!)[3].querySelector<HTMLElement>('.task-avatar')!.style.background
+    expect(tintOf('Teaser post')).toBeTruthy()
+    expect(tintOf('Teaser post'), 'Laura and Ryan are told apart').not.toBe(tintOf('Second post'))
+  })
+
   it('filters the list down to one person', () => {
     useTrafficStore.setState({
       rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],

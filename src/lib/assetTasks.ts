@@ -32,6 +32,8 @@ export interface AssetTask {
   brand: string
   rowId: string
   campaign: string
+  /** The asset's channel id, so the list can be narrowed to one kind of work. */
+  channel: string
   derived: true
 }
 
@@ -142,6 +144,7 @@ export function useAssetTasks(brand: string): {
         brand: clientForCampaign(r.campaign),
         rowId: r.id,
         campaign: r.campaign ?? '',
+        channel: r.channel ?? '',
         derived: true as const,
       }))
   }, [rows, brand, assetDone, assignees])

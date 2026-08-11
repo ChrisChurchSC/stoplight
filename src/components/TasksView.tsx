@@ -6,6 +6,8 @@ import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useAssetTasks } from '../lib/assetTasks'
+import { assigneeTints } from '../lib/assigneeTint'
+import { CHANNELS } from '../domain/channels'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 
 /**
@@ -49,8 +51,10 @@ interface Task {
   /** True when this task is derived from an asset rather than hand-created. Read-mostly:
    *  its name/date come from the asset, it opens the flow, and "done" is tracked per-asset. */
   derived?: boolean
-  /** For a derived task: the asset's row id (tracks done). */
+  /** For a derived task: the asset's row id (tracks done) and the channel it goes out on. A
+   *  hand-made task has no channel — it is not a post, so the channel filter leaves it out. */
   rowId?: string
+  channel?: string
 }
 
 const KEY = 'stoplight.tasks.v1'
@@ -122,10 +126,10 @@ function LateMark() {
 }
 
 // A small tinted-initial avatar used for both the Record and Assigned-to chips.
-function Avatar({ name }: { name: string }) {
+function Avatar({ name, tint }: { name: string; tint?: string }) {
   const ch = (name.trim()[0] ?? '?').toUpperCase()
   return (
-    <span className="task-avatar" style={{ background: recordTint(name || '?') }}>
+    <span className="task-avatar" style={{ background: tint ?? recordTint(name || '?') }}>
       {ch}
     </span>
   )
@@ -137,7 +141,7 @@ function Avatar({ name }: { name: string }) {
  * moment it is first typed and is gone once nothing is assigned to it. Correcting a misspelling is
  * therefore a rename across every task holding it, which the Assignee menu in the toolbar does.
  */
-function AssigneeField({ value, names, onCommit }: { value: string; names: string[]; onCommit: (name: string) => void }) {
+function AssigneeField({ value, names, tints, onCommit }: { value: string; names: string[]; tints: Map<string, string>; onCommit: (name: string) => void }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
   // Follow the stored value when it changes underneath (a rename from the toolbar, another tab).
@@ -151,7 +155,7 @@ function AssigneeField({ value, names, onCommit }: { value: string; names: strin
   }
   return (
     <span className={`task-chip${draft ? '' : ' empty'} task-assignee`}>
-      {draft && <Avatar name={draft} />}
+      {draft && <Avatar name={draft} tint={tints.get(draft)} />}
       <input
         className="task-input task-chip-input"
         value={draft}
@@ -189,7 +193,7 @@ function AssigneeField({ value, names, onCommit }: { value: string; names: strin
                   commit(n)
                 }}
               >
-                <Avatar name={n} />
+                <Avatar name={n} tint={tints.get(n)} />
                 <span className="task-pick-name">{n}</span>
               </button>
             ))}
@@ -218,7 +222,8 @@ export function TasksView() {
   const [groupBy, setGroupBy] = useState<GroupBy>('due')
   const [filterWho, setFilterWho] = useState('')
   const [filterCampaign, setFilterCampaign] = useState('')
-  const [openFilter, setOpenFilter] = useState<null | 'who' | 'campaign'>(null)
+  const [filterChannel, setFilterChannel] = useState('')
+  const [openFilter, setOpenFilter] = useState<null | 'who' | 'campaign' | 'channel'>(null)
   // The name currently being corrected in the Assignee menu, and the text being typed for it.
   const [editWho, setEditWho] = useState<string | null>(null)
   const [editWhoDraft, setEditWhoDraft] = useState('')
@@ -228,6 +233,13 @@ export function TasksView() {
     () => canvases.filter((c) => (brand ? c.client === brand : true) && c.name !== CONTENT_LIBRARY_CAMPAIGN).map((c) => c.name),
     [canvases, brand],
   )
+  // The channels actually on the board, so the filter only ever offers work that exists. Hand-made
+  // tasks have no channel and are not counted here.
+  const channels = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const t of assetTasks) if (t.channel && !seen.has(t.channel)) seen.set(t.channel, CHANNELS[t.channel as keyof typeof CHANNELS]?.label ?? t.channel)
+    return [...seen.entries()].sort(([, a], [, b]) => a.localeCompare(b))
+  }, [assetTasks])
   // Campaign names are stored brand-qualified ("Acme — Fall Launch"); show just the campaign part.
   // Keyed off the campaign's OWN brand rather than the selected one, so an unscoped list drops the
   // prefix too — otherwise a brand-qualified name renders as "Arbitrum — Arbitrum Campaign 1" and
@@ -283,6 +295,9 @@ export function TasksView() {
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [allTasks])
   const knownAssignees = useMemo(() => assigneeCounts.map(([n]) => n), [assigneeCounts])
+  // One colour each, resolved over the whole set at once — see assigneeTint for why a hash cannot
+  // make that promise. assigneeCounts is already sorted, which is what keeps it stable.
+  const tints = useMemo(() => assigneeTints(knownAssignees), [knownAssignees])
 
   /** Rename an owner across both kinds of task at once (to '' unassigns them everywhere). */
   const renameAssignee = (from: string, to: string) => {
@@ -297,9 +312,10 @@ export function TasksView() {
       allTasks.filter(
         (t) =>
           (!filterWho || (filterWho === UNASSIGNED ? !t.assignee : t.assignee === filterWho)) &&
-          (!filterCampaign || (t.campaign || '') === filterCampaign),
+          (!filterCampaign || (t.campaign || '') === filterCampaign) &&
+          (!filterChannel || t.channel === filterChannel),
       ),
-    [allTasks, filterWho, filterCampaign],
+    [allTasks, filterWho, filterCampaign, filterChannel],
   )
 
   // Group the open tasks — into due-date buckets, or by the campaign or the person they belong to
@@ -390,7 +406,7 @@ export function TasksView() {
         )}
       </div>
       <div className="task-cell">
-        <AssigneeField value={t.assignee} names={knownAssignees} onCommit={(v) => setAssetAssignee(t.rowId!, v)} />
+        <AssigneeField value={t.assignee} names={knownAssignees} tints={tints} onCommit={(v) => setAssetAssignee(t.rowId!, v)} />
       </div>
     </div>
   )
@@ -494,7 +510,7 @@ export function TasksView() {
         )}
       </div>
       <div className="task-cell">
-        <AssigneeField value={t.assignee} names={knownAssignees} onCommit={(v) => patch(t.id, { assignee: v })} />
+        <AssigneeField value={t.assignee} names={knownAssignees} tints={tints} onCommit={(v) => patch(t.id, { assignee: v })} />
       </div>
     </div>
   )
@@ -589,7 +605,7 @@ export function TasksView() {
                   ) : (
                     <div key={name} className={`task-pick-item tasks-filter-person${filterWho === name ? ' on' : ''}`}>
                       <button className="tasks-filter-pick" role="menuitem" onClick={() => { setFilterWho(name); setOpenFilter(null) }}>
-                        <Avatar name={name} />
+                        <Avatar name={name} tint={tints.get(name)} />
                         <span className="task-pick-name">{name}</span>
                         <span className="tasks-filter-count">{n}</span>
                       </button>
@@ -633,8 +649,42 @@ export function TasksView() {
           )}
         </div>
 
-        {(filterWho || filterCampaign) && (
-          <button className="tasks-filter-clear" onClick={() => { setFilterWho(''); setFilterCampaign('') }}>
+        {/* Channel: "just the Instagram work", which is how a person doing one kind of thing reads
+            the board. Hand-made tasks have no channel, so a channel filter is asking for posts. */}
+        {channels.length > 0 && (
+          <div className="tasks-filter">
+            <button
+              className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
+              onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
+            >
+              {filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All channels'}
+              <span className="tasks-filter-caret">▾</span>
+            </button>
+            {openFilter === 'channel' && (
+              <>
+                <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
+                <div className="task-pick-menu tasks-filter-menu" role="menu">
+                  <button className={`task-pick-item${filterChannel ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterChannel(''); setOpenFilter(null) }}>
+                    <span className="task-pick-name">All channels</span>
+                  </button>
+                  {channels.map(([id, label]) => (
+                    <button
+                      key={id}
+                      className={`task-pick-item${filterChannel === id ? ' on' : ''}`}
+                      role="menuitem"
+                      onClick={() => { setFilterChannel(id); setOpenFilter(null) }}
+                    >
+                      <span className="task-pick-name">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {(filterWho || filterCampaign || filterChannel) && (
+          <button className="tasks-filter-clear" onClick={() => { setFilterWho(''); setFilterCampaign(''); setFilterChannel('') }}>
             Clear filters
           </button>
         )}
