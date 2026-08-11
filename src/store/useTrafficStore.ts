@@ -2487,14 +2487,6 @@ interface TrafficState {
   attachLiveAsset: (id: string, url: string, opts?: { channel?: ChannelId; publishedAt?: string }) => Promise<void>
   /** Back to a plan. Keeps the copy and metrics learned while it was live — see the body. */
   detachLiveAsset: (id: string) => Promise<void>
-  /**
-   * Move a published post, and everything measured with it, from the asset holding it onto another —
-   * the way past the duplicate refusal when the row already carrying the link is an ingest artifact
-   * rather than the card the work is on. The old row is archived, which is recoverable.
-   */
-  takeOverLiveAsset: (fromId: string, toId: string) => Promise<void>
-  /** The copy the post actually went out with, beside the plan rather than over it. */
-  setLiveCopy: (id: string, copy: Record<string, string>, extractedCopy?: string) => Promise<void>
   /** Latest numbers onto the row, and every reading into the append-only snapshot store. */
   setLiveMetrics: (id: string, metrics: Record<string, number>) => Promise<void>
   /** Apply many row patches as ONE batch (sequential writes, a single refresh) so
@@ -6256,9 +6248,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
    * The act that makes an asset live, and the only writer of reconciledAt — a field whose comment
    * has described this moment since long before anything performed it.
    *
-   * NOTHING IS OVERWRITTEN. `messaging` stays the plan; the copy that actually ran arrives beside it
-   * (see setLiveCopy) so the two can be compared, which is the whole point. The caller has already
-   * put the link through readLinkFor and answered its refusals: this writes, it does not decide.
+   * NOTHING IS OVERWRITTEN: `messaging` stays exactly as it was, because attaching a card to the
+   * post it became says nothing about the words. The caller has already put the link through
+   * readLinkFor and answered its refusals — this writes, it does not decide.
    */
   attachLiveAsset: async (id, url, opts) => {
     const link = readLiveLink(url)
@@ -6280,61 +6272,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   /**
-   * MOVE A PUBLISHED POST FROM ONE CARD TO ANOTHER, taking everything measured with it.
-   *
-   * The way out of the duplicate refusal, and the reason that refusal stopped being a dead end.
-   *
-   * The common way to reach it is not a mistake at all: the site ingest imports a brand's own pages
-   * into its content library, so the page you are attaching to a planned card is very often ALREADY
-   * an asset — one nobody wrote, sitting in a campaign nobody opens. Refusing the link protects the
-   * counts and leaves the person with a card that cannot become the thing it plainly became, and
-   * "go and work on the other one" is not an answer when this is the card the work is on.
-   *
-   * So the link moves, and everything the post earned moves with it: what it said, what it did, when
-   * it went out. Anything else would leave the numbers behind on a row nobody looks at.
-   *
-   * THE OLD ROW IS ARCHIVED, not deleted, and not left holding a hollow copy. It was a second record
-   * of one post; once the post is here, it is a row claiming to be published with nothing behind it,
-   * which is the state that made this confusing in the first place. Archived is recoverable, and the
-   * caller says so before it happens.
-   */
-  takeOverLiveAsset: async (fromId, toId) => {
-    const s = get()
-    const from = s.rows.find((r) => r.id === fromId)
-    const to = s.rows.find((r) => r.id === toId)
-    if (!from || !to || fromId === toId) return
-    await get().updateRows([
-      {
-        id: toId,
-        patch: {
-          sourceUrl: from.sourceUrl,
-          source: from.source ?? 'social-live',
-          publishedAt: from.publishedAt,
-          mediaRefs: from.mediaRefs,
-          live: from.live,
-          socialMetrics: from.socialMetrics,
-          metricsUpdatedAt: from.metricsUpdatedAt,
-          engagement: from.engagement,
-          status: 'posted',
-          postedAt: from.postedAt ?? Date.now(),
-          reconciledAt: Date.now(),
-        },
-      },
-      {
-        id: fromId,
-        patch: {
-          sourceUrl: undefined,
-          live: undefined,
-          socialMetrics: undefined,
-          metricsUpdatedAt: undefined,
-          engagement: undefined,
-          archivedAt: Date.now(),
-        },
-      },
-    ])
-  },
-
-  /**
    * Put the card back to being a plan.
    *
    * Clears what made it live and NOT what was learned while it was: the copy it ran with and the
@@ -6352,36 +6289,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       postedAt: undefined,
       reconciledAt: undefined,
     })
-  },
-
-  /**
-   * The copy the post actually went out with. Keyed like `messaging` so the two diff field by field.
-   *
-   * MERGED AGAINST WHAT IS ALREADY THERE, not rebuilt from the arguments.
-   *
-   * `live` holds two unrelated things — the copy, and the words read off the creative — and they are
-   * edited by different controls. This took both as parameters and wrote whatever it was handed, so
-   * every caller that knew about one and not the other silently deleted the other: correcting a typo
-   * in any diff textarea wiped "Words on the creative", because that box is somewhere else on the
-   * panel and the textarea has no reason to know it exists. A store action that requires each caller
-   * to restate the fields it is not touching is one that will lose them again.
-   *
-   * `undefined` means "not mine to change" and `''` means "clear it", which is the distinction that
-   * lets the creative box empty itself while the copy boxes leave it alone.
-   */
-  setLiveCopy: async (id, copy, extractedCopy) => {
-    const row = get().rows.find((r) => r.id === id)
-    if (!row) return
-    const kept = Object.fromEntries(Object.entries(copy).filter(([, v]) => v.trim()))
-    const creative = extractedCopy !== undefined ? extractedCopy.trim() : row.live?.extractedCopy
-    const next = {
-      ...(Object.keys(kept).length ? { copy: kept } : {}),
-      ...(creative ? { extractedCopy: creative } : {}),
-      fetchedAt: Date.now(),
-    }
-    // An empty block is cleared off the row rather than stored, so an asset nobody has read back
-    // looks the same as one from before this existed.
-    await get().updateRow(id, { live: Object.keys(next).length > 1 ? next : undefined })
   },
 
   /**

@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.83',
+    dateLabel: 'August 10, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'An active asset stops asking you to retype the post. "What it ran with" gave every component of the format a box to copy the published words into so it could compare them against the plan line by line, and a box under that for the words on the creative — a good answer to a question nobody was asking at that moment, and on a format with five components it was six boxes of retyping before it could say anything at all. An active asset now holds the two things it is actually for: where it went out, and what it did.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.82',
     dateLabel: 'August 9, 2026',
     groups: [

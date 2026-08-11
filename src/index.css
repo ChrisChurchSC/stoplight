@@ -4709,19 +4709,6 @@ button.mf-open:focus-visible,
   color: var(--amber);
   margin: 6px 0 8px;
 }
-/* One component, planned over actual. A column rather than two, because the panel is 320px and a
-   headline side by side with a headline is two ellipses. */
-.flow-live-diff { display: flex; flex-direction: column; gap: 10px; }
-.flow-live-line {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding-left: 8px;
-  border-left: 2px solid var(--border);
-}
-/* The one thing this face is for: what changed between the plan and the post. Not a warning tone —
-   copy changes for good reasons, and the line states the difference rather than judging it. */
-.flow-live-line.changed { border-left-color: var(--green); }
 .flow-live-k {
   font-size: 10.5px;
   font-weight: 700;
@@ -4729,13 +4716,6 @@ button.mf-open:focus-visible,
   text-transform: uppercase;
   color: var(--text-faint);
 }
-.flow-live-planned {
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--text-muted);
-}
-.flow-live-planned em { color: var(--text-faint); }
-.flow-live-actual { margin-top: 1px; }
 /* The read-back and whatever it had to say. The note sits under the button rather than beside it:
    half of what it says is a platform explaining itself, which does not fit on one line. */
 /* Said once, at the top of the plan, on an asset that has already shipped. Toned like the live mark
