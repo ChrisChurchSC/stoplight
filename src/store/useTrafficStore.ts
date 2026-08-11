@@ -5742,6 +5742,37 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return dt.toISOString()
     }
     const rows: TrafficRow[] = []
+    // NAMES CONTINUE FROM WHAT THE CAMPAIGN ALREADY HAS. These rows are APPENDED (sheet.append,
+    // below) and a campaign gets built up one deliverable at a time — add "Instagram story" from
+    // the flow's ＋ and again from the campaign brief, and the second run numbered its own #1/#2/#3
+    // beside the first run's, because it counted within its own batch and never looked at the
+    // campaign. Paid and brand assets were worse: they take the bare label, so a second run
+    // produced the same name outright.
+    //
+    // Live rows only: deleting an asset is a SOFT delete (archivedAt), and a deleted asset should
+    // not hold its name against the one replacing it.
+    const taken = new Set(
+      get()
+        .rows.filter((r) => !r.archivedAt && (r.campaign ?? '').trim() === campaign.trim())
+        .map((r) => r.assetName),
+    )
+    /** Does the campaign already hold anything under this label, bare or numbered? */
+    const hasAny = (label: string) => taken.has(label) || [...taken].some((n) => n.startsWith(`${label} #`))
+    /** The next free name for a label — bare when it is the only one of its kind, numbered as soon
+     *  as there is more than one. Joining an existing series numbers rather than going bare: a
+     *  fourth story added to #1/#2/#3 is #4, not an unnumbered sibling standing beside them. A bare
+     *  name occupies the "#1" slot, so a series that began bare continues at #2. */
+    const nameFor = (label: string, count: number): string => {
+      if (count === 1 && !hasAny(label)) {
+        taken.add(label)
+        return label
+      }
+      let n = 1
+      while (taken.has(`${label} #${n}`) || (n === 1 && taken.has(label))) n++
+      const name = `${label} #${n}`
+      taken.add(name)
+      return name
+    }
     deliverables.forEach((d, di) => {
       const assetType = isPreservableType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
       const base = {
@@ -5759,7 +5790,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         rows.push({
           ...base,
           id: freshRowId(),
-          assetName: d.label,
+          assetName: nameFor(d.label, 1),
           scheduledAt: slotIso(d.channel, 1 + (di % 6)),
           endsAt: flightEndIso,
           createdAt: Date.now(),
@@ -5771,7 +5802,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         rows.push({
           ...base,
           id: freshRowId(),
-          assetName: d.label,
+          assetName: nameFor(d.label, 1),
           scheduledAt: bizSlotIso(d.channel, 1 + (di % 6)),
           createdAt: Date.now(),
         })
@@ -5818,7 +5849,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         audience: '',
         status: 'draft',
         id: freshRowId(),
-        assetName: it.count > 1 ? `${it.d.label} #${it.k + 1}` : it.d.label,
+        assetName: nameFor(it.d.label, it.count),
         scheduledAt: at.toISOString(),
         createdAt: Date.now(),
       })
