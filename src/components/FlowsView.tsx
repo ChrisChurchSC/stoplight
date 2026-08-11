@@ -1179,7 +1179,6 @@ export function FlowsView() {
   const allRows = useTrafficStore((s) => s.rows)
   const attachLiveAsset = useTrafficStore((s) => s.attachLiveAsset)
   const detachLiveAsset = useTrafficStore((s) => s.detachLiveAsset)
-  const setLiveCopy = useTrafficStore((s) => s.setLiveCopy)
   const setLiveMetrics = useTrafficStore((s) => s.setLiveMetrics)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
   const flowOpenView = useTrafficStore((s) => s.flowOpenView)
@@ -9467,9 +9466,6 @@ export function FlowsView() {
     const trends = liveTrend?.id === selPost.id ? liveTrend.trends : []
     const trendOf = (metric: string) => trends.find((t) => t.metric === metric)
     const draft = liveDraft?.id === selPost.id ? liveDraft : null
-    // `live` survives the diff going: the creative box writes through setLiveCopy, which takes the
-    // copy map alongside it and would blank whatever is stored under it otherwise.
-    const live = selPost.live?.copy ?? {}
     const metrics = selPost.socialMetrics ?? {}
 
     /**
@@ -9591,17 +9587,6 @@ export function FlowsView() {
             <button className="flow-insp-open subtle" onClick={() => void detachLiveAsset(selPost.id)}>
               Not this post
             </button>
-
-            {/* Words on the creative rather than in a field. Its own box because nobody typed them
-                into a component and pretending otherwise would put them in the diff. */}
-            <label className="flow-inspect-label" style={{ marginTop: 14 }}>Words on the creative</label>
-            <BufferedTextarea
-              className="flow-inspect-input"
-              rows={2}
-              value={selPost.live?.extractedCopy ?? ''}
-              placeholder="Overlay text, on-image claims, anything the art says"
-              onCommit={(v) => void setLiveCopy(selPost.id, live, v)}
-            />
 
             {/* WHAT IT DID. */}
             <label className="flow-inspect-label" style={{ marginTop: 16 }}>What it did</label>

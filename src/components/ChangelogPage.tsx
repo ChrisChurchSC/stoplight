@@ -29,7 +29,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Improved',
         items: [
-          'An active asset stops asking you to retype the post. "What it ran with" gave every component of the format a box to copy the published words into, so it could compare them against the plan line by line — a good answer to a question nobody was asking at that moment, and on a format with five components it was five boxes of retyping before it could say anything at all. The panel now holds what an active asset is actually for: where it went out, the words on its creative, and what it did. Anything already recorded is kept.',
+          'An active asset stops asking you to retype the post. "What it ran with" gave every component of the format a box to copy the published words into so it could compare them against the plan line by line, and a box under that for the words on the creative — a good answer to a question nobody was asking at that moment, and on a format with five components it was six boxes of retyping before it could say anything at all. An active asset now holds the two things it is actually for: where it went out, and what it did.',
         ],
       },
     ],
