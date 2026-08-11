@@ -262,6 +262,59 @@ describe('TasksView', () => {
     expect(label('Teaser post')).toBe('Instagram · Teaser post')
   })
 
+  /**
+   * LATE AND DUE-TODAY ARE NOT THE SAME NEWS. They shared one class and one red, which reads well
+   * enough under an "Overdue" heading and not at all once grouping by campaign or assignee takes
+   * those headings away — a week late and due this afternoon looked identical, and the only thing
+   * that had been telling them apart was a heading no longer on screen.
+   */
+  it('tells a late task from one due today, and counts the late ones on a group', () => {
+    const at = (offsetDays: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() + offsetDays)
+      d.setHours(10, 0, 0, 0)
+      return d.toISOString()
+    }
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-late', assetName: 'Late post', scheduledAt: at(-3) }),
+        row({ id: 'row-today', assetName: 'Today post', scheduledAt: at(0) }),
+        row({ id: 'row-later', assetName: 'Later post', scheduledAt: at(9) }),
+      ],
+      clientFilter: BRAND,
+    })
+    act(() => root.render(<TasksView />))
+
+    const due = (name: string) => cells(rowNamed(name)!)[1].querySelector('.task-due-text')!.className
+    expect(due('Late post')).toContain('late')
+    expect(due('Today post')).toContain('soon')
+    expect(due('Today post'), 'due today is not dressed as overdue').not.toContain('late')
+    expect(due('Later post')).not.toMatch(/late|soon/)
+
+    // Grouped by campaign the buckets are gone, so the group itself has to report what has slipped.
+    act(() => {
+      ;[...host.querySelectorAll('.tasks-groupby-btn')]
+        .find((b) => b.textContent === 'Campaign')!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(host.querySelector('.task-group-late')?.textContent).toBe('1 late')
+  })
+
+  it('drops the campaign column when the campaign is the grouping', () => {
+    act(() => root.render(<TasksView />))
+    expect(host.querySelector('.tasks-view')!.className).not.toContain('grouped-campaign')
+
+    act(() => {
+      ;[...host.querySelectorAll('.tasks-groupby-btn')]
+        .find((b) => b.textContent === 'Campaign')!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    // The cells still render — CSS drops them as a set, so the grid and the header stay in step.
+    expect(host.querySelector('.tasks-view')!.className).toContain('grouped-campaign')
+    expect(host.querySelectorAll('.task-cell-campaign').length).toBeGreaterThan(0)
+  })
+
   it('regroups by campaign, gathering each campaign’s tasks under its own head', () => {
     useTrafficStore.setState({
       rows: [row(), row({ id: 'row-2', assetName: 'Spring teaser', campaign: OTHER_CAMPAIGN })],

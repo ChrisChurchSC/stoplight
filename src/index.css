@@ -19360,6 +19360,17 @@ textarea.library-input {
   grid-template-columns: minmax(0, 1fr) 150px 210px 190px;
   align-items: center;
 }
+/* Grouped by campaign, the campaign chip repeats its own group heading on every row — nine rows
+   under "iScribe Campaign 1" each saying "iScribe Campaign 1". The column goes, and its width goes
+   back to the task name. The heading still names the campaign, and the row still reaches the flow
+   through its detail drawer. Assigned-to is NOT dropped the same way when grouping by assignee:
+   that cell is an editable control, not a label, and hiding it would take the control away. */
+.tasks-view.grouped-campaign .task-grid {
+  grid-template-columns: minmax(0, 1fr) 150px 190px;
+}
+.tasks-view.grouped-campaign .task-cell-campaign {
+  display: none;
+}
 .task-colhead {
   border-bottom: 1px solid var(--border);
   padding: 0 4px 7px;
@@ -19384,6 +19395,13 @@ textarea.library-input {
 }
 .task-group-head.overdue {
   color: var(--red);
+}
+.task-group-late {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
 }
 .task-group-count {
   font-size: 11px;
@@ -19476,7 +19494,13 @@ textarea.library-input {
   background: var(--surface);
 }
 .task-due-text.soon {
+  color: var(--amber, #d97706);
+}
+/* Late is the one that needs chasing, so it carries the weight as well as the colour — the two
+   used to share a class and a red, which made "due today" look exactly as bad as "a week late". */
+.task-due-text.late {
   color: var(--red);
+  font-weight: 600;
 }
 .task-due-text.empty {
   color: var(--text-faint);

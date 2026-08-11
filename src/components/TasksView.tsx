@@ -87,6 +87,15 @@ const bucketOf = (due: string, today: string): Bucket => {
   return 'Upcoming'
 }
 
+/** How a due date reads on the row. Late and due-today used to share one class, so both came out
+ *  the same red — readable under a "Overdue" heading, and not readable at all once grouping by
+ *  campaign or assignee took those headings away and left the colour to say it alone. */
+const dueTone = (t: { done: boolean; due: string }, today: string): string => {
+  if (t.done || !t.due) return ''
+  if (t.due < today) return ' late'
+  return t.due === today ? ' soon' : ''
+}
+
 // How the list is grouped. By due date it answers "what is late and what is next"; by campaign,
 // "what is still outstanding on this piece of work" — the same tasks, cut the two ways they get
 // asked about. The heading a campaign-less task groups under.
@@ -350,11 +359,11 @@ export function TasksView() {
         </button>
       </div>
       <div className="task-cell">
-        <span className={`task-due-text${!t.done && t.due && t.due <= today ? ' soon' : ''}${t.due ? '' : ' empty'}`}>
+        <span className={`task-due-text${dueTone(t, today)}${t.due ? '' : ' empty'}`}>
           {t.due ? `Due ${fmtDue(t.due)}` : 'No date'}
         </span>
       </div>
-      <div className="task-cell task-rec-cell">
+      <div className="task-cell task-rec-cell task-cell-campaign">
         {t.campaign ? (
           <button className="task-chip task-chip-set" onClick={() => openFlow(t.campaign!, 'flow')} title={`Open ${shortCampaign(t.campaign)}`}>
             <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
@@ -407,14 +416,14 @@ export function TasksView() {
           />
         ) : (
           <button
-            className={`task-due-text${!t.done && t.due && t.due <= today ? ' soon' : ''}${t.due ? '' : ' empty'}`}
+            className={`task-due-text${dueTone(t, today)}${t.due ? '' : ' empty'}`}
             onClick={() => setEditDue(t.id)}
           >
             {t.due ? `Due ${fmtDue(t.due)}` : 'Set date'}
           </button>
         )}
       </div>
-      <div className="task-cell task-rec-cell">
+      <div className="task-cell task-rec-cell task-cell-campaign">
         {t.campaign ? (
           <span className="task-chip task-chip-set">
             <button className="task-chip-open" onClick={() => openFlow(t.campaign!, 'flow')} title={`Open ${shortCampaign(t.campaign)}`}>
@@ -478,7 +487,7 @@ export function TasksView() {
 
   return (
     <>
-    <div className="mtx tasks-view">
+    <div className={`mtx tasks-view${groupBy === 'campaign' ? ' grouped-campaign' : ''}`}>
       <header className="mtx-head tasks-head">
         <h2>Tasks</h2>
         <span className="mtx-sub">{openCount > 0 ? `${openCount} open${brand ? ` · ${brand}` : ''}` : `A running to-do list for ${brand || 'this workspace'}`}</span>
@@ -601,7 +610,7 @@ export function TasksView() {
       <div className="task-grid task-colhead">
         <div className="task-cell task-cell-name">Task</div>
         <div className="task-cell">Due date</div>
-        <div className="task-cell">Campaign</div>
+        <div className="task-cell task-cell-campaign">Campaign</div>
         <div className="task-cell">Assigned to</div>
       </div>
 
@@ -609,14 +618,26 @@ export function TasksView() {
         <div className="mtx-empty">No tasks for {brand || 'this workspace'} yet. Build a campaign, or add one with “＋ New task”.</div>
       ) : (
         <>
-          {groups.map(([bucket, list]) => (
-            <div key={bucket} className="task-group">
-              <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`}>
-                {bucket} <span className="task-group-count">{list.length}</span>
+          {groups.map(([bucket, list]) => {
+            // Grouped by due date the "Overdue" heading says it. Grouped by campaign or assignee
+            // there is no such heading, so each group has to say how much of it is late itself —
+            // otherwise the one number on the head counts a campaign's work without saying that
+            // half of it has already slipped.
+            const late = groupBy === 'due' ? 0 : list.filter((t) => t.due && t.due < today).length
+            return (
+              <div key={bucket} className="task-group">
+                <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`}>
+                  {bucket} <span className="task-group-count">{list.length}</span>
+                  {late > 0 && (
+                    <span className="task-group-late" title={`${late} overdue`}>
+                      {late} late
+                    </span>
+                  )}
+                </div>
+                {list.map((t) => (t.derived ? assetRow(t) : row(t)))}
               </div>
-              {list.map((t) => (t.derived ? assetRow(t) : row(t)))}
-            </div>
-          ))}
+            )
+          })}
           {doneTasks.length > 0 && (
             <div className="task-group">
               <div className="task-group-head">
