@@ -68,6 +68,7 @@ export function useAssetTasks(brand: string): {
   assetTasks: AssetTask[]
   toggleAssetDone: (rowId: string) => void
   setAssetAssignee: (rowId: string, name: string) => void
+  renameAssetAssignee: (from: string, to: string) => void
 } {
   const rows = useTrafficStore((s) => s.rows)
   const [assetDone, setAssetDone] = useState<string[]>(() => loadAssetDone())
@@ -108,6 +109,24 @@ export function useAssetTasks(brand: string): {
     window.dispatchEvent(new Event('stoplight:tasks'))
   }
 
+  /** Rename an owner everywhere at once, or drop them ('' clears). A name is only ever typed, so a
+   *  typo is the normal case — fixing it has to reach every asset already carrying it, not just the
+   *  one in front of you. */
+  const renameAssetAssignee = (from: string, to: string) => {
+    const next = loadAssetAssignees()
+    let touched = false
+    for (const [rowId, who] of Object.entries(next)) {
+      if (who !== from) continue
+      touched = true
+      if (to.trim()) next[rowId] = to.trim()
+      else delete next[rowId]
+    }
+    if (!touched) return
+    persistState(ASSET_ASSIGNEE_KEY, next)
+    setAssignees(next)
+    window.dispatchEvent(new Event('stoplight:tasks'))
+  }
+
   const assetTasks = useMemo<AssetTask[]>(() => {
     const done = new Set(assetDone)
     return rows
@@ -127,5 +146,5 @@ export function useAssetTasks(brand: string): {
       }))
   }, [rows, brand, assetDone, assignees])
 
-  return { assetTasks, toggleAssetDone, setAssetAssignee }
+  return { assetTasks, toggleAssetDone, setAssetAssignee, renameAssetAssignee }
 }

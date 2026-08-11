@@ -90,8 +90,11 @@ const bucketOf = (due: string, today: string): Bucket => {
 // How the list is grouped. By due date it answers "what is late and what is next"; by campaign,
 // "what is still outstanding on this piece of work" — the same tasks, cut the two ways they get
 // asked about. The heading a campaign-less task groups under.
-type GroupBy = 'due' | 'campaign'
+type GroupBy = 'due' | 'campaign' | 'assignee'
 const NO_CAMPAIGN = 'No campaign'
+const NO_ASSIGNEE = 'Unassigned'
+/** Filter sentinel for "has nobody on it" — distinct from '' , which is the no-filter state. */
+const UNASSIGNED = '\u0000unassigned'
 
 // A small tinted-initial avatar used for both the Record and Assigned-to chips.
 function Avatar({ name }: { name: string }) {
@@ -99,6 +102,75 @@ function Avatar({ name }: { name: string }) {
   return (
     <span className="task-avatar" style={{ background: recordTint(name || '?') }}>
       {ch}
+    </span>
+  )
+}
+
+/**
+ * The Assigned-to cell: type a name, or pick one the workspace is already using. The suggestions
+ * are not a saved list of people — they are the names currently carrying work, so one appears the
+ * moment it is first typed and is gone once nothing is assigned to it. Correcting a misspelling is
+ * therefore a rename across every task holding it, which the Assignee menu in the toolbar does.
+ */
+function AssigneeField({ value, names, onCommit }: { value: string; names: string[]; onCommit: (name: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(value)
+  // Follow the stored value when it changes underneath (a rename from the toolbar, another tab).
+  useEffect(() => setDraft(value), [value])
+  const q = draft.trim().toLowerCase()
+  const matches = names.filter((n) => n !== value && (!q || n.toLowerCase().includes(q)))
+  const commit = (name: string) => {
+    setDraft(name)
+    setOpen(false)
+    if (name !== value) onCommit(name)
+  }
+  return (
+    <span className={`task-chip${draft ? '' : ' empty'} task-assignee`}>
+      {draft && <Avatar name={draft} />}
+      <input
+        className="task-input task-chip-input"
+        value={draft}
+        placeholder="Unassigned"
+        onChange={(e) => {
+          setDraft(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        // Committing on blur is what makes typing a NEW name work: there is nothing to pick.
+        onBlur={() => draft !== value && onCommit(draft)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            commit(draft)
+            e.currentTarget.blur()
+          } else if (e.key === 'Escape') {
+            setDraft(value)
+            setOpen(false)
+          }
+        }}
+      />
+      {open && matches.length > 0 && (
+        <>
+          <div className="task-pick-scrim" onClick={() => setOpen(false)} />
+          <div className="task-pick-menu" role="menu">
+            <div className="task-pick-head">Already on this workspace</div>
+            {matches.map((n) => (
+              <button
+                key={n}
+                className="task-pick-item"
+                role="menuitem"
+                // mousedown, not click: blur would fire first and commit the half-typed draft.
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  commit(n)
+                }}
+              >
+                <Avatar name={n} />
+                <span className="task-pick-name">{n}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </span>
   )
 }
@@ -112,13 +184,19 @@ export function TasksView() {
   // auto-picks a brand when Brand records exist, so a workspace of campaigns with no Brand card
   // sits on 'all' indefinitely.
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
-  const { assetTasks, toggleAssetDone, setAssetAssignee } = useAssetTasks(brand)
+  const { assetTasks, toggleAssetDone, setAssetAssignee, renameAssetAssignee } = useAssetTasks(brand)
   const { canvases } = useHomeCanvases()
   const [tasks, setTasks] = useState<Task[]>(() => load())
   const [editDue, setEditDue] = useState<string | null>(null)
   const [pickCamp, setPickCamp] = useState<string | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [groupBy, setGroupBy] = useState<GroupBy>('due')
+  const [filterWho, setFilterWho] = useState('')
+  const [filterCampaign, setFilterCampaign] = useState('')
+  const [openFilter, setOpenFilter] = useState<null | 'who' | 'campaign'>(null)
+  // The name currently being corrected in the Assignee menu, and the text being typed for it.
+  const [editWho, setEditWho] = useState<string | null>(null)
+  const [editWhoDraft, setEditWhoDraft] = useState('')
   // The brand's campaigns, for the Campaign picker. The ingested content-library backfill is not a
   // campaign you'd assign work to, so it stays out of the list.
   const campaigns = useMemo(
@@ -170,34 +248,65 @@ export function TasksView() {
   )
   const openCount = allTasks.filter((t) => !t.done).length
 
-  // Group the open tasks — into due-date buckets, or by the campaign they belong to (done tasks
-  // fall to their own section at the end either way). Soonest-due first within every group, so a
-  // campaign's group reads as its own running order.
+  // THE NAMES IN USE, with how many tasks each carries. There is no roster to keep: a name exists
+  // because something is assigned to it, appears the moment it is first typed, and goes when the
+  // last task holding it is reassigned. That is also why a rename has to rewrite every task at once
+  // — a misspelling is not an entry to correct, it is a person who currently has work under it.
+  const assigneeCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const t of allTasks) if (t.assignee) m.set(t.assignee, (m.get(t.assignee) ?? 0) + 1)
+    return [...m.entries()].sort(([a], [b]) => a.localeCompare(b))
+  }, [allTasks])
+  const knownAssignees = useMemo(() => assigneeCounts.map(([n]) => n), [assigneeCounts])
+
+  /** Rename an owner across both kinds of task at once (to '' unassigns them everywhere). */
+  const renameAssignee = (from: string, to: string) => {
+    setTasks((prev) => prev.map((t) => (t.assignee === from ? { ...t, assignee: to.trim() } : t)))
+    renameAssetAssignee(from, to)
+    if (filterWho === from) setFilterWho(to.trim())
+  }
+
+  // What the filters let through. Applied before grouping so a group's count is what you can see.
+  const visible = useMemo(
+    () =>
+      allTasks.filter(
+        (t) =>
+          (!filterWho || (filterWho === UNASSIGNED ? !t.assignee : t.assignee === filterWho)) &&
+          (!filterCampaign || (t.campaign || '') === filterCampaign),
+      ),
+    [allTasks, filterWho, filterCampaign],
+  )
+
+  // Group the open tasks — into due-date buckets, or by the campaign or the person they belong to
+  // (done tasks fall to their own section at the end whichever it is). Soonest-due first within
+  // every group, so a group reads as its own running order.
   const groups = useMemo(() => {
-    const open = allTasks.filter((t) => !t.done)
+    const open = visible.filter((t) => !t.done)
     const byDue = (a: Task, b: Task) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt
 
-    if (groupBy === 'campaign') {
+    // Group on a key, alphabetically, with the "nobody / nothing" bucket last rather than sorted
+    // among the names.
+    const byKey = (keyOf: (t: Task) => string, last: string) => {
       const map = new Map<string, Task[]>()
       for (const t of open) {
-        const key = t.campaign || NO_CAMPAIGN
+        const key = keyOf(t)
         if (!map.has(key)) map.set(key, [])
         map.get(key)!.push(t)
       }
       for (const list of map.values()) list.sort(byDue)
-      // Campaigns alphabetically; whatever belongs to no campaign sits last rather than under "N".
-      return [...map.entries()]
-        .sort(([a], [b]) => (a === NO_CAMPAIGN ? 1 : b === NO_CAMPAIGN ? -1 : shortCampaign(a).localeCompare(shortCampaign(b))))
-        .map(([key, list]) => [key === NO_CAMPAIGN ? NO_CAMPAIGN : shortCampaign(key), list] as const)
+      return [...map.entries()].sort(([a], [b]) => (a === last ? 1 : b === last ? -1 : a.localeCompare(b)))
     }
+
+    if (groupBy === 'campaign') return byKey((t) => (t.campaign ? shortCampaign(t.campaign) : NO_CAMPAIGN), NO_CAMPAIGN)
+    if (groupBy === 'assignee') return byKey((t) => t.assignee || NO_ASSIGNEE, NO_ASSIGNEE)
 
     const map = new Map<Bucket, Task[]>()
     for (const b of BUCKETS) map.set(b, [])
     for (const t of open) map.get(bucketOf(t.due, today))!.push(t)
     for (const list of map.values()) list.sort(byDue)
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
-  }, [allTasks, today, groupBy])
-  const doneTasks = useMemo(() => allTasks.filter((t) => t.done), [allTasks])
+  }, [visible, today, groupBy])
+  const doneTasks = useMemo(() => visible.filter((t) => t.done), [visible])
   // The task whose detail drawer is open — from allTasks so derived asset-tasks open their own detail
   // too (read live so edits to a manual task reflect immediately).
   const openTask = allTasks.find((t) => t.id === openTaskId) ?? null
@@ -255,15 +364,7 @@ export function TasksView() {
         )}
       </div>
       <div className="task-cell">
-        <span className={`task-chip${t.assignee ? '' : ' empty'}`}>
-          {t.assignee && <Avatar name={t.assignee} />}
-          <input
-            className="task-input task-chip-input"
-            value={t.assignee}
-            placeholder="Unassigned"
-            onChange={(e) => setAssetAssignee(t.rowId!, e.target.value)}
-          />
-        </span>
+        <AssigneeField value={t.assignee} names={knownAssignees} onCommit={(v) => setAssetAssignee(t.rowId!, v)} />
       </div>
     </div>
   )
@@ -366,15 +467,7 @@ export function TasksView() {
         )}
       </div>
       <div className="task-cell">
-        <span className={`task-chip${t.assignee ? '' : ' empty'}`}>
-          {t.assignee && <Avatar name={t.assignee} />}
-          <input
-            className="task-input task-chip-input"
-            value={t.assignee}
-            placeholder="Unassigned"
-            onChange={(e) => patch(t.id, { assignee: e.target.value })}
-          />
-        </span>
+        <AssigneeField value={t.assignee} names={knownAssignees} onCommit={(v) => patch(t.id, { assignee: v })} />
       </div>
     </div>
   )
@@ -397,17 +490,112 @@ export function TasksView() {
       <div className="tasks-toolbar">
         <span className="tasks-toolbar-label">Group by</span>
         <div className="tasks-groupby" role="group" aria-label="Group tasks by">
-          {(['due', 'campaign'] as const).map((g) => (
+          {(['due', 'campaign', 'assignee'] as const).map((g) => (
             <button
               key={g}
               className={`tasks-groupby-btn${groupBy === g ? ' on' : ''}`}
               aria-pressed={groupBy === g}
               onClick={() => setGroupBy(g)}
             >
-              {g === 'due' ? 'Due date' : 'Campaign'}
+              {g === 'due' ? 'Due date' : g === 'campaign' ? 'Campaign' : 'Assignee'}
             </button>
           ))}
         </div>
+
+        <span className="tasks-toolbar-gap" />
+
+        {/* Assignee: filters the list, and is also where a name gets corrected or cleared —
+            renaming here rewrites every task holding it, manual and derived alike. */}
+        <div className="tasks-filter">
+          <button
+            className={`tasks-filter-btn${filterWho ? ' on' : ''}`}
+            onClick={() => setOpenFilter(openFilter === 'who' ? null : 'who')}
+          >
+            {filterWho === UNASSIGNED ? NO_ASSIGNEE : filterWho || 'Everyone'}
+            <span className="tasks-filter-caret">▾</span>
+          </button>
+          {openFilter === 'who' && (
+            <>
+              <div className="task-pick-scrim" onClick={() => { setOpenFilter(null); setEditWho(null) }} />
+              <div className="task-pick-menu tasks-filter-menu" role="menu">
+                <button className={`task-pick-item${filterWho ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterWho(''); setOpenFilter(null) }}>
+                  <span className="task-pick-name">Everyone</span>
+                </button>
+                <button
+                  className={`task-pick-item${filterWho === UNASSIGNED ? ' on' : ''}`}
+                  role="menuitem"
+                  onClick={() => { setFilterWho(UNASSIGNED); setOpenFilter(null) }}
+                >
+                  <span className="task-pick-name muted">{NO_ASSIGNEE}</span>
+                </button>
+                {assigneeCounts.length > 0 && <div className="task-pick-head">People</div>}
+                {assigneeCounts.map(([name, n]) =>
+                  editWho === name ? (
+                    <div key={name} className="task-pick-item tasks-filter-edit">
+                      <input
+                        autoFocus
+                        className="task-input"
+                        value={editWhoDraft}
+                        onChange={(e) => setEditWhoDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { renameAssignee(name, editWhoDraft); setEditWho(null) }
+                          if (e.key === 'Escape') setEditWho(null)
+                        }}
+                      />
+                      <button className="tasks-filter-act" title="Save" onClick={() => { renameAssignee(name, editWhoDraft); setEditWho(null) }}>✓</button>
+                    </div>
+                  ) : (
+                    <div key={name} className={`task-pick-item tasks-filter-person${filterWho === name ? ' on' : ''}`}>
+                      <button className="tasks-filter-pick" role="menuitem" onClick={() => { setFilterWho(name); setOpenFilter(null) }}>
+                        <Avatar name={name} />
+                        <span className="task-pick-name">{name}</span>
+                        <span className="tasks-filter-count">{n}</span>
+                      </button>
+                      <button className="tasks-filter-act" title={`Rename ${name} everywhere`} onClick={() => { setEditWho(name); setEditWhoDraft(name) }}>✎</button>
+                      <button className="tasks-filter-act" title={`Unassign ${name} from everything`} onClick={() => renameAssignee(name, '')}>✕</button>
+                    </div>
+                  ),
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="tasks-filter">
+          <button
+            className={`tasks-filter-btn${filterCampaign ? ' on' : ''}`}
+            onClick={() => setOpenFilter(openFilter === 'campaign' ? null : 'campaign')}
+          >
+            {filterCampaign ? shortCampaign(filterCampaign) : 'All campaigns'}
+            <span className="tasks-filter-caret">▾</span>
+          </button>
+          {openFilter === 'campaign' && (
+            <>
+              <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
+              <div className="task-pick-menu tasks-filter-menu" role="menu">
+                <button className={`task-pick-item${filterCampaign ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterCampaign(''); setOpenFilter(null) }}>
+                  <span className="task-pick-name">All campaigns</span>
+                </button>
+                {campaigns.map((name) => (
+                  <button
+                    key={name}
+                    className={`task-pick-item${filterCampaign === name ? ' on' : ''}`}
+                    role="menuitem"
+                    onClick={() => { setFilterCampaign(name); setOpenFilter(null) }}
+                  >
+                    <span className="task-pick-name">{shortCampaign(name)}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {(filterWho || filterCampaign) && (
+          <button className="tasks-filter-clear" onClick={() => { setFilterWho(''); setFilterCampaign('') }}>
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="task-grid task-colhead">

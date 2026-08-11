@@ -178,9 +178,71 @@ describe('TasksView', () => {
       setter.call(input, 'Ryan')
       input!.dispatchEvent(new Event('input', { bubbles: true }))
     })
+    // Typing alone does not commit — the suggestions are open over a half-typed name. Leaving the
+    // field is what writes it, which is also what lets a name nobody has used yet be typed at all.
+    act(() => {
+      input!.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+    })
 
     const stored = JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1') ?? '{}')
     expect(stored['row-1']).toBe('Ryan')
+  })
+
+  it('suggests a name already in use, and renaming it reaches every task holding it', () => {
+    // Two assets, one of them already assigned — so there is a name to suggest and a name to fix.
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
+      clientFilter: BRAND,
+    })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryna' }))
+    localStorage.setItem(KEY, JSON.stringify([manualTask({ assignee: 'Ryna' })]))
+    act(() => root.render(<TasksView />))
+
+    // The unassigned row offers the name the workspace is already using.
+    const input = cells(rowNamed('Second post')!)[3].querySelector('input')!
+    act(() => input.dispatchEvent(new FocusEvent('focusin', { bubbles: true })))
+    const suggestion = [...host.querySelectorAll('.task-pick-item')].find((b) => b.textContent?.includes('Ryna'))
+    expect(suggestion, 'a name in use is offered rather than retyped').toBeTruthy()
+
+    // Correcting the spelling from the toolbar has to reach the asset AND the manual task.
+    act(() => {
+      host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    act(() => {
+      ;[...host.querySelectorAll('.tasks-filter-act')]
+        .find((b) => b.getAttribute('title')?.startsWith('Rename'))!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const edit = host.querySelector<HTMLInputElement>('.tasks-filter-edit input')!
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(edit, 'Ryan')
+      edit.dispatchEvent(new Event('input', { bubbles: true }))
+      edit.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-1']).toBe('Ryan')
+    expect(JSON.parse(localStorage.getItem(KEY)!)[0].assignee).toBe('Ryan')
+  })
+
+  it('filters the list down to one person', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
+      clientFilter: BRAND,
+    })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+    expect(rows()).toHaveLength(2)
+
+    act(() => {
+      host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    act(() => {
+      host.querySelector<HTMLElement>('.tasks-filter-pick')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(rows()).toHaveLength(1)
+    expect(rowNamed('Teaser post'), 'the one assigned to them').toBeTruthy()
   })
 
   it('does not say the channel twice when the asset already names it', () => {

@@ -19244,6 +19244,117 @@ textarea.library-input {
   color: var(--text);
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
 }
+/* Separates the grouping control from the filters — same row, different job. */
+.tasks-toolbar-gap {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border);
+}
+/* A filter pill and the menu it opens. `position: relative` anchors the shared .task-pick-menu. */
+.tasks-filter {
+  position: relative;
+  display: inline-flex;
+}
+.tasks-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 5px 10px;
+  cursor: pointer;
+  max-width: 220px;
+}
+.tasks-filter-btn:hover {
+  color: var(--text);
+}
+.tasks-filter-btn.on {
+  color: var(--text);
+  border-color: var(--accent-2, #0e6d84);
+}
+.tasks-filter-caret {
+  font-size: 9px;
+  opacity: 0.7;
+}
+.tasks-filter-menu {
+  min-width: 240px;
+}
+/* A person row: pick to filter, then rename or clear. The actions stay quiet until hover so the
+   menu still reads as a list of people rather than a row of controls. */
+.tasks-filter-person,
+.tasks-filter-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tasks-filter-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.tasks-filter-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.tasks-filter-act {
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+}
+.tasks-filter-person:hover .tasks-filter-act,
+.tasks-filter-act:focus-visible {
+  opacity: 1;
+}
+.tasks-filter-act:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.tasks-filter-edit .task-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+.tasks-filter-clear {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent-2, #0e6d84);
+  cursor: pointer;
+  padding: 4px 2px;
+}
+/* The assignee cell anchors its own suggestion menu. */
+.task-assignee {
+  position: relative;
+}
 .task-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 150px 210px 190px;
