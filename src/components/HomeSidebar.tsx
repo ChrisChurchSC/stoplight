@@ -387,10 +387,21 @@ export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' | 'record
           <span className="nav-label">Campaigns</span>
         </button>
         {topItems.map((it) => (
-          <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
-            <span className="nav-ico"><Ico name={it.ico} /></span>
+          <button
+            key={it.key}
+            className={`nav-item${it.active ? ' active' : ''}`}
+            onClick={it.onClick}
+            title={it.badge ? `${it.label} — ${it.badge} open` : it.label}
+          >
+            <span className="nav-ico">
+              <Ico name={it.ico} />
+              {/* Capped, because the rail is 59px wide and a four-digit count would run off it. The
+                  full number is on the button's title. */}
+              {it.badge ? (
+                <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge > 99 ? '99+' : it.badge}</span>
+              ) : null}
+            </span>
             <span className="nav-label">{it.label}</span>
-            {it.badge ? <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span> : null}
           </button>
         ))}
       </div>

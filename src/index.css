@@ -2916,8 +2916,8 @@ button.mf-open:focus-visible,
 }
 .railnav .nav-item:hover { background: var(--surface-2); }
 .railnav .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
-.railnav .nav-ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
-.railnav .nav-ico svg { width: 17px; height: 17px; }
+.railnav .nav-ico { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+.railnav .nav-ico svg { width: 18px; height: 18px; }
 /* The campaign rail carries no labels (see CampaignNav), so the icon is the whole control: it gets
    a square hit area and a couple of extra pixels, because it is now the only thing naming the
    destination on screen. */
@@ -2930,12 +2930,22 @@ button.mf-open:focus-visible,
 .railnav-back:hover { color: var(--text); }
 .railnav-sep { height: 1px; width: 22px; margin: 3px auto 4px; background: var(--border); flex: none; }
 .railnav .nav-label { flex: none; white-space: normal; }
+/* The count hangs off the ICON's corner, not the button's. Anchored to the button it grew inward
+   from the right edge and drove straight through a centred 18px glyph — 8px of overlap at two
+   digits, and worse at three, on a rail only 59px wide. There is no room to sit BESIDE the icon
+   here, so it sits deliberately ON its corner, the way a notification badge does, and a ring in the
+   rail's own colour is what keeps that reading as layered rather than collided. */
+.railnav .nav-ico { position: relative; overflow: visible; }
 .railnav .nav-count {
-  position: absolute; top: 4px; right: 10px;
-  min-width: 15px; padding: 0 4px; line-height: 15px;
-  border-radius: 7px; font-size: 9.5px; font-weight: 700; text-align: center;
+  position: absolute; top: -5px; left: 100%; margin-left: -7px;
+  min-width: 13px; padding: 0 3px; line-height: 13px;
+  border-radius: 7px; font-size: 8.5px; font-weight: 700; text-align: center;
   background: var(--surface-2); color: var(--text-muted);
+  box-shadow: 0 0 0 2px var(--bg);
 }
+.railnav .nav-item.active .nav-count { box-shadow: 0 0 0 2px var(--accent-soft); }
+.railnav .nav-item:hover .nav-count { box-shadow: 0 0 0 2px var(--surface-2); }
+.railnav .nav-item.active:hover .nav-count { box-shadow: 0 0 0 2px var(--accent-soft); }
 .railnav .nav-count.overdue { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
 /* Chats section (recent saved reports) */
 .hsb-chats {
