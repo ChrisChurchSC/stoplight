@@ -151,3 +151,47 @@ export function useAssetTasks(brand: string): {
 
   return { assetTasks, toggleAssetDone, setAssetAssignee, renameAssetAssignee }
 }
+
+/** Manual tasks, as the sidebar badge needs them — the shape TasksView persists. */
+const MANUAL_KEY = 'stoplight.tasks.v1'
+const loadManual = (brand: string): { done?: boolean; due?: string; brand?: string }[] => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MANUAL_KEY) ?? '[]')
+    if (!Array.isArray(raw)) return []
+    // Same scoping as the page: unscoped means every brand, and an untagged task shows everywhere.
+    return raw.filter((t: { brand?: string }) => !brand || !t.brand || t.brand === brand)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * What the Tasks badge counts: BOTH kinds of task, because that is what the page lists.
+ *
+ * It used to read the manual tasks alone and agree with the page only by accident — while asset
+ * tasks were dropped whenever no brand was picked, both showed nothing. Fixing the page's scoping
+ * left the badge behind, so a board of thirty-one open tasks wore a "1". A count in the nav is a
+ * promise about the page it points at; if it counts a different set it is not a smaller number, it
+ * is a wrong one.
+ */
+export function useTaskCounts(brand: string): { open: number; overdue: number } {
+  const { assetTasks } = useAssetTasks(brand)
+  const [manual, setManual] = useState(() => loadManual(brand))
+  useEffect(() => {
+    const update = () => setManual(loadManual(brand))
+    update()
+    window.addEventListener('stoplight:tasks', update)
+    window.addEventListener('focus', update)
+    return () => {
+      window.removeEventListener('stoplight:tasks', update)
+      window.removeEventListener('focus', update)
+    }
+  }, [brand])
+
+  return useMemo(() => {
+    const today = ymd(new Date())
+    const all = [...manual, ...assetTasks]
+    const open = all.filter((t) => !t.done)
+    return { open: open.length, overdue: open.filter((t) => t.due && t.due < today).length }
+  }, [manual, assetTasks])
+}

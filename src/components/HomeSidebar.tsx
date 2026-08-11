@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ROLE_PRESETS } from '../domain/roles'
 import { InfoTip } from './InfoTip'
+import { useTaskCounts } from '../lib/assetTasks'
 
 // Which glossary term defines each collapsible nav section (build -> reach -> measure).
 const SECTION_TERM: Record<string, string> = { Foundation: 'foundation', Prospects: 'prospects', 'Go-to-market': 'gtm' }
@@ -178,23 +179,6 @@ const ICONS: Record<string, ReactNode> = {
 
 // Open / overdue task counts for the sidebar badge. Tasks live in localStorage (see TasksView),
 // so read them straight from there; TasksView fires a 'stoplight:tasks' event on every change.
-function readTaskCounts(brand: string): { open: number; overdue: number } {
-  try {
-    const raw = JSON.parse(localStorage.getItem('stoplight.tasks.v1') ?? '[]')
-    if (!Array.isArray(raw)) return { open: 0, overdue: 0 }
-    const now = new Date()
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    // Scope to the active brand; legacy tasks without a brand still count so nothing silently drops.
-    const scoped = brand
-      ? raw.filter((t: { brand?: string }) => (t.brand ?? '') === brand || !t.brand)
-      : raw
-    const open = scoped.filter((t: { done?: boolean }) => !t.done)
-    return { open: open.length, overdue: open.filter((t: { due?: string }) => t.due && t.due < today).length }
-  } catch {
-    return { open: 0, overdue: 0 }
-  }
-}
-
 function Ico({ name }: { name: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -232,7 +216,8 @@ export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' | 'record
   const openSavedHomeChat = useTrafficStore((s) => s.openSavedHomeChat)
   const deleteHomeChat = useTrafficStore((s) => s.deleteHomeChat)
 
-  const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
+  // Counts BOTH kinds of task, from the same hook the page reads — see useTaskCounts.
+  const taskCounts = useTaskCounts(taskBrand)
   const [chatsOpen, setChatsOpen] = useState(false)
   // Workflow sections (Foundation / Prospects / Go-to-market) — collapsed by default so the nav starts
   // compact; the user expands what they need. A picked role pre-expands the section it works in
@@ -301,18 +286,7 @@ export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' | 'record
   // Home chat history (already newest-activity-first from the store), capped for the sidebar.
   const recentChats = useMemo(() => homeChats.slice(0, 12), [homeChats])
 
-  // Keep the Tasks badge in sync: TasksView writes localStorage + fires 'stoplight:tasks'; also
-  // refresh when the tab regains focus (another tab may have edited) and when the page changes.
-  useEffect(() => {
-    const update = () => setTaskCounts(readTaskCounts(taskBrand))
-    update()
-    window.addEventListener('stoplight:tasks', update)
-    window.addEventListener('focus', update)
-    return () => {
-      window.removeEventListener('stoplight:tasks', update)
-      window.removeEventListener('focus', update)
-    }
-  }, [page, taskBrand])
+
 
   // The record nav is the dedicated home for the discipline sections in the right sidebar, so
   // always show all of them there; Simple-mode condensing only applies in the left rail ('full').
