@@ -19323,10 +19323,16 @@ textarea.library-input {
   cursor: pointer;
   text-align: left;
 }
+ /* Same pill as the group heads' counts (.task-group-count) — it is the same fact, so it should
+    not be a different shape depending on where you read it. */
 .tasks-filter-count {
   margin-left: auto;
   font-size: 11px;
+  font-weight: 700;
   color: var(--text-faint);
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 1px 7px;
   font-variant-numeric: tabular-nums;
 }
 .tasks-filter-act {
@@ -19370,6 +19376,22 @@ textarea.library-input {
 /* The assignee cell anchors its own suggestion menu. */
 .task-assignee {
   position: relative;
+}
+/* Row actions, quiet until the row is under the cursor — the same treatment the Assignee menu
+   gives them, so they read as the same pair doing the same kind of thing at a smaller reach. */
+.task-assignee-acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.task-assignee-acts .tasks-filter-act {
+  opacity: 0;
+}
+.task-row:hover .task-assignee-acts .tasks-filter-act,
+.task-assignee-acts .tasks-filter-act:focus-visible {
+  opacity: 1;
 }
 .task-grid {
   display: grid;

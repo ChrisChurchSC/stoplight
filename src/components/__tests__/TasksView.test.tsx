@@ -251,8 +251,8 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
     expect(rows()).toHaveLength(3)
 
-    const channelBtn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All channels'))
-    expect(channelBtn, 'the channels on the board are offered').toBeTruthy()
+    const channelBtn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All work'))
+    expect(channelBtn, 'the kinds of work on the board are offered').toBeTruthy()
     act(() => channelBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     act(() => {
       ;[...host.querySelectorAll('.task-pick-item')]
@@ -277,7 +277,7 @@ describe('TasksView', () => {
 
     const open = () => {
       const btn = [...host.querySelectorAll('.tasks-filter-btn')].find(
-        (b) => b.textContent?.includes('All channels') || b.textContent?.includes('Custom tasks'),
+        (b) => b.textContent?.includes('All work') || b.textContent?.includes('Custom tasks'),
       )
       act(() => btn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     }
@@ -295,11 +295,34 @@ describe('TasksView', () => {
     useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
     act(() => root.render(<TasksView />))
 
-    const btn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All channels'))
+    const btn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All work'))
     act(() => btn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 
     const labels = [...host.querySelectorAll('.task-pick-item')].map((b) => b.textContent)
     expect(labels).not.toContain('Custom tasks')
+  })
+
+  /**
+   * THE ROW'S ✕ REACHES ONE ROW. The Assignee menu has the same pair and they act on the person
+   * across every task; here they must not, because an ✕ beside a name in a cell reads as "take
+   * them off this" and quietly unassigning them from ten other tasks is not something a row should
+   * be able to do by accident.
+   */
+  it('unassigns only the row it was clicked on', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
+      clientFilter: BRAND,
+    })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan', 'row-2': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const clear = cells(rowNamed('Teaser post')!)[3].querySelector('.task-assignee-acts .tasks-filter-act:last-child')
+    expect(clear, 'the row carries the same actions as the menu').toBeTruthy()
+    act(() => clear!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })))
+
+    const stored = JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)
+    expect(stored['row-1'], 'the row that was clicked').toBeUndefined()
+    expect(stored['row-2'], 'and not the other one Ryan is on').toBe('Ryan')
   })
 
   it('gives two owners two colours, where the shared hash gave them one', () => {

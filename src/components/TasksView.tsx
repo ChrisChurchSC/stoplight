@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -149,6 +149,7 @@ function Avatar({ name, tint }: { name: string; tint?: string }) {
 function AssigneeField({ value, names, tints, onCommit }: { value: string; names: string[]; tints: Map<string, string>; onCommit: (name: string) => void }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
   // Follow the stored value when it changes underneath (a rename from the toolbar, another tab).
   useEffect(() => setDraft(value), [value])
   const q = draft.trim().toLowerCase()
@@ -162,6 +163,7 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
     <span className={`task-chip${draft ? '' : ' empty'} task-assignee`}>
       {draft && <Avatar name={draft} tint={tints.get(draft)} />}
       <input
+        ref={inputRef}
         className="task-input task-chip-input"
         value={draft}
         placeholder="Unassigned"
@@ -182,6 +184,28 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
           }
         }}
       />
+      {/* The same two actions as the Assignee menu, and deliberately NOT the same reach: there they
+          act on the person across every task, here on this one row. An ✕ beside a name in a cell
+          reads as "take them off this", and quietly unassigning them from eleven other tasks is not
+          something a row should be able to do by accident. */}
+      {draft && (
+        <span className="task-assignee-acts">
+          <button
+            className="tasks-filter-act"
+            title="Change who this is assigned to"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              inputRef.current?.focus()
+              inputRef.current?.select()
+            }}
+          >
+            ✎
+          </button>
+          <button className="tasks-filter-act" title="Unassign this task" onMouseDown={(e) => { e.preventDefault(); commit('') }}>
+            ✕
+          </button>
+        </span>
+      )}
       {open && matches.length > 0 && (
         <>
           <div className="task-pick-scrim" onClick={() => setOpen(false)} />
@@ -660,15 +684,17 @@ export function TasksView() {
           )}
         </div>
 
-        {/* Channel: "just the Instagram work", which is how a person doing one kind of thing reads
-            the board. Hand-made tasks have no channel, so a channel filter is asking for posts. */}
+        {/* What KIND of work: "just the Instagram posts", which is how someone doing one kind of
+            thing reads the board. Named "All work" rather than "All channels" because the last
+            entry is Custom tasks, which is not a channel — the list is kinds of work, and channel
+            is what nearly all of them happen to be. */}
         {channels.length > 0 && (
           <div className="tasks-filter">
             <button
               className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
               onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
             >
-              {filterChannel === CUSTOM_TASKS ? CUSTOM_TASKS_LABEL : filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All channels'}
+              {filterChannel === CUSTOM_TASKS ? CUSTOM_TASKS_LABEL : filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All work'}
               <span className="tasks-filter-caret">▾</span>
             </button>
             {openFilter === 'channel' && (
@@ -676,7 +702,7 @@ export function TasksView() {
                 <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
                 <div className="task-pick-menu tasks-filter-menu" role="menu">
                   <button className={`task-pick-item${filterChannel ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterChannel(''); setOpenFilter(null) }}>
-                    <span className="task-pick-name">All channels</span>
+                    <span className="task-pick-name">All work</span>
                   </button>
                   {channels.map(([id, label]) => (
                     <button
