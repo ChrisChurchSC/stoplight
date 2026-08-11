@@ -2946,7 +2946,11 @@ button.mf-open:focus-visible,
 .railnav .nav-item.active .nav-count { box-shadow: 0 0 0 2px var(--accent-soft); }
 .railnav .nav-item:hover .nav-count { box-shadow: 0 0 0 2px var(--surface-2); }
 .railnav .nav-item.active:hover .nav-count { box-shadow: 0 0 0 2px var(--accent-soft); }
-.railnav .nav-count.overdue { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+/* Mixed into the rail's own background rather than into `transparent`. The status chips elsewhere
+   mix with transparent quite happily — they sit on flat surfaces — but this one sits ON an icon,
+   and a 16% wash let the glyph read straight through the number. Same tint, opaque. */
+.railnav .nav-count.overdue { background: color-mix(in srgb, var(--red) 16%, var(--bg)); color: var(--red); }
+.railnav .nav-item.active .nav-count.overdue { background: color-mix(in srgb, var(--red) 16%, var(--accent-soft)); }
 /* Chats section (recent saved reports) */
 .hsb-chats {
   margin-top: 8px;
