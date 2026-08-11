@@ -19224,29 +19224,7 @@ textarea.library-input {
 .tasks-toolbar-label {
   font-weight: 600;
 }
-/* Grouping is set on the column headers, so the toolbar only reports it — and offers the way out,
-   which matters because grouping by campaign hides the very header you would click to undo it. */
-.tasks-grouped-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-2);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  padding: 5px 10px;
-  cursor: pointer;
-}
-.tasks-grouped-chip:hover {
-  border-color: var(--text-faint);
-}
-.tasks-grouped-x {
-  color: var(--text-faint);
-  font-size: 10px;
-}
+
 /* A column header that is also the grouping control. It stays looking like a header until hovered:
    the affordance is worth having, a row of buttons across the top is not. */
 .task-colhead-cell {
@@ -19398,17 +19376,10 @@ textarea.library-input {
   grid-template-columns: minmax(0, 1fr) 150px 210px 190px;
   align-items: center;
 }
-/* Grouped by campaign, the campaign chip repeats its own group heading on every row — nine rows
-   under "iScribe Campaign 1" each saying "iScribe Campaign 1". The column goes, and its width goes
-   back to the task name. The heading still names the campaign, and the row still reaches the flow
-   through its detail drawer. Assigned-to is NOT dropped the same way when grouping by assignee:
-   that cell is an editable control, not a label, and hiding it would take the control away. */
-.tasks-view.grouped-campaign .task-grid {
-  grid-template-columns: minmax(0, 1fr) 150px 190px;
-}
-.tasks-view.grouped-campaign .task-cell-campaign {
-  display: none;
-}
+/* Grouped by campaign, every row's chip does repeat the heading above it. It is left alone: the
+   header is the control, and a column that changes when you click its own header reads as
+   breakage. The table holds its shape whichever header is pressed — there is deliberately no rule
+   here keyed to the grouping, and nothing in the markup to hang one on. */
 .task-colhead {
   border-bottom: 1px solid var(--border);
   padding: 0 4px 7px;

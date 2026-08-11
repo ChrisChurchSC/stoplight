@@ -312,15 +312,26 @@ describe('TasksView', () => {
     expect(host.querySelector('.task-group-late')?.textContent).toBe('1 late')
   })
 
-  it('drops the campaign column when the campaign is the grouping', () => {
+  /**
+   * THE TABLE KEEPS ITS SHAPE WHICHEVER HEADER IS PRESSED. The campaign column used to hide itself
+   * while it was the grouping — its chips did repeat the heading above them — but once the header
+   * became the control, a column that vanishes on click reads as breakage and takes away the only
+   * thing that would put it back.
+   *
+   * This checks the markup, which is as far as it can reach: the old hiding was a CSS rule keyed to
+   * a class on the view, and jsdom applies no stylesheet, so no assertion here would have caught
+   * it. What keeps it gone is that the class is gone too — there is nothing left in the markup that
+   * says which column is grouping, so a rule of that kind has nothing to select.
+   */
+  it('keeps every column in place whichever header is grouping', () => {
     act(() => root.render(<TasksView />))
-    expect(host.querySelector('.tasks-view')!.className).not.toContain('grouped-campaign')
+    const before = headerLabels()
 
-    groupByColumn('Campaign')
-
-    // The cells still render — CSS drops them as a set, so the grid and the header stay in step.
-    expect(host.querySelector('.tasks-view')!.className).toContain('grouped-campaign')
-    expect(host.querySelectorAll('.task-cell-campaign').length).toBeGreaterThan(0)
+    for (const col of ['Campaign', 'Assigned to', 'Due date']) {
+      groupByColumn(col)
+      expect(headerLabels(), `columns hold while grouped by ${col}`).toEqual(before)
+      expect(cells(rowNamed('Teaser post')!), `and the rows still match them`).toHaveLength(before.length)
+    }
   })
 
   /**
@@ -340,16 +351,16 @@ describe('TasksView', () => {
     expect(headerGrouped('Due date'), 'falling back to the default grouping').toBe(true)
   })
 
-  it('leaves a way back when the grouped column is the one that hides', () => {
+  it('ungroups from the campaign header, which is still there to click', () => {
     act(() => root.render(<TasksView />))
+
     groupByColumn('Campaign')
+    expect(headerGrouped('Campaign')).toBe(true)
 
-    // The Campaign header is still in the DOM but hidden by CSS, so the chip is the real way out.
-    const chip = host.querySelector<HTMLElement>('.tasks-grouped-chip')
-    expect(chip?.textContent).toContain('Grouped by Campaign')
-
-    act(() => chip!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
-    expect(host.querySelector('.tasks-view')!.className).not.toContain('grouped-campaign')
+    // The header it was grouped by is still on screen and still the way out — no rescue control.
+    groupByColumn('Campaign')
+    expect(headerGrouped('Campaign')).toBe(false)
+    expect(headerGrouped('Due date')).toBe(true)
   })
 
   it('regroups by campaign, gathering each campaign’s tasks under its own head', () => {

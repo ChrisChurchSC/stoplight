@@ -507,6 +507,12 @@ export function TasksView() {
    * Clicking groups outright rather than opening a menu. That does spend the gesture a sort would
    * want later; if sorting arrives, it needs its own affordance rather than taking this one back.
    * The Task column is not a header of this kind — there is nothing sensible to group a name by.
+   *
+   * Every header behaves the same way and the table keeps its shape whichever one is pressed. The
+   * campaign column used to hide itself while it was the grouping, on the grounds that its chips
+   * repeated the heading above them; but once the header is the control, a column that changes
+   * when you click it reads as breakage, and hiding it took away the only thing that would undo
+   * it. The repetition is the cheaper price.
    */
   const ColHead = ({ label, col, className = '' }: { label: string; col: GroupBy; className?: string }) => {
     const on = groupBy === col
@@ -530,7 +536,7 @@ export function TasksView() {
 
   return (
     <>
-    <div className={`mtx tasks-view${groupBy === 'campaign' ? ' grouped-campaign' : ''}`}>
+    <div className="mtx tasks-view">
       <header className="mtx-head tasks-head">
         <h2>Tasks</h2>
         <span className="mtx-sub">{openCount > 0 ? `${openCount} open${brand ? ` · ${brand}` : ''}` : `A running to-do list for ${brand || 'this workspace'}`}</span>
@@ -540,18 +546,6 @@ export function TasksView() {
       </header>
 
       <div className="tasks-toolbar">
-        {/* Grouping is chosen on the column headers. This states the result and takes it back —
-            and it is the ONLY way back when the grouped column is the one that hides itself. */}
-        {groupBy !== 'due' && (
-          <>
-            <button className="tasks-grouped-chip" onClick={() => setGroupBy('due')} title="Back to due date">
-              Grouped by {groupBy === 'campaign' ? 'Campaign' : 'Assignee'}
-              <span className="tasks-grouped-x">✕</span>
-            </button>
-            <span className="tasks-toolbar-gap" />
-          </>
-        )}
-
         {/* Assignee: filters the list, and is also where a name gets corrected or cleared —
             renaming here rewrites every task holding it, manual and derived alike. */}
         <div className="tasks-filter">
