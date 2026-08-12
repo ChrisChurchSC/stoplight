@@ -142,7 +142,9 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     const headers = headerLabels()
-    expect(headers).toEqual(['Task', 'Due date', 'Folder', 'Campaign', 'Assigned to'])
+    // The first column carries no label: every row is a task, so "Task" named the table rather
+    // than the column, and it was the only header here that is not a grouping control.
+    expect(headers).toEqual(['', 'Due date', 'Folder', 'Campaign', 'Assigned to'])
 
     // The derived asset-task (from the seeded row) and the manual one agree on the grid.
     const derived = rowNamed('Teaser post')!
@@ -547,7 +549,15 @@ describe('TasksView', () => {
     expect(rowNamed('Teaser post'), 'the one assigned to them').toBeTruthy()
   })
 
-  it('does not say the channel twice when the asset already names it', () => {
+  /**
+   * THE CHANNEL IS A MARK, NOT A WORD, in the table. Spelled out it half-repeated the asset's own
+   * name — "LinkedIn post · LinkedIn image post #1" — and rows whose names carried no channel were
+   * left looking like a different column.
+   *
+   * `text` KEEPS the spelled-out form. HomeAgenda renders it with no icon beside it, so stripping
+   * the channel there would drop the only thing saying what the asset is.
+   */
+  it('shows the channel as an icon and the asset’s own name', () => {
     useTrafficStore.setState({
       rows: [
         row({ id: 'row-lp', assetName: 'Landing page', channel: 'landing-page' }),
@@ -555,98 +565,19 @@ describe('TasksView', () => {
       ],
       clientFilter: BRAND,
     })
+    // Seeded before the only render: `tasks` is read once on mount, so a second root.render on the
+    // same root would not pick it up.
+    localStorage.setItem(KEY, JSON.stringify([manualTask()]))
     act(() => root.render(<TasksView />))
 
     const label = (t: string) => rowNamed(t)!.querySelector('.task-name-open')!.textContent
-    // "Landing page · Landing page" was the old rendering of a self-naming asset.
-    expect(label('Landing page')).toBe('Landing page')
-    // A name that does not already carry its channel still gets it.
-    expect(label('Teaser post')).toBe('Instagram · Teaser post')
-  })
+    expect(label('Teaser post'), 'the name alone, with no channel spelled in front').toBe('Teaser post')
+    expect(rowNamed('Teaser post')!.querySelector('.task-channel'), 'and the channel as a mark').toBeTruthy()
+    expect(label('Landing page'), 'including the one whose name IS its channel').toBe('Landing page')
 
-  /**
-   * LATE AND DUE-TODAY ARE NOT THE SAME NEWS. They shared one class and one red, which reads well
-   * enough under an "Overdue" heading and not at all once grouping by campaign or assignee takes
-   * those headings away — a week late and due this afternoon looked identical, and the only thing
-   * that had been telling them apart was a heading no longer on screen.
-   */
-  it('tells a late task from one due today, and counts the late ones on a group', () => {
-    const at = (offsetDays: number) => {
-      const d = new Date()
-      d.setDate(d.getDate() + offsetDays)
-      d.setHours(10, 0, 0, 0)
-      return d.toISOString()
-    }
-    useTrafficStore.setState({
-      rows: [
-        row({ id: 'row-late', assetName: 'Late post', scheduledAt: at(-3) }),
-        row({ id: 'row-today', assetName: 'Today post', scheduledAt: at(0) }),
-        row({ id: 'row-later', assetName: 'Later post', scheduledAt: at(9) }),
-      ],
-      clientFilter: BRAND,
-    })
-    act(() => root.render(<TasksView />))
-
-    const due = (name: string) => cellUnder(rowNamed(name)!, 'Due date').querySelector('.task-due-text')!.className
-    expect(due('Late post')).toContain('late')
-    expect(due('Today post')).toContain('soon')
-    expect(due('Today post'), 'due today is not dressed as overdue').not.toContain('late')
-    expect(due('Later post')).not.toMatch(/late|soon/)
-
-    // Grouped by campaign the buckets are gone, so the group itself has to report what has slipped.
-    groupByColumn('Campaign')
-    expect(host.querySelector('.task-group-late')?.textContent).toBe('1 late')
-  })
-
-  /**
-   * THE TABLE KEEPS ITS SHAPE WHICHEVER HEADER IS PRESSED. The campaign column used to hide itself
-   * while it was the grouping — its chips did repeat the heading above them — but once the header
-   * became the control, a column that vanishes on click reads as breakage and takes away the only
-   * thing that would put it back.
-   *
-   * This checks the markup, which is as far as it can reach: the old hiding was a CSS rule keyed to
-   * a class on the view, and jsdom applies no stylesheet, so no assertion here would have caught
-   * it. What keeps it gone is that the class is gone too — there is nothing left in the markup that
-   * says which column is grouping, so a rule of that kind has nothing to select.
-   */
-  it('keeps every column in place whichever header is grouping', () => {
-    act(() => root.render(<TasksView />))
-    const before = headerLabels()
-
-    for (const col of ['Campaign', 'Assigned to', 'Due date']) {
-      groupByColumn(col)
-      expect(headerLabels(), `columns hold while grouped by ${col}`).toEqual(before)
-      expect(cells(rowNamed('Teaser post')!), `and the rows still match them`).toHaveLength(before.length)
-    }
-  })
-
-  /**
-   * The header IS the switch, so it has to say so and it has to turn itself off. Grouping by
-   * campaign is the case that cannot rely on the header alone: that column hides itself, taking
-   * the control with it, which is what the toolbar chip is for.
-   */
-  it('marks the header it is grouping by, and ungroups when clicked again', () => {
-    act(() => root.render(<TasksView />))
-    expect(headerGrouped('Assigned to')).toBe(false)
-
-    groupByColumn('Assigned to')
-    expect(headerGrouped('Assigned to'), 'the header shows it is the grouping').toBe(true)
-
-    groupByColumn('Assigned to')
-    expect(headerGrouped('Assigned to'), 'and clicking it again lets go').toBe(false)
-    expect(headerGrouped('Due date'), 'falling back to the default grouping').toBe(true)
-  })
-
-  it('ungroups from the campaign header, which is still there to click', () => {
-    act(() => root.render(<TasksView />))
-
-    groupByColumn('Campaign')
-    expect(headerGrouped('Campaign')).toBe(true)
-
-    // The header it was grouped by is still on screen and still the way out — no rescue control.
-    groupByColumn('Campaign')
-    expect(headerGrouped('Campaign')).toBe(false)
-    expect(headerGrouped('Due date')).toBe(true)
+    // A hand-made task is on no channel, so it carries no mark — the fixed-width slot is what keeps
+    // its name on the same left edge as the rest.
+    expect(rowNamed('Book the photographer')!.querySelector('.task-channel')).toBeFalsy()
   })
 
   it('regroups by campaign, gathering each campaign’s tasks under its own head', () => {

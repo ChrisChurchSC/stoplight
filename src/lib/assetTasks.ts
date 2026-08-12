@@ -34,6 +34,10 @@ export interface AssetTask {
   campaign: string
   /** The asset's channel id, so the list can be narrowed to one kind of work. */
   channel: string
+  /** The asset's own name, WITHOUT the channel spelled in front of it. `text` keeps the prefix for
+   *  views that show no channel icon (HomeAgenda); the Tasks table pairs this with the icon
+   *  instead, which is shorter and gives the column a scannable left edge. */
+  assetName: string
   derived: true
 }
 
@@ -136,6 +140,7 @@ export function useAssetTasks(brand: string): {
       .map((r) => ({
         id: `asset:${r.id}`,
         text: taskLabel(CHANNELS[r.channel]?.label ?? r.channel, r.assetName ?? ''),
+        assetName: (r.assetName ?? '').trim() || 'Untitled asset',
         due: r.scheduledAt ? ymd(new Date(r.scheduledAt)) : '',
         done: done.has(r.id) || r.status === 'posted',
         assignee: assignees[r.id] ?? '',

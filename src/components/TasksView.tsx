@@ -9,6 +9,7 @@ import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useAssetTasks } from '../lib/assetTasks'
 import { assignTints, loadTintStore, renameTint, ASSIGNEE_TINT_KEY } from '../lib/assigneeTint'
 import { CHANNELS } from '../domain/channels'
+import { ChannelIcon } from './ChannelIcon'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 
 /**
@@ -56,6 +57,8 @@ interface Task {
    *  hand-made task has no channel — it is not a post, so the channel filter leaves it out. */
   rowId?: string
   channel?: string
+  /** A derived task's asset name without the channel in front — paired with the channel icon. */
+  assetName?: string
 }
 
 const KEY = 'stoplight.tasks.v1'
@@ -489,13 +492,21 @@ export function TasksView() {
             </svg>
           )}
         </button>
+        {/* The channel as a mark, not a word. Spelled out it half-repeated the asset's own name —
+            "LinkedIn post · LinkedIn image post #1" — and the rows whose names carried no channel
+            were left looking like a different column. */}
+        {t.channel && (
+          <span className="task-channel" title={CHANNELS[t.channel as keyof typeof CHANNELS]?.label ?? t.channel}>
+            <ChannelIcon channel={t.channel as Parameters<typeof ChannelIcon>[0]['channel']} size={13} />
+          </span>
+        )}
         <button
           className="task-input task-name-input task-name-open"
           onClick={() => setOpenTaskId(t.id)}
           title="Open task details"
           style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'var(--text)', padding: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         >
-          {t.text}
+          {t.assetName ?? t.text}
         </button>
       </div>
       <div className="task-cell">
@@ -667,22 +678,24 @@ export function TasksView() {
   return (
     <>
     <div className="mtx tasks-view">
+      {/* One band, not three. Title, filters and the action shared a page that put title, filters
+          and column heads on separate rows — a hundred-odd pixels of chrome before the first task.
+          The action stays pinned to the far right of the row rather than sitting among the filters,
+          where a primary action reads as a fifth thing to filter by. */}
       <header className="mtx-head tasks-head">
-        <h2>Tasks</h2>
-        <span className="mtx-sub">
-          {/* When a filter is on, the count has to be the count of what is ON SCREEN — it read
-              "31 open" over a single row, and over no rows at all, which makes it a number about
-              nothing you can see. The whole is still worth saying, as the thing being sliced. */}
-          {filtered
-            ? `${visibleOpen} of ${openCount} open${brand ? ` · ${brand}` : ''}`
-            : openCount > 0
-              ? `${openCount} open${brand ? ` · ${brand}` : ''}`
-              : `A running to-do list for ${brand || 'this workspace'}`}
-        </span>
-        <button className="tasks-new" onClick={addTask}>
-          ＋ New task
-        </button>
-      </header>
+        <div className="tasks-head-title">
+          <h2>Tasks</h2>
+          <span className="mtx-sub">
+            {/* When a filter is on, the count has to be the count of what is ON SCREEN — it read
+                "31 open" over a single row, and over no rows at all, which makes it a number about
+                nothing you can see. The whole is still worth saying, as the thing being sliced. */}
+            {filtered
+              ? `${visibleOpen} of ${openCount} open${brand ? ` · ${brand}` : ''}`
+              : openCount > 0
+                ? `${openCount} open${brand ? ` · ${brand}` : ''}`
+                : `A running to-do list for ${brand || 'this workspace'}`}
+          </span>
+        </div>
 
       <div className="tasks-toolbar">
         {/* Assignee: filters the list, and is also where a name gets corrected or cleared —
@@ -849,8 +862,15 @@ export function TasksView() {
         )}
       </div>
 
+        <button className="tasks-new" onClick={addTask}>
+          ＋ New task
+        </button>
+      </header>
+
       <div className="task-grid task-colhead">
-        <div className="task-cell task-cell-name">Task</div>
+        {/* No label: every row is a task, so "Task" named the table rather than the column, and it
+            was the one header here that is not a grouping control. */}
+        <div className="task-cell task-cell-name" aria-hidden="true" />
         <ColHead label="Due date" col="due" />
         <ColHead label="Folder" col="folder" />
         <ColHead label="Campaign" col="campaign" className="task-cell-campaign" />

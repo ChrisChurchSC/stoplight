@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { useTaskCounts } from '../assetTasks'
+import { useAssetTasks, useTaskCounts } from '../assetTasks'
 import { registerCampaign } from '../../domain/clients'
 import { useTrafficStore } from '../../store/useTrafficStore'
 import type { TrafficRow } from '../../domain/types'
@@ -54,6 +54,12 @@ let seen: { open: number; overdue: number }
 
 function Probe({ brand }: { brand: string }) {
   seen = useTaskCounts(brand)
+  return null
+}
+
+let derived: { text: string; assetName: string }[] = []
+function TaskProbe({ brand }: { brand: string }) {
+  derived = useAssetTasks(brand).assetTasks.map((a) => ({ text: a.text, assetName: a.assetName }))
   return null
 }
 
@@ -115,5 +121,30 @@ describe('useTaskCounts', () => {
 
     expect(seen.open, 'the done one is not open').toBe(3)
     expect(seen.overdue, 'one late asset and one late task').toBe(2)
+  })
+})
+
+/**
+ * TWO NAMES FOR ONE ASSET, ON PURPOSE. The Tasks table draws the channel as an icon and the asset's
+ * own name beside it. HomeAgenda draws neither icon nor channel column, so it still needs the
+ * spelled-out form — strip the channel from `text` to tidy the table and Home quietly loses the
+ * only thing saying what the asset is.
+ */
+describe('useAssetTasks naming', () => {
+  it('keeps the spelled-out channel on text, and the bare name beside it', () => {
+    useTrafficStore.setState({ rows: [row({ assetName: 'Teaser post' })], clientFilter: BRAND })
+    act(() => root.render(<TaskProbe brand={BRAND} />))
+
+    expect(derived[0].assetName, 'what the table renders, next to the icon').toBe('Teaser post')
+    expect(derived[0].text, 'what a view with no icon renders').toBe('Instagram · Teaser post')
+  })
+
+  it('still does not say the channel twice when the name already carries it', () => {
+    useTrafficStore.setState({
+      rows: [row({ id: 'row-lp', assetName: 'Landing page', channel: 'landing-page' })],
+      clientFilter: BRAND,
+    })
+    act(() => root.render(<TaskProbe brand={BRAND} />))
+    expect(derived[0].text).toBe('Landing page')
   })
 })
