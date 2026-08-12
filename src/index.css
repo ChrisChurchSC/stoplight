@@ -19307,12 +19307,10 @@ textarea.library-input {
 }
 /* The band the top of the list is in, riding in the column-header row. Same type as the headings
    it echoes, so the row reads as one thing rather than a label glued onto a table head. */
+ /* Reuses .task-group-head so the two cannot drift apart — only the padding differs, because this
+    one sits inside a table head rather than standing as its own row. */
 .task-band {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+  padding: 0;
 }
 /* The channel mark in front of an asset's name. Fixed width so the names below it start on one
    left edge whether or not a row has a channel — a hand-made task has none. */
@@ -19597,6 +19595,12 @@ textarea.library-input {
    are inset 6px from the same container; the two land on the same edge. */
 .task-colhead .task-cell-name {
   padding-left: 2px;
+}
+ /* 32px of air is the break now — the heading that used to announce it lives in the column-header
+    row, where it holds still. A gap reads as a boundary faster than a word does, and the word was
+    being said twice on the one screen everybody sees. */
+.task-group + .task-group {
+  margin-top: 32px;
 }
 .task-group {
   margin-top: 2px;

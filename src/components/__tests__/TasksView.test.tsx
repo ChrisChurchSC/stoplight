@@ -102,6 +102,9 @@ const headerGrouped = (label: string) =>
  * test that shares it is a test that will be "fixed" by renumbering rather than read.
  */
 const cellUnder = (rowEl: Element, label: string) => cells(rowEl)[headerLabels().indexOf(label)]
+/** The bands rendered, in order. The headings that used to announce them are gone — the header row
+ *  names the current one and space marks the breaks — so a group's identity lives on the group. */
+const bandsOnScreen = () => [...host.querySelectorAll<HTMLElement>('.task-group')].map((g) => g.dataset.band)
 /** The column labels, in header order. */
 const headerLabels = () =>
   cells(host.querySelector('.task-colhead')!).map((c) => c.querySelector('.task-colhead-label')?.textContent ?? c.textContent)
@@ -503,19 +506,21 @@ describe('TasksView', () => {
    * is zero and "which heading has passed under the header" has no meaning. What is checkable is
    * that the pieces the handler needs exist and agree.
    */
-  it('labels each band for the header row to read', () => {
+  it('labels every row with its band, which is what the header row reads', () => {
     act(() => root.render(<TasksView />))
 
-    const band = host.querySelector('.task-colhead .task-band')
-    expect(band, 'the first column carries the band').toBeTruthy()
-    expect(band!.textContent, 'and says nothing until a heading has gone under it').toBe('')
+    // The header cell is always present; what fills it is decided by layout, and jsdom lays nothing
+    // out — every rect is zero, so "which row is under the header" has no meaning here. What is
+    // checkable is the contract the scroll handler depends on: rows say which band they are in.
+    expect(host.querySelector('.task-colhead .task-cell-name'), 'the header cell exists to hold it').toBeTruthy()
 
-    const heads = [...host.querySelectorAll('.task-group-head')]
-    expect(heads.length).toBeGreaterThan(0)
-    for (const h of heads) {
-      expect(h.getAttribute('data-band'), `heading "${h.textContent?.trim()}" is labelled`).toBeTruthy()
-      expect(h.textContent).toContain(h.getAttribute('data-band'))
+    const rows = [...host.querySelectorAll<HTMLElement>('.task-row')]
+    expect(rows.length).toBeGreaterThan(0)
+    for (const r of rows) {
+      expect(r.dataset.band, `row "${r.textContent?.trim().slice(0, 24)}" carries its band`).toBeTruthy()
     }
+    // And every band a row claims is one the page actually groups by.
+    expect(new Set(rows.map((r) => r.dataset.band))).toEqual(new Set(bandsOnScreen()))
   })
 
   it('groups by folder from its header, like the other columns', () => {
@@ -534,8 +539,7 @@ describe('TasksView', () => {
 
     groupByColumn('Folder')
     expect(headerGrouped('Folder')).toBe(true)
-    const heads = [...host.querySelectorAll('.task-group-head')].map((h) => h.firstChild?.textContent?.trim())
-    expect(heads).toEqual(['Arbitrum', 'Oxyle'])
+    expect(bandsOnScreen()).toEqual(['Arbitrum', 'Oxyle'])
   })
 
   it('gives two owners two colours, where the shared hash gave them one', () => {
@@ -613,15 +617,14 @@ describe('TasksView', () => {
     localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: CAMPAIGN }), manualTask({ id: 'task-2', text: 'Unfiled errand' })]))
     act(() => root.render(<TasksView />))
 
-    const heads = () => [...host.querySelectorAll('.task-group-head')].map((h) => h.firstChild?.textContent?.trim())
-    // Every heading is a due-date bucket until the control is touched (which bucket depends on
-    // where the fixture's dates fall relative to the day the suite runs).
-    expect(heads().every((h) => ['Overdue', 'Today', 'Upcoming', 'No date'].includes(h!))).toBe(true)
+    // Every band is a due-date bucket until the control is touched (which bucket depends on where
+    // the fixture's dates fall relative to the day the suite runs).
+    expect(bandsOnScreen().every((h) => ['Overdue', 'Today', 'Upcoming', 'No date'].includes(h!))).toBe(true)
 
     groupByColumn('Campaign')
 
     // Campaigns alphabetically, with whatever has no campaign last rather than sorted among them.
     // Each heading drops its own brand prefix, so an unscoped list is not "Acme — Acme Fall Launch".
-    expect(heads()).toEqual(['Fall Launch', 'Spring Push', 'No campaign'])
+    expect(bandsOnScreen()).toEqual(['Fall Launch', 'Spring Push', 'No campaign'])
   })
 })

@@ -430,13 +430,12 @@ export function TasksView() {
     const measure = () => {
       queued = false
       const edge = sticky.getBoundingClientRect().bottom
-      const heads = [...scroller.querySelectorAll<HTMLElement>('.task-group-head')]
-      let current = ''
-      for (const h of heads) {
-        if (h.getBoundingClientRect().top <= edge + 1) current = h.dataset.band ?? ''
-        else break
-      }
-      setBandLabel(current)
+      const rows = [...scroller.querySelectorAll<HTMLElement>('.task-row[data-band]')]
+      // The first row still showing below the header. Reading rows rather than headings is what
+      // lets the label be right BEFORE any scrolling — at rest that is simply the first row, so
+      // the header opens on OVERDUE instead of blank.
+      const first = rows.find((r) => r.getBoundingClientRect().bottom > edge + 1) ?? rows[rows.length - 1]
+      setBandLabel(first?.dataset.band ?? '')
     }
     const onScroll = () => {
       if (queued) return
@@ -517,6 +516,13 @@ export function TasksView() {
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
   }, [visible, today, groupBy, folderOf])
   const doneTasks = useMemo(() => visible.filter((t) => t.done), [visible])
+  /** How many are in each band, so the header's pill can say it. */
+  const bandCounts = useMemo(() => {
+    const m = new Map<string, number>(groups.map(([label, list]) => [label, list.length]))
+    if (doneTasks.length) m.set('Done', doneTasks.length)
+    return m
+  }, [groups, doneTasks])
+
   const visibleOpen = visible.filter((t) => !t.done).length
   const filtered = Boolean(filterWho || filterCampaign || filterChannel)
   // The task whose detail drawer is open — from allTasks so derived asset-tasks open their own detail
@@ -538,8 +544,8 @@ export function TasksView() {
 
   // A derived asset-task: read-mostly. Check toggles per-asset done; the name and the flow chip
   // both open the asset's flow. No company / assignee / delete (those belong to manual tasks).
-  const assetRow = (t: Task) => (
-    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`}>
+  const assetRow = (t: Task, band = '') => (
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band}>
       <div className="task-cell task-cell-name">
         <button
           className={`task-check${t.done ? ' on' : ''}`}
@@ -593,8 +599,8 @@ export function TasksView() {
     </div>
   )
 
-  const row = (t: Task) => (
-    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`}>
+  const row = (t: Task, band = '') => (
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band}>
       <div className="task-cell task-cell-name">
         <button
           className={`task-check${t.done ? ' on' : ''}`}
@@ -938,8 +944,13 @@ export function TasksView() {
             which stretch of the list the top of the view is in, changing as you scroll past each
             heading. Empty until the first one goes under, so it never labels a view it is not
             describing. */}
-        <div className="task-cell task-cell-name task-band" aria-live="polite">
-          {bandLabel}
+        <div className="task-cell task-cell-name" aria-live="polite">
+          {bandLabel && (
+            <span className={`task-group-head task-band${bandLabel === 'Overdue' ? ' overdue' : ''}`}>
+              {bandLabel}
+              {bandCounts.get(bandLabel) ? <span className="task-group-count">{bandCounts.get(bandLabel)}</span> : null}
+            </span>
+          )}
         </div>
         <ColHead label="Due date" col="due" />
         <ColHead label="Folder" col="folder" />
@@ -961,32 +972,14 @@ export function TasksView() {
         </div>
       ) : (
         <>
-          {groups.map(([bucket, list]) => {
-            // Grouped by due date the "Overdue" heading says it. Grouped by campaign or assignee
-            // there is no such heading, so each group has to say how much of it is late itself —
-            // otherwise the one number on the head counts a campaign's work without saying that
-            // half of it has already slipped.
-            const late = groupBy === 'due' ? 0 : list.filter((t) => t.due && t.due < today).length
-            return (
-              <div key={bucket} className="task-group">
-                <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`} data-band={bucket}>
-                  {bucket} <span className="task-group-count">{list.length}</span>
-                  {late > 0 && (
-                    <span className="task-group-late" title={`${late} overdue`}>
-                      {late} late
-                    </span>
-                  )}
-                </div>
-                {list.map((t) => (t.derived ? assetRow(t) : row(t)))}
-              </div>
-            )
-          })}
+          {groups.map(([bucket, list]) => (
+            <div key={bucket} className="task-group" data-band={bucket}>
+              {list.map((t) => (t.derived ? assetRow(t, bucket) : row(t, bucket)))}
+            </div>
+          ))}
           {doneTasks.length > 0 && (
-            <div className="task-group">
-              <div className="task-group-head" data-band="Done">
-                Done <span className="task-group-count">{doneTasks.length}</span>
-              </div>
-              {doneTasks.map((t) => (t.derived ? assetRow(t) : row(t)))}
+            <div className="task-group" data-band="Done">
+              {doneTasks.map((t) => (t.derived ? assetRow(t, 'Done') : row(t, 'Done')))}
             </div>
           )}
         </>
