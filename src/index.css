@@ -19717,19 +19717,26 @@ textarea.library-input {
   color: var(--text-faint);
   text-decoration: line-through;
 }
+ /* Shared by both kinds of row, but only one of them is a control: a hand-made task renders this
+    as a <button> that opens the date editor, an asset-task as a <span> whose date belongs to the
+    flow and cannot be changed here. The pointer and the hover box therefore hang off the BUTTON,
+    not the class — on the class they lit up twenty-nine rows that do nothing when clicked. The
+    padding stays shared, so both forms sit on the same baseline. */
 .task-due-text {
   border: 0;
   background: none;
   font: inherit;
   font-size: 13px;
   color: var(--text-muted);
-  cursor: pointer;
   padding: 8px 4px;
   border-radius: 6px;
   text-align: left;
   width: 100%;
 }
-.task-due-text:hover {
+button.task-due-text {
+  cursor: pointer;
+}
+button.task-due-text:hover {
   background: var(--surface);
 }
 /* Due-date tones are their own tokens rather than --amber / --red, which are tuned for fills and
