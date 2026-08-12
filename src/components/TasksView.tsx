@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -141,6 +141,52 @@ function LateMark() {
   return <span className="task-due-mark" aria-hidden="true" />
 }
 
+/**
+ * Keyboard behaviour for a pop-up menu: arrows to move, Home/End to jump, Escape to leave.
+ *
+ * These menus were mouse-only. Every one of them is a <button> already, so Tab reached them — but
+ * Tab walks the whole page, and a menu that has taken over the screen should own the arrow keys
+ * while it is open. Escape returns focus to whatever opened it, because a menu that closes into
+ * nowhere loses a keyboard user their place entirely.
+ *
+ * Every focusable child counts, not only [role=menuitem]: the person rows carry a rename and a
+ * remove button beside the name, and skipping them would make them unreachable without Tab.
+ */
+function useMenuNav(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null)
+  const opener = useRef<HTMLElement | null>(null)
+  const items = () => [...(ref.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input') ?? [])]
+
+  useEffect(() => {
+    if (!open) return
+    opener.current = document.activeElement as HTMLElement | null
+    // Open on the current choice where there is one, so arrowing starts from where you are.
+    const all = items()
+    ;(all.find((i) => i.classList.contains('on')) ?? all[0])?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const all = items()
+    if (!all.length) return
+    const i = all.indexOf(document.activeElement as HTMLElement)
+    const go = (n: number) => {
+      e.preventDefault()
+      all[(n + all.length) % all.length].focus()
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      close()
+      opener.current?.focus()
+    } else if (e.key === 'ArrowDown') go(i + 1)
+    else if (e.key === 'ArrowUp') go(i - 1)
+    else if (e.key === 'Home') go(0)
+    else if (e.key === 'End') go(all.length - 1)
+  }
+
+  return { ref, onKeyDown }
+}
+
 /** The arrow that says this chip is a door. It rides with the chip's box, on hover: at rest the
  *  campaign is just a label, and a mark on every row saying "clickable" is a mark nobody reads. The
  *  same ↗ the detail drawer uses for "Open in flow", so the two mean one thing. */
@@ -169,9 +215,20 @@ function Avatar({ name, tint }: { name: string; tint?: string }) {
  * therefore a rename across every task holding it, which the Assignee menu in the toolbar does.
  */
 function AssigneeField({ value, names, tints, onCommit }: { value: string; names: string[]; tints: Map<string, string>; onCommit: (name: string) => void }) {
+  const listId = useId()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
+  /**
+   * Which suggestion the arrows are on. -1 means none — what you typed stands, which matters
+   * because a NEW name is the common case and must not be overwritten by whatever happens to be
+   * first in the list.
+   *
+   * The suggestions cannot take focus the way a menu's items do: this is a field you are still
+   * typing into, and moving focus out of it would end the typing. So the highlight moves and the
+   * input keeps focus, and aria-activedescendant is what tells a screen reader which one is live.
+   */
+  const [hi, setHi] = useState(-1)
   // Follow the stored value when it changes underneath (a rename from the toolbar, another tab).
   useEffect(() => setDraft(value), [value])
   const q = draft.trim().toLowerCase()
@@ -179,6 +236,7 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
   const commit = (name: string) => {
     setDraft(name)
     setOpen(false)
+    setHi(-1)
     if (name !== value) onCommit(name)
   }
   return (
@@ -189,20 +247,36 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
         className="task-input task-chip-input"
         value={draft}
         placeholder="Unassigned"
+        role="combobox"
+        aria-expanded={open && matches.length > 0}
+        aria-controls={listId}
+        aria-activedescendant={hi >= 0 ? `${listId}-${hi}` : undefined}
+        aria-autocomplete="list"
         onChange={(e) => {
           setDraft(e.target.value)
+          setHi(-1)
           setOpen(true)
         }}
         onFocus={() => setOpen(true)}
         // Committing on blur is what makes typing a NEW name work: there is nothing to pick.
         onBlur={() => draft !== value && onCommit(draft)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            commit(draft)
+          if (e.key === 'ArrowDown' && matches.length) {
+            e.preventDefault()
+            setOpen(true)
+            setHi((n) => (n + 1) % matches.length)
+          } else if (e.key === 'ArrowUp' && matches.length) {
+            e.preventDefault()
+            setOpen(true)
+            setHi((n) => (n <= 0 ? matches.length : n) - 1)
+          } else if (e.key === 'Enter') {
+            // The highlighted name if the arrows picked one, otherwise exactly what was typed.
+            commit(hi >= 0 && matches[hi] ? matches[hi] : draft)
             e.currentTarget.blur()
           } else if (e.key === 'Escape') {
             setDraft(value)
             setOpen(false)
+            setHi(-1)
           }
         }}
       />
@@ -231,13 +305,15 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
       {open && matches.length > 0 && (
         <>
           <div className="task-pick-scrim" onClick={() => setOpen(false)} />
-          <div className="task-pick-menu" role="menu">
+          <div className="task-pick-menu" role="listbox" id={listId}>
             <div className="task-pick-head">Already on this workspace</div>
-            {matches.map((n) => (
+            {matches.map((n, i) => (
               <button
                 key={n}
-                className="task-pick-item"
-                role="menuitem"
+                id={`${listId}-${i}`}
+                className={`task-pick-item${i === hi ? ' on' : ''}`}
+                role="option"
+                aria-selected={i === hi}
                 // mousedown, not click: blur would fire first and commit the half-typed draft.
                 onMouseDown={(e) => {
                   e.preventDefault()
@@ -281,6 +357,15 @@ export function TasksView() {
   // The person whose ✕ has been pressed but not yet confirmed. This one reaches every task they
   // hold, which is not something to do on a single click of a small glyph.
   const [confirmWho, setConfirmWho] = useState<string | null>(null)
+  // Keyboard for each pop-up. Separate instances because they open independently and each needs to
+  // remember which control opened it, to hand focus back on Escape.
+  const whoNav = useMenuNav(openFilter === 'who', () => { setOpenFilter(null); setEditWho(null); setConfirmWho(null) })
+  const campNav = useMenuNav(openFilter === 'campaign', () => setOpenFilter(null))
+  const chanNav = useMenuNav(openFilter === 'channel', () => setOpenFilter(null))
+  // One instance for the row-level campaign picker: pickCamp holds a single row id, so only ever
+  // one of them is rendered, and a hook cannot be called per row anyway.
+  const pickCampNav = useMenuNav(pickCamp !== null, () => setPickCamp(null))
+
   // The brand's campaigns, for the Campaign picker. The ingested content-library backfill is not a
   // campaign you'd assign work to, so it stays out of the list.
   const campaigns = useMemo(
@@ -699,21 +784,34 @@ export function TasksView() {
               <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
               <OpenMark />
             </button>
-            <button className="task-chip-edit" onClick={() => setPickCamp(t.id)} title="Change campaign" aria-label="Change campaign">
+            <button
+              className="task-chip-edit"
+              onClick={() => setPickCamp(t.id)}
+              title="Change campaign"
+              aria-label="Change campaign"
+              aria-haspopup="menu"
+              aria-expanded={pickCamp === t.id}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m6 9 6 6 6-6" />
               </svg>
             </button>
           </span>
         ) : (
-          <button className="task-chip task-chip-btn empty" onClick={() => setPickCamp(t.id)} title="Link a campaign">
+          <button
+            className="task-chip task-chip-btn empty"
+            onClick={() => setPickCamp(t.id)}
+            title="Link a campaign"
+            aria-haspopup="menu"
+            aria-expanded={pickCamp === t.id}
+          >
             <span className="task-chip-name muted">—</span>
           </button>
         )}
         {pickCamp === t.id && (
           <>
             <div className="task-pick-scrim" onClick={() => setPickCamp(null)} />
-            <div className="task-pick-menu" role="menu">
+            <div className="task-pick-menu" role="menu" ref={pickCampNav.ref} onKeyDown={pickCampNav.onKeyDown}>
               <div className="task-pick-head">Campaigns</div>
               {campaigns.length === 0 && <div className="task-pick-empty">No campaigns yet</div>}
               {campaigns.map((name) => (
@@ -829,6 +927,8 @@ export function TasksView() {
             <button
               className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
               data-filter="channel"
+              aria-haspopup="menu"
+              aria-expanded={openFilter === 'channel'}
               onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
             >
               {filterChannel === CUSTOM_TASKS ? CUSTOM_TASKS_LABEL : filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All work'}
@@ -837,7 +937,7 @@ export function TasksView() {
             {openFilter === 'channel' && (
               <>
                 <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
-                <div className="task-pick-menu tasks-filter-menu" role="menu">
+                <div className="task-pick-menu tasks-filter-menu" role="menu" ref={chanNav.ref} onKeyDown={chanNav.onKeyDown}>
                   <button className={`task-pick-item${filterChannel ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterChannel(''); setOpenFilter(null) }}>
                     <span className="task-pick-name">All work</span>
                   </button>
@@ -861,6 +961,8 @@ export function TasksView() {
           <button
             className={`tasks-filter-btn${filterCampaign ? ' on' : ''}`}
             data-filter="campaign"
+            aria-haspopup="menu"
+            aria-expanded={openFilter === 'campaign'}
             onClick={() => setOpenFilter(openFilter === 'campaign' ? null : 'campaign')}
           >
             {campaignFilterLabel()}
@@ -869,7 +971,7 @@ export function TasksView() {
           {openFilter === 'campaign' && (
             <>
               <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
-              <div className="task-pick-menu tasks-filter-menu" role="menu">
+              <div className="task-pick-menu tasks-filter-menu" role="menu" ref={campNav.ref} onKeyDown={campNav.onKeyDown}>
                 <button className={`task-pick-item${filterCampaign ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterCampaign(''); setOpenFilter(null) }}>
                   <span className="task-pick-name">All campaigns</span>
                 </button>
@@ -908,6 +1010,8 @@ export function TasksView() {
           <button
             className={`tasks-filter-btn${filterWho ? ' on' : ''}`}
             data-filter="who"
+            aria-haspopup="menu"
+            aria-expanded={openFilter === 'who'}
             onClick={() => setOpenFilter(openFilter === 'who' ? null : 'who')}
           >
             {filterWho === UNASSIGNED ? NO_ASSIGNEE : filterWho || 'Everyone'}
@@ -916,7 +1020,7 @@ export function TasksView() {
           {openFilter === 'who' && (
             <>
               <div className="task-pick-scrim" onClick={() => { setOpenFilter(null); setEditWho(null); setConfirmWho(null) }} />
-              <div className="task-pick-menu tasks-filter-menu" role="menu">
+              <div className="task-pick-menu tasks-filter-menu" role="menu" ref={whoNav.ref} onKeyDown={whoNav.onKeyDown}>
                 <button className={`task-pick-item${filterWho ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterWho(''); setOpenFilter(null) }}>
                   <span className="task-pick-name">Everyone</span>
                 </button>

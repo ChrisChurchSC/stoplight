@@ -556,6 +556,85 @@ describe('TasksView', () => {
     expect(bandsOnScreen()).toContain('Done')
   })
 
+  /**
+   * THE MENUS WERE MOUSE-ONLY. Every item is a <button>, so Tab reached them — but Tab walks the
+   * whole page, and nothing told a screen reader a menu had opened at all. None of this shows in a
+   * screenshot, which is exactly why it went unnoticed through a dozen passes over this page.
+   */
+  it('says a filter menu has opened, and closes it on Escape', () => {
+    act(() => root.render(<TasksView />))
+    const btn = filterBtn('who')
+    expect(btn.getAttribute('aria-haspopup'), 'announced as a menu').toBe('menu')
+    expect(btn.getAttribute('aria-expanded'), 'and as shut').toBe('false')
+
+    act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(filterBtn('who').getAttribute('aria-expanded')).toBe('true')
+
+    const menu = host.querySelector<HTMLElement>('.tasks-filter-menu')!
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+
+    expect(host.querySelector('.tasks-filter-menu'), 'Escape shuts it').toBeFalsy()
+    expect(filterBtn('who').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('moves through a menu on the arrow keys', () => {
+    act(() => root.render(<TasksView />))
+    act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    const menu = host.querySelector<HTMLElement>('.tasks-filter-menu')!
+    const items = [...menu.querySelectorAll<HTMLElement>('button')]
+    expect(items.length).toBeGreaterThan(1)
+
+    // Opens on the current choice — "Everyone", which is where the filter is.
+    expect(document.activeElement).toBe(items[0])
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    expect(document.activeElement, 'down moves on').toBe(items[1])
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })))
+    expect(document.activeElement, 'and up comes back').toBe(items[0])
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })))
+    expect(document.activeElement, 'End jumps to the last').toBe(items[items.length - 1])
+  })
+
+  /**
+   * The typeahead is NOT a menu: it is a field you are still typing into, so the suggestions cannot
+   * take focus the way menu items do. The highlight moves, focus stays, and Enter takes the
+   * highlighted name — or, with nothing highlighted, exactly what was typed, which is the common
+   * case and must not be overwritten by whatever happens to be first in the list.
+   */
+  it('arrows through suggestions without leaving the field', () => {
+    useTrafficStore.setState({ rows: [row(), row({ id: 'row-2', assetName: 'Second post' })], clientFilter: BRAND })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const input = cellUnder(rowNamed('Second post')!, 'Assigned to').querySelector<HTMLInputElement>('input')!
+    // Really focused, not just sent a focus event — jsdom does not move focus for a dispatched one,
+    // and the claim being made here is about where focus actually is.
+    act(() => input.focus())
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+
+    expect(document.activeElement, 'focus never leaves the input').toBe(input)
+    expect(input.getAttribute('aria-activedescendant'), 'but something is highlighted').toBeTruthy()
+
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-2']).toBe('Ryan')
+  })
+
+  it('takes what you typed when no suggestion is highlighted', () => {
+    useTrafficStore.setState({ rows: [row(), row({ id: 'row-2', assetName: 'Second post' })], clientFilter: BRAND })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const input = cellUnder(rowNamed('Second post')!, 'Assigned to').querySelector<HTMLInputElement>('input')!
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(input, 'Rya')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    // "Ryan" is offered and NOT highlighted; Enter must take the three letters actually typed.
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-2']).toBe('Rya')
+  })
+
   it('groups by folder from its header, like the other columns', () => {
     useTrafficStore.setState({
       rows: [
