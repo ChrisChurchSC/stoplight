@@ -19921,9 +19921,9 @@ button.task-due-text:hover {
 .task-row { cursor: pointer }
 
 .task-chip-go {
-  width: 14px;
-  height: 14px;
   flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1;
   opacity: 0;
   color: var(--text-faint);
   transition: opacity 90ms ease;

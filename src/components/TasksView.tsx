@@ -191,13 +191,17 @@ function useMenuNav(open: boolean, close: () => void) {
 }
 
 /** The arrow that says this chip is a door. It rides with the chip's box, on hover: at rest the
- *  campaign is just a label, and a mark on every row saying "clickable" is a mark nobody reads. The
- *  same ↗ the detail drawer uses for "Open in flow", so the two mean one thing. */
+ *  campaign is just a label, and a mark on every row saying "clickable" is a mark nobody reads.
+ *
+ *  Literally the ↗ the detail drawer sets in "Open in flow", at the same 12px — it was a drawn
+ *  approximation of that glyph before, which meant its weight drifted from the thing it was
+ *  supposed to match every time either one was resized. It takes its colour from the chip, so it is
+ *  faint at rest and picks up the accent when the chip is hovered. */
 function OpenMark() {
   return (
-    <svg className="task-chip-go" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-      <path d="M3.8 8.2L8.2 3.8M8.2 3.8H4.6M8.2 3.8v3.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <span className="task-chip-go" aria-hidden="true">
+      ↗
+    </span>
   )
 }
 
