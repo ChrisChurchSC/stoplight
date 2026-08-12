@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.84',
+    dateLabel: 'August 12, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The grid stops labelling the channels that were cut off from the brief. A “cut off” chip sat in the Channel column of every row belonging to a severed channel — six assets meant six copies of a fact that belongs to the channel, not to any one asset — wearing the same amber the grid uses for work under review, for something that is a decision somebody made rather than a problem to go and fix. Nothing on that surface depended on it either: the grid has no Generate and no publish, so the thing the cut actually changes cannot happen there, and the chip’s own tooltip sent you to the board — which says it already, with a missing line and a button to put the line back. The column is the channel name again, which is what it is scanned for, and which the chip had been quietly clipping: it was supposed to drop to its own line and never did.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.83',
     dateLabel: 'August 10, 2026',
     groups: [
