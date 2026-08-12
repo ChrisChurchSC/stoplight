@@ -5,7 +5,7 @@ import { filledFields, hasCopy, messagingFields, messagingMap } from '../domain/
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { rtbsForCampaign } from '../domain/rtb'
-import { boardFor, deliverableKeyFor, objectName, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
+import { boardFor, objectName, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
 import { usablePatterns } from '../domain/pattern'
 import { recordDetail } from '../domain/recordDetail'
@@ -882,28 +882,6 @@ export function SheetGrid({
   const widths = [GUTTER_W, ...cols.map((c) => widthByKey[c.key] ?? c.width)]
   const total = widths.reduce((a, b) => a + b, 0)
   /**
-   * CHANNELS CUT OFF FROM THE BRIEF, as row ids.
-   *
-   * The connection gate above reads detectBreaks, which is handed rows and only rows: it has never
-   * seen the board, the wires, or which channels have been severed from the campaign. So cutting a
-   * channel on the canvas and switching to this tab produced "✓ Connected" — the grid asserting the
-   * exact word the canvas had just taken away, with nothing anywhere to say that six rows had
-   * stopped reading the brief.
-   *
-   * Being cut off is not a break and must not gate publish: it is a decision somebody made, and the
-   * assets still ship. It just has to be SAID, because it changes what gets written (see
-   * FlowBoard.detached: a cut channel's assets take neither the campaign's records nor its
-   * instructions). Only meaningful when the grid is scoped to one campaign, which is the only time
-   * there is a single board to read.
-   */
-  const detachedRowIds = (() => {
-    if (!scopeCampaign) return new Set<string>()
-    const cut = boardFor(flowBoards, scopeCampaign).detached ?? []
-    if (!cut.length) return new Set<string>()
-    return new Set(view.filter((r) => cut.includes(deliverableKeyFor(r))).map((r) => r.id))
-  })()
-
-  /**
    * The selected CELL is marked on the DOM node after render rather than through a class on the
    * cell itself. The body cells are written out in order — a column key is not threaded through
    * them — and adding one to all thirty would be thirty chances to get it wrong for a highlight.
@@ -1154,15 +1132,6 @@ export function SheetGrid({
                           </optgroup>
                         ))}
                       </select>
-                      {/* Cut off from the brief. The canvas says this by a missing line and the
-                          panel says it in words; here it has to be per row, because the grid is the
-                          one surface where a cut channel's assets sit interleaved with everything
-                          else and nothing distinguishes them. */}
-                      {detachedRowIds.has(row.id) && (
-                        <span className="ch-cut" title="Cut off from the brief, so its assets are written without the campaign's cards. Reconnect it on the board.">
-                          cut off
-                        </span>
-                      )}
                     </div>
                   </td>
 

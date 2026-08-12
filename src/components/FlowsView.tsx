@@ -919,6 +919,13 @@ export function FlowsView() {
   /** The card being dragged over right now, so only that box lights up. */
   const [docDropOn, setDocDropOn] = useState<string | null>(null)
   /**
+   * The card whose board-local name field has been asked for. Keyed by card and not a boolean: left
+   * as one flag, opening the override on one card would open it on the next card you selected, and
+   * an empty second name field on a card nobody asked it of is exactly the clutter it was moved out
+   * of the way to avoid. A card that already HAS an override shows the field regardless.
+   */
+  const [aliasOpen, setAliasOpen] = useState<string | null>(null)
+  /**
    * ONE hidden picker for every card, same as the Data source card's: the card that asked is held in
    * a ref, since mounting an input per card puts dozens in the tree for a control used once.
    */
@@ -4380,10 +4387,36 @@ export function FlowsView() {
    */
   const addAfterRef = useRef<((id: string) => void) | null>(null)
   const submitCreate = (nt: CanvasObject) => {
+    const typed = creatingName.trim()
     const made = createRecordForKind(nt.kind, creatingName)
     setCreatingFor(null)
     setCreatingName('')
-    if (!made) return
+    /**
+     * THE NAME SURVIVES A REFUSAL. createRecordForKind returns null when it cannot mint — an
+     * Audience or a Proof point with no brand bound (ensureAudienceRef and ensureProofRef both
+     * refuse; see NEEDS_BRAND_TO_MINT), or a Data source whose name matches no table. This path
+     * dropped the typed name on the floor and left the card reading "Nothing picked yet", which is
+     * the same silent-write failure attachDocToCard guards against on the other route in: you named
+     * the thing, the app took the gesture, and nothing anywhere said the name had gone.
+     *
+     * Keeping it as the CARD's name rather than nothing is the honest floor. The card then reads as
+     * what you called it, and the toast names the one thing that would let it become a record.
+     */
+    if (!made) {
+      if (typed) {
+        renameObject(nt.id, typed)
+        showToast(
+          nt.kind === 'data-source'
+            ? `No data set called "${typed}". The card is named that; connect it to a table to give it one.`
+            : brand
+              ? `Kept "${typed}" on the card. It could not be saved to Records.`
+              : `Kept "${typed}" on the card. Connect a Brand card and it becomes ${withArticle(OBJECT_META[nt.kind].label.toLowerCase())} every campaign can use.`,
+        )
+        setSel(nt.id)
+        setSelected(new Set())
+      }
+      return
+    }
     setObjectRef(nt.id, made.id)
     // If the card is already attached to the campaign, the new record joins it immediately, so
     // creating from an attached card does the whole job in one gesture.
@@ -5917,6 +5950,19 @@ export function FlowsView() {
     setObjectRef(nt.id, id)
     return id
   }
+  /**
+   * THE TWO KINDS WHOSE RECORD CANNOT BE MINTED WITHOUT A BRAND.
+   *
+   * ensureAudienceRef and ensureProofRef both refuse when no brand is bound and return null, at
+   * which point ensureAudienceFor / ensureProofFor return null too and every write to the record is
+   * a silent no-op. Every other kind mints unconditionally (addPerson, addMessage and the rest take
+   * an optional brand).
+   *
+   * Named here rather than discovered at the call site, because the failure it guards is invisible:
+   * the field takes what you type, the panel redraws, and nothing was written. Anything that offers
+   * to write to a record has to know first whether that write can land.
+   */
+  const NEEDS_BRAND_TO_MINT = new Set<CanvasObjectKind>(['audience', 'proof-point'])
   /**
    * THE RECORD A CARD EDITS, and how to write to it: one switch, for every kind that has one.
    *
@@ -8322,6 +8368,28 @@ export function FlowsView() {
   const renderObjectInspector = (nt: CanvasObject) => {
     const meta = OBJECT_META[nt.kind]
     const title = cardLabel(nt, meta.label)
+    const kindLabel = meta.label.toLowerCase()
+    /**
+     * THE RECORD THIS CARD NAMES, resolved at the top of the panel rather than inside the context
+     * box, because the Name field writes to it now too.
+     *
+     * WHY THE NAME FIELD MOVED ONTO THE RECORD. It used to set `nt.name`, the card's own label, and
+     * the reasoning was sound in isolation: renaming the record renames it on every campaign that
+     * points at it, which is not what a board-local edit should do. What it produced was a panel
+     * headed "Northwind Pharmacy" with an empty box under it labelled Name, placeholder "Name this
+     * brand…". The one visible field asks for a name the panel is already displaying, and takes it
+     * somewhere the person typing it does not mean. Naming the thing is the common act; naming it
+     * something else HERE is the rare one, so the common act gets the field and the rare one gets a
+     * line underneath it.
+     *
+     * `canNameRecord` is the part that has to be right. Writing to a record that cannot be minted
+     * is a no-op with a redraw after it, so on a brandless Audience or Proof point card — the two
+     * NEEDS_BRAND_TO_MINT kinds, and only before a record exists — the field stays on the card,
+     * where what you type is at least kept.
+     */
+    const nameRec = recordForCard(nt)
+    const recordName = nameRec ? String(nameRec.current[nameRec.nameKey] ?? '').trim() : ''
+    const canNameRecord = !!nameRec && (!!nt.refId || !NEEDS_BRAND_TO_MINT.has(nt.kind) || !!brand)
     return (
       <>
         <div className="flow-panel-head">
@@ -8382,49 +8450,45 @@ export function FlowsView() {
             <span className="flow-insp-saverow-note">Edits save on their own; this does it now.</span>
           </div>
           <label className="flow-inspect-label">Name</label>
-          <input
+          {/* BUFFERED, because this one can mint. Committing per keystroke on a card that has no
+              record yet would put the first letter you typed into the library as a record and then
+              rename it eleven times; on blur it is one record with the name you meant. It is also
+              why ensurePersonFor and the rest keep mintedRecordRef — see the note there. */}
+          <BufferedInput
             className="flow-inspect-input"
-            value={nt.name ?? ''}
-            placeholder={`Name this ${meta.label.toLowerCase()}…`}
-            onChange={(e) => renameObject(nt.id, e.target.value)}
+            value={canNameRecord ? recordName : nt.name ?? ''}
+            placeholder={canNameRecord ? `Name this ${kindLabel}…` : `Name this card…`}
+            onCommit={(v) => {
+              if (canNameRecord && nameRec) nameRec.apply({ [nameRec.nameKey]: v.trim() })
+              else renameObject(nt.id, v)
+            }}
           />
-          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT, near the top because a control nobody
-              scrolls to is a control nobody has.
-              It first went in below Applied to, which is under the name, the record, the whole
-              document panel and a list of everything the card feeds: on a card with a brief on it
-              that is most of a screen away, and the report was simply "I don't see the save on the
-              inspector" — correct, and the same burial this panel has been cleared of twice today.
-              It sits under the name instead, which is the other thing here that is about the card
-              itself rather than about what it says.
-
-              Only for a loose card. One already inside a smart object is saved by definition, and
-              the object's own panel is where its library rung is decided (see "Add to the brand
-              library" there). */}
-          {!placementOf(nt.id) && (() => {
-            // The same pool convertSelection will actually act on, so the label cannot promise one
-            // card and bundle three. Called with no state changes first, because it reads the
-            // selection from this render and a setSel here would not have landed by then.
-            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
-              (id) => objects.some((o) => o.id === id) && !placementOf(id),
-            ).length
-            if (!n) return null
-            return (
-              <>
-                <button
-                  className="flow-insp-open subtle"
-                  style={{ marginTop: 10 }}
-                  title="Keep this on the shelf: place it on another campaign instead of rebuilding it"
-                  onClick={() => convertSelection()}
-                >
-                  {n > 1 ? `Save these ${n} cards as a smart object` : 'Save as a smart object'}
-                </button>
-                <div className="flow-inspect-note" style={{ marginTop: 6 }}>
-                  Kept on this campaign to start with. Its own panel can add it to the brand library,
-                  where every campaign can reach it.
-                </div>
-              </>
-            )
-          })()}
+          {/* AND THE RARE CASE, ONE LINE DOWN: calling it something else on this board only.
+              Worth keeping — a card can honestly need a name the library should not be called — but
+              it is not what somebody opening a blank card came here to do, and for as long as it
+              WAS the Name field the common act had nowhere to go. Offered only where the field
+              above is writing to a record, since with no record there is one name and no second one
+              to override it with. */}
+          {canNameRecord && (nt.name || aliasOpen === nt.id ? (
+            <>
+              <label className="flow-inspect-label">Called this on this campaign</label>
+              <BufferedInput
+                className="flow-inspect-input"
+                value={nt.name ?? ''}
+                placeholder={recordName || `Name this ${kindLabel}…`}
+                onCommit={(v) => { renameObject(nt.id, v); if (!v.trim()) setAliasOpen(null) }}
+              />
+              <div className="flow-inspect-note" style={{ marginTop: 6 }}>
+                The board and the grid call it this. Records still calls it
+                {recordName ? <strong> {recordName}</strong> : ` the ${kindLabel}'s own name`}. Clear
+                the box to go back to it.
+              </div>
+            </>
+          ) : (
+            <button className="flow-doc-override-go" style={{ marginTop: 8 }} onClick={() => setAliasOpen(nt.id)}>
+              Call it something else on this campaign
+            </button>
+          ))}
           {nt.kind === 'data-source' && (
             <p className="flow-inspect-note flow-wip-note">
               This card is still being built. Pasting, uploading and describing a table all work, and
@@ -8448,7 +8512,8 @@ export function FlowsView() {
               them, and they are edited where records are edited. What a card asks you for now is the
               thing only you can give it, in the form you already have it in. */}
           {TAKES_CONTEXT.has(nt.kind) && (() => {
-            const target = recordForCard(nt)
+            // The same record the Name field above writes to, resolved once at the top of the panel.
+            const target = nameRec
             const fields = FILLABLE[nt.kind]
             /** A Company reaches this box for the upload alone: there is nothing for it to generate. */
             const canGenerate = !!fields && !!target
@@ -8463,8 +8528,6 @@ export function FlowsView() {
             const ref = doc?.ref
             /** Whether the record has one of its own, which is what makes an override removable. */
             const hasRecordDoc = !!(target?.current.reference as ObjectReference | undefined)?.text.trim()
-            /** The object this card names, once it names one. Blank until a document or a Generate mints it. */
-            const recordName = target ? String(target.current[target.nameKey] ?? '').trim() : ''
             /**
              * WHAT THE RECORD ALREADY SAYS. The fields Generate writes, read straight off the
              * record, so this is exactly what the copy writer will be handed. Computed here because
@@ -8482,7 +8545,6 @@ export function FlowsView() {
                 .map((f) => ({ brief: f.brief, value: fmt(target.current[f.key]) }))
                 .filter((f) => f.value)
             })()
-            const kindLabel = (OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()
             return (
               <div
                 className="flow-context"
@@ -8639,12 +8701,35 @@ export function FlowsView() {
                           </span>
                         </div>
                       )}
+                      {/* A TARGET, NOT A LINK — because the panel has been one all along.
+                          Everything from the prompt box down already takes a dropped file (see the
+                          onDrop on .flow-context above), and the only thing on screen admitting it
+                          was an 11.5px outline button reading "Upload a .md" under an "or". So the
+                          two ways to answer a card were offered as a filled box four rows tall and
+                          a footnote, and the footnote is the one you use when the thing you want to
+                          say is already written down somewhere.
+
+                          Same button, same handler. What is new is that it is the size of the
+                          choice it represents and it says that the drop the panel already accepts
+                          is a thing you may do. */}
                       <button
-                        className="flow-fill-upload"
+                        className="flow-doc-drop"
                         disabled={busy}
                         onClick={() => { docTargetRef.current = { cardId: nt.id, override: false }; docFileRef.current?.click() }}
                       >
-                        Upload a .md
+                        <span className="flow-doc-drop-ic" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" />
+                            <path d="M14 3v4h4" />
+                          </svg>
+                        </span>
+                        <span className="flow-doc-drop-main">Drop a .md here, or choose a file</span>
+                        {/* Says where it lands, which is the one thing about this that is not
+                            obvious and the reason the old pitch paragraph existed. Eleven words
+                            instead of forty, and only on the kinds that have a record to land on. */}
+                        {canGenerate && (
+                          <span className="flow-doc-drop-sub">It becomes this {kindLabel}&rsquo;s own document.</span>
+                        )}
                       </button>
                     </>
                   )}
@@ -8791,6 +8876,46 @@ export function FlowsView() {
                   </details>
                 )}
                 </div>
+              </div>
+            )
+          })()}
+
+          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT.
+              It sat under the Name field, on the argument that a control nobody scrolls to is a
+              control nobody has — which is true, and it had been buried under Applied to before
+              that. What it cost up there was the top of the panel: three rows in, between naming
+              the card and saying what it is, a button offering to file the card somewhere, wearing
+              .flow-insp-open — a full-width bordered box the same height as the input directly
+              above it, so it read as a second empty text field. Two of the first four rows were
+              about where the card is kept rather than what it says.
+
+              So it comes down to here, under the box that answers the card, and stops looking like
+              a field. It is still above Applied to, the fold it was rescued from, and the panel it
+              now follows is short: a name, a prompt and an upload.
+
+              Only for a loose card. One already inside a smart object is saved by definition, and
+              the object's own panel is where its library rung is decided (see "Add to the brand
+              library" there). */}
+          {!placementOf(nt.id) && (() => {
+            // The same pool convertSelection will actually act on, so the label cannot promise one
+            // card and bundle three. Called with no state changes first, because it reads the
+            // selection from this render and a setSel here would not have landed by then.
+            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
+              (id) => objects.some((o) => o.id === id) && !placementOf(id),
+            ).length
+            if (!n) return null
+            return (
+              <div className="flow-insp-promote">
+                <button
+                  className="flow-insp-promote-go"
+                  title="Keep this on the shelf: place it on another campaign instead of rebuilding it"
+                  onClick={() => convertSelection()}
+                >
+                  {n > 1 ? `Save these ${n} cards as a smart object` : 'Save as a smart object'}
+                </button>
+                {/* One line, not two. The second sentence explained a rung of the library you reach
+                    from a panel you have not opened yet, which is a thing to say there. */}
+                <span className="flow-insp-promote-note">Kept on this campaign until you add it to the brand library.</span>
               </div>
             )
           })()}

@@ -23,6 +23,38 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.85',
+    dateLabel: 'August 12, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The Name field on a card names the thing. It set the card’s own label, which was deliberate — renaming the record renames it on every campaign pointing at it, and a board-local edit should not do that — but what it produced was a panel headed “Northwind Pharmacy” with an empty box under it labelled Name, asking you to name a brand it was already displaying. Everyone typing there meant the brand. It writes to the brand now, and to the audience, the concept and the rest: type a name into a blank card and the record is made and called that. Calling it something else on this campaign is still there, one quiet line underneath, where a rare and deliberate act belongs.',
+          'And the card asks for three things in the order you would do them. Name it, describe it and have it written, or hand it the document that already says all of this. Two of the first four rows used to be about where the card is kept rather than what it says: Save, then Name, then a full-width bordered box reading “Save as a smart object” that was the same shape as the input above it and read as a second, empty name field. That one moved below the box that answers the card, and stopped looking like somewhere to type.',
+          'Handing a card a document is offered at the size of the choice it is. The panel has always taken a file dropped anywhere on it and nothing said so, while the only visible way in was a small outline button under the word “or” — so the alternative to describing a card read as a footnote to describing it, rather than as the other half of the same question. It is a proper target now, and it says where the file lands.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Naming a new audience with no brand on the board no longer loses the name. Typing one into the card as it lands and pressing return produced a card reading “Nothing picked yet”: an audience belongs to a brand, so with none bound there was nothing to create, and the name went nowhere with nothing on screen to say it had. The card keeps what you called it, and says that connecting a Brand card is what turns it into an audience every campaign can use.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.84',
+    dateLabel: 'August 12, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The grid stops labelling the channels that were cut off from the brief. A “cut off” chip sat in the Channel column of every row belonging to a severed channel — six assets meant six copies of a fact that belongs to the channel, not to any one asset — wearing the same amber the grid uses for work under review, for something that is a decision somebody made rather than a problem to go and fix. Nothing on that surface depended on it either: the grid has no Generate and no publish, so the thing the cut actually changes cannot happen there, and the chip’s own tooltip sent you to the board — which says it already, with a missing line and a button to put the line back. The column is the channel name again, which is what it is scanned for, and which the chip had been quietly clipping: it was supposed to drop to its own line and never did.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.83',
     dateLabel: 'August 10, 2026',
     groups: [
