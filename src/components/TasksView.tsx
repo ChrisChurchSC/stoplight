@@ -429,13 +429,17 @@ export function TasksView() {
     let queued = false
     const measure = () => {
       queued = false
+      // The label appears exactly ONCE. Each band names itself at its own break; the header only
+      // takes that job over when the break has scrolled out of reach, and gives it back at the top.
+      // Showing both is what put OVERDUE on screen twice, fifty pixels apart, on the first screen
+      // everybody sees.
       const edge = sticky.getBoundingClientRect().bottom
-      const rows = [...scroller.querySelectorAll<HTMLElement>('.task-row[data-band]')]
-      // The first row still showing below the header. Reading rows rather than headings is what
-      // lets the label be right BEFORE any scrolling — at rest that is simply the first row, so
-      // the header opens on OVERDUE instead of blank.
-      const first = rows.find((r) => r.getBoundingClientRect().bottom > edge + 1) ?? rows[rows.length - 1]
-      setBandLabel(first?.dataset.band ?? '')
+      let current = ''
+      for (const h of scroller.querySelectorAll<HTMLElement>('.task-group-head')) {
+        if (h.getBoundingClientRect().top <= edge + 1) current = h.dataset.band ?? ''
+        else break
+      }
+      setBandLabel(current)
     }
     const onScroll = () => {
       if (queued) return
@@ -974,11 +978,22 @@ export function TasksView() {
         <>
           {groups.map(([bucket, list]) => (
             <div key={bucket} className="task-group" data-band={bucket}>
+              {/* The break needs a name at the break. The gap says something changed; without a
+                  heading you cannot tell WHAT until that band reaches the header and renames it,
+                  which is several rows too late to be useful. */}
+              <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`} data-band={bucket}>
+                {bucket}
+                <span className="task-group-count">{list.length}</span>
+              </div>
               {list.map((t) => (t.derived ? assetRow(t, bucket) : row(t, bucket)))}
             </div>
           ))}
           {doneTasks.length > 0 && (
             <div className="task-group" data-band="Done">
+              <div className="task-group-head" data-band="Done">
+                Done
+                <span className="task-group-count">{doneTasks.length}</span>
+              </div>
               {doneTasks.map((t) => (t.derived ? assetRow(t, 'Done') : row(t, 'Done')))}
             </div>
           )}

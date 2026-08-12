@@ -19596,11 +19596,12 @@ textarea.library-input {
 .task-colhead .task-cell-name {
   padding-left: 2px;
 }
- /* 32px of air is the break now — the heading that used to announce it lives in the column-header
-    row, where it holds still. A gap reads as a boundary faster than a word does, and the word was
-    being said twice on the one screen everybody sees. */
+ /* A wide gap AND a heading at the break. The gap is what you see first — a boundary registers
+    faster than a word — and the heading is what tells you which band is starting, which the gap
+    alone cannot: the header row only renames itself once that band reaches it, several rows after
+    you have already crossed. */
 .task-group + .task-group {
-  margin-top: 32px;
+  margin-top: 48px;
 }
 .task-group {
   margin-top: 2px;
