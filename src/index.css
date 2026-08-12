@@ -1738,29 +1738,10 @@ button.mf-open:focus-visible,
   border-radius: 9px;
 }
 
-/* The connection gate can carry two independent things at once: a break to resolve, and a count of
-   channels deliberately cut off. They are not alternatives, so they need room from each other. */
-.sheet th.gate-conn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 /* "est." beside a modelled figure. Faint, because it is a qualifier on the number, not news. */
 .perf-est {
   color: var(--text-faint);
   font-weight: 500;
-}
-.ch-cut,
-.cov-cut {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--warn-ink);
-  background: var(--warn-tint);
-  border: 1px solid var(--warn-line);
-  border-radius: 20px;
-  padding: 1px 7px;
-  white-space: nowrap;
 }
 .cell-select.st-in_review {
   color: var(--warn-ink);
@@ -10683,9 +10664,6 @@ a.flow-top-credits.out:hover { color: var(--danger, #e5484d); opacity: 0.82; }
   align-items: center;
   gap: 7px;
   padding: 6px 9px;
-  /* The cut-off chip drops to its own line rather than squeezing the channel name, which is the
-     thing you are actually scanning this column for. */
-  flex-wrap: wrap;
 }
 .ch-cell .cell-select {
   padding: 0;
