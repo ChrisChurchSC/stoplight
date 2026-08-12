@@ -434,7 +434,12 @@ export function TasksView() {
       // without a heading under it repeating the word.
       const edge = sticky.getBoundingClientRect().bottom
       let current = scroller.querySelector<HTMLElement>('.task-group')?.dataset.band ?? ''
-      for (const h of scroller.querySelectorAll<HTMLElement>('.task-group-head')) {
+      // `.task-group >` matters: the band in the header wears .task-group-head too, for its type.
+      // Matching it here meant the tracker read its own output — the band sits above the edge, so
+      // it counted as a heading that had passed, blanked the label (it carries no data-band),
+      // which removed the span, which changed the header's height, which measured again. That was
+      // the shudder at the top of the scroll.
+      for (const h of scroller.querySelectorAll<HTMLElement>('.task-group > .task-group-head')) {
         if (h.getBoundingClientRect().top <= edge + 1) current = h.dataset.band ?? ''
         else break
       }
@@ -948,12 +953,17 @@ export function TasksView() {
             heading. Empty until the first one goes under, so it never labels a view it is not
             describing. */}
         <div className="task-cell task-cell-name" aria-live="polite">
-          {bandLabel && (
-            <span className={`task-group-head task-band${bandLabel === 'Overdue' ? ' overdue' : ''}`}>
-              {bandLabel}
-              {bandCounts.get(bandLabel) ? <span className="task-group-count">{bandCounts.get(bandLabel)}</span> : null}
-            </span>
-          )}
+          {/* Rendered even when there is nothing to say. The label is what DECIDES the label: a
+              filled band made this header 15px taller, which moved the edge the tracker measures
+              against, which flipped the label, which changed the height again — the table visibly
+              shuddering at the top of the scroll. An always-present box with a reserved height
+              breaks the loop; what varies is only the text inside it. */}
+          <span className={`task-group-head task-band${bandLabel === 'Overdue' ? ' overdue' : ''}`}>
+            {bandLabel}
+            {bandLabel && bandCounts.get(bandLabel) ? (
+              <span className="task-group-count">{bandCounts.get(bandLabel)}</span>
+            ) : null}
+          </span>
         </div>
         <ColHead label="Due date" col="due" />
         <ColHead label="Folder" col="folder" />
