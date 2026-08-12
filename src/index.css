@@ -19499,8 +19499,13 @@ textarea.library-input {
   font-weight: 600;
   color: var(--text-faint);
 }
+/* "Task" lines up with the GROUP HEADINGS and the checkboxes below it, not with the task names.
+   It used to clear the checkbox column (34px) to sit over the names, which put the one header that
+   starts the row 30px right of "Overdue" — the two labels that begin each band of the page, not
+   agreeing on where the page begins. 2px because the header row is inset 4px and the group heads
+   are inset 6px from the same container; the two land on the same edge. */
 .task-colhead .task-cell-name {
-  padding-left: 34px;
+  padding-left: 2px;
 }
 .task-group {
   margin-top: 2px;
