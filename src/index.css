@@ -5287,6 +5287,12 @@ button.mf-open:focus-visible,
 /* The Name field now sits directly above this on an object card, and 2px of air read as the two
    controls being one thing. */
 .flow-inspect-input + .flow-context { margin-top: 14px; }
+/* The same gap, for the two things that can now stand between the name and this box: the offer of a
+   board-local name, and the note under that field once it is taken. An adjacent-sibling rule is
+   exactly as durable as the row order it was written against, and 2px of air here reads as the box
+   belonging to the line above it. */
+.flow-doc-override-go + .flow-context,
+.flow-inspect-note + .flow-context { margin-top: 14px; }
 /* THE TWO WAYS TO ANSWER A CARD, as one region: the prompt, then the document under it. The wrapper
    owns the outer spacing and the file drop, so neither half has to know about the other. */
 .flow-context { margin: 2px 0 16px; }
@@ -5420,6 +5426,65 @@ button.mf-open:focus-visible,
 }
 .flow-doc-override-go:hover:not(:disabled) { color: var(--text); text-decoration-color: currentColor; }
 .flow-doc-override-go:disabled { opacity: 0.5; cursor: default; }
+/* THE SECOND WAY TO ANSWER A CARD, at the size of the choice it is.
+   It was .flow-fill-upload: an 11.5px outline button under an "or", against a filled four-row prompt
+   box. The panel has always taken a dropped file anywhere on it (see the onDrop on .flow-context) and
+   nothing said so, so the alternative to writing a description read as a footnote to it rather than
+   as the other half of the same question. Dashed because that is what a drop target looks like, and
+   sized to sit level with the box above rather than under it. */
+.flow-doc-drop {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 100%; box-sizing: border-box;
+  margin: 0;
+  padding: 15px 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: center;
+}
+.flow-doc-drop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+}
+.flow-doc-drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.flow-doc-drop:disabled { color: var(--text-faint); border-color: var(--border); cursor: default; background: none; }
+.flow-doc-drop-ic { display: block; line-height: 0; opacity: 0.75; }
+.flow-doc-drop-ic svg { width: 17px; height: 17px; }
+.flow-doc-drop-main { font-size: 12px; font-weight: 600; }
+/* The consequence, in the muted colour the rest of the panel says consequences in — the button's
+   accent belongs to the instruction above it, not to the footnote under it. */
+.flow-doc-drop-sub { font-size: 10.5px; line-height: 1.4; color: var(--text-faint); }
+.flow-doc-drop:disabled .flow-doc-drop-sub { color: inherit; }
+/* Already the drop-highlight hook for the section; now it has a target inside it worth lighting. */
+.flow-doc.dropping .flow-doc-drop {
+  border-style: solid;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+/* SAVE AS A SMART OBJECT, below the box that answers the card rather than three rows into the panel.
+   Auto width and a row of its own: as .flow-insp-open it was a full-width bordered box the height of
+   the Name input directly above it, which is how a button offering to file the card away came to read
+   as a second, empty name field. */
+.flow-insp-promote { margin-top: 16px; }
+.flow-insp-promote-go {
+  display: inline-block;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.flow-insp-promote-go:hover { color: var(--text); border-color: var(--border-strong, var(--border)); }
+.flow-insp-promote-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.flow-insp-promote-note {
+  display: block; margin-top: 6px;
+  font-size: 10.5px; line-height: 1.45; color: var(--text-faint);
+}
 /* THE NAME IS A CHIP AGAIN, closed on all four sides. It used to be the lid of the always-open text
    box below it — shared border, no seam — which was right while the two were one object. The text
    now sits behind a disclosure, so a chip with its bottom edge rubbed out would be a lid on nothing.
@@ -24727,6 +24792,7 @@ table.aud-sheet td.stick .aud-cell {
     .flow-ctx-item,
     .flow-ctxrow-del,
     .flow-ctxrow-open,
+    .flow-doc-drop,
     .flow-fill-doc-x,
     .flow-fill-go,
     .flow-fill-upload,
@@ -24734,6 +24800,7 @@ table.aud-sheet td.stick .aud-cell {
     .flow-insert,
     .flow-insp-del,
     .flow-insp-open,
+    .flow-insp-promote-go,
     .flow-inspect-del,
     .flow-inspect-regen,
     .flow-lib-folder-head,
