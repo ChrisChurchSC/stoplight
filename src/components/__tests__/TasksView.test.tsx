@@ -751,6 +751,9 @@ describe('TasksView', () => {
    * chip and the assignee field are asked to leave it shut.
    */
   const drawer = () => host.querySelector('.task-drawer')
+  /** React tracks an input's value on the node, so assigning `.value` directly is not seen. */
+  const setValue = (el: HTMLInputElement, v: string) =>
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(el, v)
   const clickOn = (el: Element) =>
     act(() => {
       el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -808,5 +811,70 @@ describe('TasksView', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  /**
+   * THE PANEL COULD DO LESS THAN THE ROW THAT OPENED IT.
+   *
+   * It showed three read-only facts and a link out, while the row behind it could reassign the task
+   * and tick it off. Opening a task to act on it was a step backwards, and nothing failed — which is
+   * why it survived: every field rendered, none of them did anything.
+   *
+   * What is checked here is that the panel carries the facts the table carries and can write the two
+   * that matter. The date arithmetic behind rescheduling is checked in reschedulePatch.test.ts,
+   * where it can be examined without a store in the way.
+   */
+  it('carries the asset’s own status, which the task’s checkbox was standing in for', () => {
+    useTrafficStore.setState({ rows: [row({ status: 'approved' })], clientFilter: BRAND })
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+
+    // Two states, told apart. The task is open; the asset is approved. One "Status" row saying
+    // "Open" for an approved asset is what this replaced.
+    const status = drawer()!.querySelector<HTMLSelectElement>('select')!
+    expect(status.value, 'the asset’s lifecycle, not the checkbox').toBe('approved')
+    expect(drawer()!.textContent).toContain('Task status')
+    expect(drawer()!.textContent).toContain('Asset status')
+  })
+
+  it('shows the facts the table shows, so opening a row is not a step backwards', () => {
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+    const text = drawer()!.textContent ?? ''
+
+    expect(text, 'the channel it goes out on').toContain('Instagram')
+    expect(text, 'and the folder, which the table has a column for').toContain('Folder')
+    // A date you can change, not a date you can read: the panel is where you act on a task.
+    expect(drawer()!.querySelector('input[type="date"]'), 'due date is editable').toBeTruthy()
+  })
+
+  it('assigns from the panel, and the row agrees', () => {
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+
+    const field = drawer()!.querySelector<HTMLInputElement>('input:not([type="date"])')!
+    act(() => {
+      field.focus()
+      setValue(field, 'Laura')
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+
+    // The table is the check, not the panel's own field: assigning somewhere that only the panel
+    // could see would look identical here and be worth nothing.
+    // The name lives in the cell's own field, not its text — the text is the avatar and its actions.
+    const cell = cellUnder(rowNamed('Teaser post')!, 'Assigned to')
+    expect(cell.querySelector('input')!.value).toBe('Laura')
+  })
+
+  it('does not name the channel twice in the heading', () => {
+    // `text` spells the channel in front of the name for views that draw no icon; the line under
+    // the heading already says it. Together they read "Instagram · Instagram · Teaser post".
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+    const heading = drawer()!.querySelector('div')!.textContent ?? ''
+    expect(heading).not.toContain('·')
   })
 })

@@ -6,9 +6,12 @@ import { DRAFTS, folderSegments } from '../domain/campaignFolders'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
-import { useAssetTasks } from '../lib/assetTasks'
+import { reschedulePatch, useAssetTasks } from '../lib/assetTasks'
 import { assignTints, loadTintStore, renameTint, ASSIGNEE_TINT_KEY } from '../lib/assigneeTint'
 import { CHANNELS } from '../domain/channels'
+import { STATUS_LABEL, STATUS_ORDER } from '../domain/assetBadge'
+import { typeLabel } from '../domain/channelAssetTypes'
+import type { RowStatus, TrafficRow } from '../domain/types'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -343,6 +346,8 @@ export function TasksView() {
   const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const openFlow = useTrafficStore((s) => s.openFlow)
+  const allRows = useTrafficStore((s) => s.rows)
+  const updateRow = useTrafficStore((s) => s.updateRow)
   // '' means unscoped — every brand — and it is a routine state, not a transient one: the rail only
   // auto-picks a brand when Brand records exist, so a workspace of campaigns with no Brand card
   // sits on 'all' indefinitely.
@@ -695,6 +700,19 @@ export function TasksView() {
   // The task whose detail drawer is open — from allTasks so derived asset-tasks open their own detail
   // too (read live so edits to a manual task reflect immediately).
   const openTask = allTasks.find((t) => t.id === openTaskId) ?? null
+  /** The asset behind an open asset-task. Manual tasks have none, which is what splits the drawer. */
+  const openRow = openTask?.rowId ? allRows.find((r) => r.id === openTask.rowId) : undefined
+
+  /**
+   * Move an asset's due date. An asset-task's date IS its row's `scheduledAt` — the moment the thing
+   * goes out — so changing it here is a reschedule, the same one dragging the asset on the calendar
+   * performs. What the new moment should be lives next to the code that derived the old day from it,
+   * in assetTasks; see reschedulePatch for why the time of day and the flight length are carried.
+   */
+  const setAssetDue = (row: TrafficRow, day: string) => {
+    const patch = reschedulePatch(row, day)
+    if (patch) void updateRow(row.id, patch)
+  }
 
   // Jump to Companies and pop the linked company's record drawer.
   const openCompany = (id: string) => {
@@ -922,6 +940,10 @@ export function TasksView() {
   const fieldRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12 }
   const fieldLabel: CSSProperties = { width: 92, flex: '0 0 auto', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }
   const fieldControl: CSSProperties = { flex: 1, minWidth: 0, padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13 }
+  /** A value you can read but not set. Same metrics as fieldControl so the column still lines up,
+   *  minus the border that promises an input. It only started to matter once real inputs moved in
+   *  beside them: three unfillable boxes among fillable ones read as fields that were not working. */
+  const fieldStatic: CSSProperties = { ...fieldControl, border: '1px solid transparent', background: 'none' }
 
   return (
     <>
@@ -1209,23 +1231,86 @@ export function TasksView() {
               <span style={{ flex: 1, fontSize: 12, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{openTask.done ? 'Completed asset' : 'Asset task'}</span>
               <button onClick={closeDrawer} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
             </header>
+            {/* The fields run in the table's column order — done, due, folder, campaign, owner —
+                so opening a row does not reshuffle the same facts into a different sequence. */}
             <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{openTask.text || 'Untitled asset'}</div>
-              <div style={fieldRow}>
-                <span style={fieldLabel}>Status</span>
-                <button onClick={() => toggleAssetDone(openTask.rowId!)} style={{ ...fieldControl, cursor: 'pointer', textAlign: 'left', color: openTask.done ? 'var(--accent-2, #0e6d84)' : 'var(--text)' }}>{openTask.done ? '✓ Done' : 'Open'}</button>
+              <div>
+                {/* The asset's own name, not `text`. `text` spells the channel in front of it for
+                    views with no icon, and the line under this one already says the channel — so
+                    the heading used to read "LinkedIn post · LinkedIn image post #1". */}
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{openTask.assetName || openTask.text || 'Untitled asset'}</div>
+                {openRow && (
+                  <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+                    <ChannelIcon channel={openRow.channel} size={13} />
+                    {CHANNELS[openRow.channel]?.label ?? openRow.channel}
+                    {typeLabel(openRow.channel, openRow.assetType) && ` · ${typeLabel(openRow.channel, openRow.assetType)}`}
+                  </div>
+                )}
               </div>
               <div style={fieldRow}>
+                <span style={fieldLabel}>Task status</span>
+                <button onClick={() => toggleAssetDone(openTask.rowId!)} style={{ ...fieldControl, cursor: 'pointer', textAlign: 'left', color: openTask.done ? 'var(--accent-2, #0e6d84)' : 'var(--text)' }}>{openTask.done ? '✓ Done' : 'Open'}</button>
+              </div>
+              {/* TWO DIFFERENT STATES, BOTH CALLED STATUS UNTIL NOW. The one above is ours: has
+                  someone finished the work. This one belongs to the asset and runs a seven-state
+                  lifecycle the flow drives. The panel showed only the first and labelled it
+                  "Status", so an approved, scheduled asset read "Open" with nothing to say
+                  otherwise. Written the way the flow's own drawer writes it, stamps included. */}
+              {openRow && (
+                <div style={fieldRow}>
+                  <span style={fieldLabel}>Asset status</span>
+                  <select
+                    value={openRow.status}
+                    onChange={(e) => {
+                      const status = e.target.value as RowStatus
+                      void updateRow(openRow.id, {
+                        status,
+                        approvedAt: status === 'approved' ? openRow.approvedAt ?? Date.now() : openRow.approvedAt,
+                        postedAt: status === 'posted' ? openRow.postedAt ?? Date.now() : openRow.postedAt,
+                      })
+                    }}
+                    style={{ ...fieldControl, textTransform: 'capitalize' }}
+                  >
+                    {STATUS_ORDER.map((s) => (<option key={s} value={s}>{STATUS_LABEL[s]}</option>))}
+                  </select>
+                </div>
+              )}
+              <div style={fieldRow}>
                 <span style={fieldLabel}>Due date</span>
-                <span style={{ ...fieldControl, color: openTask.due ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{openTask.due ? fmtDue(openTask.due) : 'No date'}</span>
+                {openRow ? (
+                  <input type="date" value={openTask.due} onChange={(e) => setAssetDue(openRow, e.target.value)} style={fieldControl} />
+                ) : (
+                  <span style={{ ...fieldStatic, color: openTask.due ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{openTask.due ? fmtDue(openTask.due) : 'No date'}</span>
+                )}
+              </div>
+              {/* The time of day is the asset's, and only worth a line when it carries one — a
+                  reader deciding what to chase today wants to know a post goes out at 09:00. */}
+              {openRow?.scheduledAt && (
+                <div style={fieldRow}>
+                  <span style={fieldLabel}>Goes out</span>
+                  <span style={fieldStatic}>{new Date(openRow.scheduledAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                </div>
+              )}
+              <div style={fieldRow}>
+                <span style={fieldLabel}>Folder</span>
+                <span style={{ ...fieldStatic, color: folderOf.get(openTask.campaign ?? '') ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{folderLabel(openTask.campaign ?? '')}</span>
               </div>
               <div style={fieldRow}>
                 <span style={fieldLabel}>Campaign</span>
-                <span style={fieldControl}>{openTask.campaign ? shortCampaign(openTask.campaign) : '—'}</span>
+                <span style={fieldStatic}>{openTask.campaign ? shortCampaign(openTask.campaign) : '—'}</span>
               </div>
               <div style={fieldRow}>
                 <span style={fieldLabel} />
                 <button onClick={() => { openFlow(openTask.campaign ?? '', 'grid'); closeDrawer() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open in flow ↗</button>
+              </div>
+              {/* Assignable from here, because this is the panel you open to act on a task. The
+                  table could hand work to someone and the drawer could not, which made opening a
+                  row a step backwards. */}
+              <div style={fieldRow}>
+                <span style={fieldLabel}>Assigned to</span>
+                <span style={{ ...fieldStatic, padding: '0 4px' }}>
+                  <AssigneeField value={openTask.assignee} names={knownAssignees} tints={tints} onCommit={(v) => setAssetAssignee(openTask.rowId!, v)} />
+                </span>
               </div>
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>This task is a built asset from a flow. Edit its content in the flow.</div>
             </div>
@@ -1291,8 +1376,13 @@ export function TasksView() {
             )}
 
             <div style={fieldRow}>
-              <span style={fieldLabel}>Assignee</span>
-              <input value={openTask.assignee} placeholder="Unassigned" onChange={(e) => patch(openTask.id, { assignee: e.target.value })} style={fieldControl} />
+              {/* "Assigned to", as the column is called, and the same field the rows use: a plain
+                  text box suggested nobody, so a second Laura arrived as "laura" and split her
+                  work across two people who looked identical in the table. */}
+              <span style={fieldLabel}>Assigned to</span>
+              <span style={{ ...fieldStatic, padding: '0 4px' }}>
+                <AssigneeField value={openTask.assignee} names={knownAssignees} tints={tints} onCommit={(v) => patch(openTask.id, { assignee: v })} />
+              </span>
             </div>
 
             <div>
