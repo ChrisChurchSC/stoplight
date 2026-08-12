@@ -19564,7 +19564,10 @@ textarea.library-input {
 }
 .task-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px 150px 200px 180px;
+  /* The task name is CAPPED and the rest share what is left. It used to be the 1fr against four
+     fixed columns, so every pixel a wider window added went to the one column that needed it least
+     — a task name and its due date drifting a third of a screen apart. */
+  grid-template-columns: minmax(0, 460px) minmax(130px, 1fr) minmax(110px, 0.8fr) minmax(160px, 1.1fr) minmax(150px, 1fr);
   align-items: center;
 }
 /* Grouped by campaign, every row's chip does repeat the heading above it. It is left alone: the
@@ -19590,12 +19593,23 @@ textarea.library-input {
   margin-top: 2px;
 }
  /* The Campaigns page's section heading (.flow-home-group-h): uppercase, tracked, with a pill
-    count. Same job — naming a band of work — so it should not be a different shape here. */
+    count. Same job — naming a band of work — so it should not be a different shape here.
+
+    It also STICKS, directly under the page header, so the band you are reading names itself the
+    whole way down: OVERDUE holds until UPCOMING reaches it and pushes it off, then UPCOMING holds
+    until DONE does the same. --tasks-sticky-h is published by a ResizeObserver because the header
+    changes height — filters wrap, "Clear filters" appears — and any constant here would leave the
+    heading floating in a gap or hidden behind the column names. The -22px matches the header's own
+    offset, which is the scroll container's padding. */
 .task-group-head {
+  position: sticky;
+  top: calc(var(--tasks-sticky-h, 190px) - 22px);
+  z-index: 4;
+  background: var(--bg);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 18px 6px 6px;
+  padding: 10px 6px 6px;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;

@@ -388,6 +388,26 @@ export function TasksView() {
   const knownAssignees = useMemo(() => assigneeCounts.map(([n]) => n), [assigneeCounts])
   // One colour each, decided on first sight of a name and then kept — see assigneeTint for why it
   // is remembered rather than derived. Resolving is pure; the write happens in the effect below.
+  /**
+   * The sticky header's height, published as a CSS variable so the GROUP headings can park directly
+   * beneath it. It cannot be a constant: the header grows a "Clear filters" link, the filter pills
+   * wrap on a narrow window, and the subtitle changes length — any fixed number would leave the
+   * group heading either floating in a gap or tucked under the column names.
+   */
+  const stickyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = stickyRef.current
+    if (!el) return
+    const publish = () => el.style.setProperty('--tasks-sticky-h', `${Math.round(el.getBoundingClientRect().height)}px`)
+    publish()
+    // Measured once regardless, then watched where the browser can watch. jsdom has no
+    // ResizeObserver, and neither do a few older engines — the one-off measure is what the CSS
+    // actually needs, and the observer only keeps it true as the header reflows.
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(publish)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const [tintStore, setTintStore] = useState(loadTintStore)
   const { tints, store: nextTintStore, changed: tintsChanged } = useMemo(
     () => assignTints(knownAssignees, tintStore),
@@ -686,7 +706,7 @@ export function TasksView() {
           board of thirty-odd tasks the column names and the filters that produced them were the
           first things to leave the screen, which is exactly when you need to know what you are
           reading and what is being hidden. */}
-      <div className="tasks-sticky">
+      <div className="tasks-sticky" ref={stickyRef}>
       <header className="tasks-head">
         <div>
           <h1 className="tasks-title">
