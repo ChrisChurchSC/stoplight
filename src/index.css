@@ -19208,6 +19208,14 @@ textarea.library-input {
 }
 
 /* Tasks page — an Attio-style task list: Task / Due date / Record / Assigned to, grouped by due. */
+ /* Tasks sits inside .home-main-scroll, which already pads 22/28; .mtx then pads 18/22 on top, so
+    the page started 16px further right and 12px lower than Campaigns — which has no parent padding
+    and does all 28/34 itself. These numbers are the REMAINDER: 28 + 6 = 34 and 22 + 6 = 28, so the
+    two pages' content lands on the same edge. .mtx is not touched, because Reports and Priorities
+    share it and neither sits in the same container. */
+.tasks-view {
+  padding: 6px 6px 20px;
+}
  /* Matched to the Campaigns page (.flow-home-head / -title / -sub). Two pages of the same kind
     were wearing different type: this one had a smaller title with its count inline beside it, so
     they did not read as siblings in the same product. */
