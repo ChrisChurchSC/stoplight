@@ -19240,18 +19240,26 @@ textarea.library-input {
   color: var(--text-muted);
   margin-top: 4px;
 }
+ /* The Campaigns page's action button (.flow-home-new), to the pixel. That page's PRIMARY action —
+    "New campaign" — is an outlined button, so a filled accent one here made Tasks look like it had
+    a louder job to offer than the page it sits beside in the rail. The convention is outlined; this
+    was the outlier. */
 .tasks-new {
+  flex: none;
   margin-left: auto;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  padding: 7px 14px;
-  border-radius: 8px;
+  padding: 8px 13px;
+  border-radius: 9px;
   cursor: pointer;
   white-space: nowrap;
+}
+.tasks-new:hover {
+  border-color: var(--text-faint);
 }
 .tasks-new:hover {
   filter: brightness(0.95);
