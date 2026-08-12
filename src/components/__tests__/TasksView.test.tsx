@@ -877,4 +877,31 @@ describe('TasksView', () => {
     const heading = drawer()!.querySelector('div')!.textContent ?? ''
     expect(heading).not.toContain('·')
   })
+
+  /**
+   * THE WAY OUT, AT THE FOOT OF THE PANEL. It was a 12px text link between two fields, in a panel
+   * whose job is to hand you to the flow when there is content to change.
+   *
+   * The guard is the half worth holding: a hand-made task need not belong to a campaign, and a
+   * button offering to open one that does not exist would still render, still look right, and take
+   * you nowhere. Rendering is not the test — rendering is what it does in the broken case too.
+   */
+  it('offers the flow at the foot of the panel, naming where it goes', () => {
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+
+    const cta = drawer()!.querySelector('.drawer-foot button')
+    expect(cta, 'a way out of the panel').toBeTruthy()
+    // Named, not generic: two campaigns are one click apart in this table.
+    expect(cta!.textContent).toContain('Fall Launch')
+  })
+
+  it('offers no door when the task belongs to no campaign', () => {
+    localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: '' })]))
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Book the photographer')!, 'Folder'))
+
+    expect(drawer(), 'the panel is open').toBeTruthy()
+    expect(drawer()!.querySelector('.drawer-foot'), 'and offers nowhere to go').toBeNull()
+  })
 })

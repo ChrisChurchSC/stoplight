@@ -945,6 +945,24 @@ export function TasksView() {
    *  beside them: three unfillable boxes among fillable ones read as fields that were not working. */
   const fieldStatic: CSSProperties = { ...fieldControl, border: '1px solid transparent', background: 'none' }
 
+  /**
+   * The handoff, at the foot of both panels. It was a 12px text link tucked between two fields, in a
+   * panel whose whole job is to hand you to the flow when there is content to change — small, and
+   * easy to miss under everything else. Sticky so it is there whether the panel is half full or
+   * scrolling, and built on the .drawer-foot the app's other drawers already use.
+   *
+   * Nothing to hand off to without a campaign, which a hand-made task may not have, so it stays
+   * away rather than offering a door to nowhere.
+   */
+  const drawerCta = (campaign: string | undefined, view: 'flow' | 'grid') =>
+    campaign ? (
+      <div className="drawer-foot" style={{ marginTop: 'auto', position: 'sticky', bottom: 0, background: 'var(--surface)' }}>
+        <button className="btn" style={{ flex: 1, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }} onClick={() => { openFlow(campaign, view); closeDrawer() }}>
+          Open {shortCampaign(campaign)} ↗
+        </button>
+      </div>
+    ) : null
+
   return (
     <>
     <div className="mtx tasks-view">
@@ -1299,10 +1317,6 @@ export function TasksView() {
                 <span style={fieldLabel}>Campaign</span>
                 <span style={fieldStatic}>{openTask.campaign ? shortCampaign(openTask.campaign) : '—'}</span>
               </div>
-              <div style={fieldRow}>
-                <span style={fieldLabel} />
-                <button onClick={() => { openFlow(openTask.campaign ?? '', 'grid'); closeDrawer() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open in flow ↗</button>
-              </div>
               {/* Assignable from here, because this is the panel you open to act on a task. The
                   table could hand work to someone and the drawer could not, which made opening a
                   row a step backwards. */}
@@ -1314,6 +1328,8 @@ export function TasksView() {
               </div>
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>This task is a built asset from a flow. Edit its content in the flow.</div>
             </div>
+            {/* Grid, not flow: the asset is a ROW, and the grid is where it exists as one. */}
+            {drawerCta(openTask.campaign, 'grid')}
           </aside>
         ) : (
         <aside className={`task-drawer${drawerClosing ? ' closing' : ''}`} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
@@ -1353,12 +1369,6 @@ export function TasksView() {
                 {campaigns.map((name) => (<option key={name} value={name}>{shortCampaign(name)}</option>))}
               </select>
             </div>
-            {openTask.campaign && (
-              <div style={fieldRow}>
-                <span style={fieldLabel} />
-                <button onClick={() => { openFlow(openTask.campaign!, 'flow'); closeDrawer() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {shortCampaign(openTask.campaign)} ↗</button>
-              </div>
-            )}
 
             <div style={fieldRow}>
               <span style={fieldLabel}>Company</span>
@@ -1395,6 +1405,9 @@ export function TasksView() {
               <div>Created · {new Date(openTask.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
             </div>
           </div>
+          {/* Flow, not grid: a hand-made task is not a row in the sheet, so the board is where its
+              campaign actually is. */}
+          {drawerCta(openTask.campaign, 'flow')}
         </aside>
         )}
       </>
