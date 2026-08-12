@@ -96,6 +96,12 @@ const headerGrouped = (label: string) =>
   [...host.querySelectorAll('.task-colhead-cell')].some(
     (c) => c.querySelector('.task-colhead-label')?.textContent === label && c.className.includes('grouped'),
   )
+/**
+ * A row's cell UNDER A NAMED COLUMN. Indexing by position meant every test broke the day a column
+ * was inserted, which is the same brittleness the grid itself has — and there it is a bug, so a
+ * test that shares it is a test that will be "fixed" by renumbering rather than read.
+ */
+const cellUnder = (rowEl: Element, label: string) => cells(rowEl)[headerLabels().indexOf(label)]
 /** The column labels, in header order. */
 const headerLabels = () =>
   cells(host.querySelector('.task-colhead')!).map((c) => c.querySelector('.task-colhead-label')?.textContent ?? c.textContent)
@@ -106,7 +112,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     // The campaign cell starts empty, and opens the picker.
-    const campaignCell = cells(rowNamed('Book the photographer')!)[2]
+    const campaignCell = cellUnder(rowNamed('Book the photographer')!, 'Campaign')
     act(() => {
       campaignCell.querySelector('.task-chip-btn')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -128,7 +134,7 @@ describe('TasksView', () => {
     // Rendering rewrites storage, so a link that survives the read/write round trip is one a
     // reload will still find.
     expect(stored().find((t) => t.id === 'task-1')?.campaign).toBe(CAMPAIGN)
-    expect(cells(rowNamed('Book the photographer')!)[2].textContent).toContain('Fall Launch')
+    expect(cellUnder(rowNamed('Book the photographer')!, 'Campaign').textContent).toContain('Fall Launch')
   })
 
   it('puts every row’s campaign under the campaign header, whatever kind of task it is', () => {
@@ -136,14 +142,14 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     const headers = headerLabels()
-    expect(headers).toEqual(['Task', 'Due date', 'Campaign', 'Assigned to'])
+    expect(headers).toEqual(['Task', 'Due date', 'Folder', 'Campaign', 'Assigned to'])
 
     // The derived asset-task (from the seeded row) and the manual one agree on the grid.
     const derived = rowNamed('Teaser post')!
     const manual = rowNamed('Book the photographer')!
     expect(cells(derived)).toHaveLength(headers.length)
     expect(cells(manual)).toHaveLength(headers.length)
-    expect(cells(derived)[2].textContent).toContain('Fall Launch')
+    expect(cellUnder(derived, 'Campaign').textContent).toContain('Fall Launch')
   })
 
   /**
@@ -186,7 +192,7 @@ describe('TasksView', () => {
   it('assigns an owner to an asset-task, and keeps it', () => {
     act(() => root.render(<TasksView />))
 
-    const input = cells(rowNamed('Teaser post')!)[3].querySelector('input')
+    const input = cellUnder(rowNamed('Teaser post')!, 'Assigned to').querySelector('input')
     expect(input, 'the derived row has an assignee field like any other').toBeTruthy()
 
     act(() => {
@@ -215,7 +221,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     // The unassigned row offers the name the workspace is already using.
-    const input = cells(rowNamed('Second post')!)[3].querySelector('input')!
+    const input = cellUnder(rowNamed('Second post')!, 'Assigned to').querySelector('input')!
     act(() => input.dispatchEvent(new FocusEvent('focusin', { bubbles: true })))
     const suggestion = [...host.querySelectorAll('.task-pick-item')].find((b) => b.textContent?.includes('Ryna'))
     expect(suggestion, 'a name in use is offered rather than retyped').toBeTruthy()
@@ -316,7 +322,7 @@ describe('TasksView', () => {
     localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan', 'row-2': 'Ryan' }))
     act(() => root.render(<TasksView />))
 
-    const clear = cells(rowNamed('Teaser post')!)[3].querySelector('.task-assignee-acts .tasks-filter-act:last-child')
+    const clear = cellUnder(rowNamed('Teaser post')!, 'Assigned to').querySelector('.task-assignee-acts .tasks-filter-act:last-child')
     expect(clear, 'the row carries the same actions as the menu').toBeTruthy()
     act(() => clear!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })))
 
@@ -392,6 +398,66 @@ describe('TasksView', () => {
     expect(host.querySelector('.mtx-sub')?.textContent).toContain('0 of 1 open')
   })
 
+  /**
+   * THE FOLDER IS WHAT SAYS WHOSE WORK IT IS WHEN THE NAME DOES NOT.
+   *
+   * campaignStoredName only prefixes a campaign with a brand when it HAS one, so a campaign made
+   * without a brand keeps whatever was typed: "Rebrand Launch" filed under Arbitrum carries nothing
+   * at all saying Arbitrum, and its rows read the same as anyone's. The folder is the thing the
+   * person filing it actually chose, and the only reliable answer for those campaigns.
+   */
+  it('shows the folder a campaign is filed under, even when its name says nothing', () => {
+    const PLAIN = 'Rebrand Launch' // no brand prefix — exactly the case the name cannot answer
+    useTrafficStore.setState({
+      rows: [row({ id: 'row-p', assetName: 'Teaser post', campaign: PLAIN })],
+      campaignList: [{ name: PLAIN, client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum' }],
+      clientFilter: 'all',
+    })
+    act(() => root.render(<TasksView />))
+
+    expect(cellUnder(rowNamed('Teaser post')!, 'Campaign').textContent, 'the name alone is ambiguous').toContain(PLAIN)
+    expect(cellUnder(rowNamed('Teaser post')!, 'Folder').textContent, 'the folder resolves it').toBe('Arbitrum')
+  })
+
+  it('reads a nested folder as its whole path, and an unfiled campaign as Drafts', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-n', assetName: 'Nested post', campaign: 'Deep one' }),
+        row({ id: 'row-u', assetName: 'Unfiled post', campaign: 'Loose one' }),
+      ],
+      campaignList: [
+        { name: 'Deep one', client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum/Q3' },
+        { name: 'Loose one', client: 'Drafts', strategy: 'Current state' },
+      ],
+      clientFilter: 'all',
+    })
+    act(() => root.render(<TasksView />))
+
+    // Whole path: the top segment is usually the brand, and dropping it loses what the column is for.
+    expect(cellUnder(rowNamed('Nested post')!, 'Folder').textContent).toBe('Arbitrum / Q3')
+    expect(cellUnder(rowNamed('Unfiled post')!, 'Folder').textContent, 'the no-folder bucket has a name').toBe('Drafts')
+  })
+
+  it('groups by folder from its header, like the other columns', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-a', assetName: 'A post', campaign: 'One' }),
+        row({ id: 'row-b', assetName: 'B post', campaign: 'Two' }),
+      ],
+      campaignList: [
+        { name: 'One', client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum' },
+        { name: 'Two', client: 'Drafts', strategy: 'Current state', folder: 'Oxyle' },
+      ],
+      clientFilter: 'all',
+    })
+    act(() => root.render(<TasksView />))
+
+    groupByColumn('Folder')
+    expect(headerGrouped('Folder')).toBe(true)
+    const heads = [...host.querySelectorAll('.task-group-head')].map((h) => h.firstChild?.textContent?.trim())
+    expect(heads).toEqual(['Arbitrum', 'Oxyle'])
+  })
+
   it('gives two owners two colours, where the shared hash gave them one', () => {
     useTrafficStore.setState({
       rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
@@ -402,7 +468,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     const tintOf = (name: string) =>
-      cells(rowNamed(name)!)[3].querySelector<HTMLElement>('.task-avatar')!.style.background
+      cellUnder(rowNamed(name)!, 'Assigned to').querySelector<HTMLElement>('.task-avatar')!.style.background
     expect(tintOf('Teaser post')).toBeTruthy()
     expect(tintOf('Teaser post'), 'Laura and Ryan are told apart').not.toBe(tintOf('Second post'))
   })
@@ -467,7 +533,7 @@ describe('TasksView', () => {
     })
     act(() => root.render(<TasksView />))
 
-    const due = (name: string) => cells(rowNamed(name)!)[1].querySelector('.task-due-text')!.className
+    const due = (name: string) => cellUnder(rowNamed(name)!, 'Due date').querySelector('.task-due-text')!.className
     expect(due('Late post')).toContain('late')
     expect(due('Today post')).toContain('soon')
     expect(due('Today post'), 'due today is not dressed as overdue').not.toContain('late')

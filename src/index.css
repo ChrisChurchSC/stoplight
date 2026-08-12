@@ -19427,6 +19427,25 @@ textarea.library-input {
 .task-assignee {
   position: relative;
 }
+/* The folder a campaign is filed under — plain text, not a chip: it is where the work lives, not
+   something to open, and a second chip beside the campaign's would read as a second link.
+   
+   The unfiled modifier is `task-folder-none`, NOT `empty`. There is a global `.empty` carrying
+   `padding: 48px 20px` for empty-state blocks (line ~721), and the other modifiers in this file
+   named `empty` escape it only by setting their own padding later in the source. Relying on that is
+   how this cell came out 123px tall and blew its whole row open. A namespaced modifier cannot
+   collide at all, whatever order the file ends up in. */
+.task-folder {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+.task-folder-none {
+  color: var(--text-faint);
+}
 /* Row actions, quiet until the row is under the cursor — the same treatment the Assignee menu
    gives them, so they read as the same pair doing the same kind of thing at a smaller reach. */
 .task-assignee-acts {
@@ -19445,7 +19464,7 @@ textarea.library-input {
 }
 .task-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px 210px 190px;
+  grid-template-columns: minmax(0, 1fr) 150px 150px 200px 180px;
   align-items: center;
 }
 /* Grouped by campaign, every row's chip does repeat the heading above it. It is left alone: the

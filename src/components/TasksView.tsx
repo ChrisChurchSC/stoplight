@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
+import { DRAFTS, folderSegments } from '../domain/campaignFolders'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
@@ -110,7 +111,7 @@ const dueTone = (t: { done: boolean; due: string }, today: string): string => {
 // How the list is grouped. By due date it answers "what is late and what is next"; by campaign,
 // "what is still outstanding on this piece of work" — the same tasks, cut the two ways they get
 // asked about. The heading a campaign-less task groups under.
-type GroupBy = 'due' | 'campaign' | 'assignee'
+type GroupBy = 'due' | 'campaign' | 'assignee' | 'folder'
 const NO_CAMPAIGN = 'No campaign'
 const NO_ASSIGNEE = 'Unassigned'
 /** Filter sentinel for "has nobody on it" — distinct from '' , which is the no-filter state. */
@@ -265,6 +266,27 @@ export function TasksView() {
     () => canvases.filter((c) => (brand ? c.client === brand : true) && c.name !== CONTENT_LIBRARY_CAMPAIGN).map((c) => c.name),
     [canvases, brand],
   )
+  /**
+   * A campaign's FOLDER, which on the Campaigns page is the heading it sits under. It is resolved
+   * from the campaign rather than stored on the task, so refiling a campaign moves its tasks with
+   * it and there is one answer rather than a copy per row.
+   *
+   * This is the column that stops the table going ambiguous. A campaign made without a brand keeps
+   * the name it was typed — campaignStoredName only prefixes when there IS a brand — so "Rebrand
+   * Launch" filed under Arbitrum carries nothing at all saying Arbitrum, and the row reads the same
+   * as one belonging to anybody. The folder is what the person filing it actually chose.
+   */
+  const folderOf = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of canvases) if (c.folder) m.set(c.name, c.folder)
+    return m
+  }, [canvases])
+  // Nested folders are a path ("Arbitrum/Q3"); show it whole, because the top segment is usually
+  // the brand and dropping it would lose exactly what this column is for.
+  const folderLabel = (campaign: string) => {
+    const path = folderOf.get(campaign)
+    return path ? folderSegments(path).join(' / ') : DRAFTS
+  }
   // Campaign names are stored brand-qualified ("Acme — Fall Launch"); show just the campaign part.
   // Keyed off the campaign's OWN brand rather than the selected one, so an unscoped list drops the
   // prefix too — otherwise a brand-qualified name renders as "Arbitrum — Arbitrum Campaign 1" and
@@ -391,6 +413,7 @@ export function TasksView() {
       return [...map.entries()].sort(([a], [b]) => (a === last ? 1 : b === last ? -1 : a.localeCompare(b)))
     }
 
+    if (groupBy === 'folder') return byKey((t) => folderLabel(t.campaign ?? ''), DRAFTS)
     if (groupBy === 'campaign') return byKey((t) => (t.campaign ? shortCampaign(t.campaign) : NO_CAMPAIGN), NO_CAMPAIGN)
     if (groupBy === 'assignee') return byKey((t) => t.assignee || NO_ASSIGNEE, NO_ASSIGNEE)
 
@@ -399,7 +422,7 @@ export function TasksView() {
     for (const t of open) map.get(bucketOf(t.due, today))!.push(t)
     for (const list of map.values()) list.sort(byDue)
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
-  }, [visible, today, groupBy])
+  }, [visible, today, groupBy, folderOf])
   const doneTasks = useMemo(() => visible.filter((t) => t.done), [visible])
   const visibleOpen = visible.filter((t) => !t.done).length
   const filtered = Boolean(filterWho || filterCampaign || filterChannel)
@@ -450,6 +473,9 @@ export function TasksView() {
           {dueTone(t, today) === ' late' && <LateMark />}
           {dueText(t.due, today, 'No date')}
         </span>
+      </div>
+      <div className="task-cell task-cell-folder">
+        <span className={`task-folder${folderOf.get(t.campaign ?? '') ? '' : ' task-folder-none'}`}>{folderLabel(t.campaign ?? '')}</span>
       </div>
       <div className="task-cell task-rec-cell task-cell-campaign">
         {t.campaign ? (
@@ -511,6 +537,9 @@ export function TasksView() {
             {dueText(t.due, today, 'Set date')}
           </button>
         )}
+      </div>
+      <div className="task-cell task-cell-folder">
+        <span className={`task-folder${folderOf.get(t.campaign ?? '') ? '' : ' task-folder-none'}`}>{folderLabel(t.campaign ?? '')}</span>
       </div>
       <div className="task-cell task-rec-cell task-cell-campaign">
         {t.campaign ? (
@@ -779,6 +808,7 @@ export function TasksView() {
       <div className="task-grid task-colhead">
         <div className="task-cell task-cell-name">Task</div>
         <ColHead label="Due date" col="due" />
+        <ColHead label="Folder" col="folder" />
         <ColHead label="Campaign" col="campaign" className="task-cell-campaign" />
         <ColHead label="Assigned to" col="assignee" />
       </div>
