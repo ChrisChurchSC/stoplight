@@ -19603,6 +19603,9 @@ textarea.library-input {
 .task-group + .task-group {
   margin-top: 48px;
 }
+.task-group:first-child {
+  margin-top: 0;
+}
 .task-group {
   margin-top: 2px;
 }

@@ -429,12 +429,11 @@ export function TasksView() {
     let queued = false
     const measure = () => {
       queued = false
-      // The label appears exactly ONCE. Each band names itself at its own break; the header only
-      // takes that job over when the break has scrolled out of reach, and gives it back at the top.
-      // Showing both is what put OVERDUE on screen twice, fifty pixels apart, on the first screen
-      // everybody sees.
+      // The header opens on the first band and hands over as each later heading scrolls past it.
+      // Starting from the first group rather than from nothing is what makes OVERDUE right at rest
+      // without a heading under it repeating the word.
       const edge = sticky.getBoundingClientRect().bottom
-      let current = ''
+      let current = scroller.querySelector<HTMLElement>('.task-group')?.dataset.band ?? ''
       for (const h of scroller.querySelectorAll<HTMLElement>('.task-group-head')) {
         if (h.getBoundingClientRect().top <= edge + 1) current = h.dataset.band ?? ''
         else break
@@ -976,15 +975,19 @@ export function TasksView() {
         </div>
       ) : (
         <>
-          {groups.map(([bucket, list]) => (
+          {groups.map(([bucket, list], i) => (
             <div key={bucket} className="task-group" data-band={bucket}>
-              {/* The break needs a name at the break. The gap says something changed; without a
-                  heading you cannot tell WHAT until that band reaches the header and renames it,
-                  which is several rows too late to be useful. */}
-              <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`} data-band={bucket}>
-                {bucket}
-                <span className="task-group-count">{list.length}</span>
-              </div>
+              {/* The FIRST band has no heading of its own: it is always the one sitting against the
+                  header, so its name lives up there from the start and a heading here would say it
+                  twice. Every later band gets one at its break, because a gap says something
+                  changed and cannot say what — and by the time the header adopts that name, this
+                  heading has already scrolled out of sight. One label, always, no overlap. */}
+              {i > 0 && (
+                <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`} data-band={bucket}>
+                  {bucket}
+                  <span className="task-group-count">{list.length}</span>
+                </div>
+              )}
               {list.map((t) => (t.derived ? assetRow(t, bucket) : row(t, bucket)))}
             </div>
           ))}
