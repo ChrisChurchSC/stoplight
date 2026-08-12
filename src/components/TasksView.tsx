@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -120,6 +120,9 @@ const UNASSIGNED = '\u0000unassigned'
  *  and used to just fall out of a channel filter — findable by no filter, which on a board of
  *  thirty posts means not findable. It is its own kind of work, so it gets its own answer. */
 const CUSTOM_TASKS = '\u0000custom'
+/** A campaign-filter value that means "everything filed here", not one campaign. Prefixed because a
+ *  folder path and a campaign name are different namespaces that would otherwise be indistinguishable. */
+const FOLDER_PREFIX = '\u0000folder:'
 const CUSTOM_TASKS_LABEL = 'Custom tasks'
 
 /** The one mark on the row, and only on an overdue date. Colour alone cannot carry "late" — it
@@ -287,6 +290,30 @@ export function TasksView() {
     const path = folderOf.get(campaign)
     return path ? folderSegments(path).join(' / ') : DRAFTS
   }
+  /**
+   * The campaign filter's contents, grouped by folder. A flat list of campaigns stops being
+   * scannable at five or six per client, and "all the Oxyle work" is the cut most days want — but
+   * folders ALONE would drop single-campaign filtering, which gets more useful as the count grows,
+   * not less. So: both, at the level you point at.
+   */
+  const campaignsByFolder = useMemo(() => {
+    const groups = new Map<string, string[]>()
+    for (const name of campaigns) {
+      const key = folderOf.get(name) ? folderSegments(folderOf.get(name)!).join(' / ') : DRAFTS
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(name)
+    }
+    // Folders alphabetically, unfiled last — the same order the rest of the page uses.
+    return [...groups.entries()].sort(([a], [b]) => (a === DRAFTS ? 1 : b === DRAFTS ? -1 : a.localeCompare(b)))
+  }, [campaigns, folderOf])
+  /** What the campaign pill reads. The filter value is a folder OR a campaign, and the folder form
+   *  carries a sentinel prefix — passing that to shortCampaign left the prefix on screen, with only
+   *  the leading NUL invisible, so the pill read "folder:Oxyle". */
+  const campaignFilterLabel = () => {
+    if (!filterCampaign) return 'All campaigns'
+    if (filterCampaign.startsWith(FOLDER_PREFIX)) return filterCampaign.slice(FOLDER_PREFIX.length)
+    return shortCampaign(filterCampaign)
+  }
   // Campaign names are stored brand-qualified ("Acme — Fall Launch"); show just the campaign part.
   // Keyed off the campaign's OWN brand rather than the selected one, so an unscoped list drops the
   // prefix too — otherwise a brand-qualified name renders as "Arbitrum — Arbitrum Campaign 1" and
@@ -387,7 +414,10 @@ export function TasksView() {
       allTasks.filter(
         (t) =>
           (!filterWho || (filterWho === UNASSIGNED ? !t.assignee : t.assignee === filterWho)) &&
-          (!filterCampaign || (t.campaign || '') === filterCampaign) &&
+          (!filterCampaign ||
+            (filterCampaign.startsWith(FOLDER_PREFIX)
+              ? folderLabel(t.campaign ?? '') === filterCampaign.slice(FOLDER_PREFIX.length)
+              : (t.campaign || '') === filterCampaign)) &&
           (!filterChannel || (filterChannel === CUSTOM_TASKS ? !t.derived : t.channel === filterChannel)),
       ),
     [allTasks, filterWho, filterCampaign, filterChannel],
@@ -737,7 +767,7 @@ export function TasksView() {
             className={`tasks-filter-btn${filterCampaign ? ' on' : ''}`}
             onClick={() => setOpenFilter(openFilter === 'campaign' ? null : 'campaign')}
           >
-            {filterCampaign ? shortCampaign(filterCampaign) : 'All campaigns'}
+            {campaignFilterLabel()}
             <span className="tasks-filter-caret">▾</span>
           </button>
           {openFilter === 'campaign' && (
@@ -747,15 +777,29 @@ export function TasksView() {
                 <button className={`task-pick-item${filterCampaign ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterCampaign(''); setOpenFilter(null) }}>
                   <span className="task-pick-name">All campaigns</span>
                 </button>
-                {campaigns.map((name) => (
-                  <button
-                    key={name}
-                    className={`task-pick-item${filterCampaign === name ? ' on' : ''}`}
-                    role="menuitem"
-                    onClick={() => { setFilterCampaign(name); setOpenFilter(null) }}
-                  >
-                    <span className="task-pick-name">{shortCampaign(name)}</span>
-                  </button>
+                {campaignsByFolder.map(([folder, names]) => (
+                  <Fragment key={folder}>
+                    {/* The folder itself is selectable — one click for everything filed under it,
+                        which is the coarse cut most days want. */}
+                    <button
+                      className={`task-pick-item tasks-filter-folder${filterCampaign === FOLDER_PREFIX + folder ? ' on' : ''}`}
+                      role="menuitem"
+                      onClick={() => { setFilterCampaign(FOLDER_PREFIX + folder); setOpenFilter(null) }}
+                    >
+                      <span className="task-pick-name">{folder}</span>
+                      <span className="tasks-filter-count">{names.length}</span>
+                    </button>
+                    {names.map((name) => (
+                      <button
+                        key={name}
+                        className={`task-pick-item tasks-filter-sub${filterCampaign === name ? ' on' : ''}`}
+                        role="menuitem"
+                        onClick={() => { setFilterCampaign(name); setOpenFilter(null) }}
+                      >
+                        <span className="task-pick-name">{shortCampaign(name)}</span>
+                      </button>
+                    ))}
+                  </Fragment>
                 ))}
               </div>
             </>

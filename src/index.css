@@ -19315,6 +19315,27 @@ textarea.library-input {
 .tasks-filter-menu {
   min-width: 240px;
 }
+/* Folder rows lead their campaigns, told apart by weight and indent rather than by a divider — the
+   list is already two kinds of thing and does not need a third.
+
+   Compounded with .task-pick-item deliberately. On its own `.tasks-filter-sub` is the same
+   specificity as `.task-pick-item`, which sets `padding: 7px 10px` four hundred lines further down
+   — so the indent silently lost to source order and both levels rendered flush. Second time today
+   a single-class rule in this file has been decided by position; a compound selector cannot be. */
+.task-pick-item.tasks-filter-folder {
+  font-weight: 650;
+  color: var(--text);
+}
+.task-pick-item.tasks-filter-folder .task-pick-name {
+  flex: 1;
+}
+.task-pick-item.tasks-filter-sub {
+  padding-left: 26px;
+  color: var(--text-muted);
+}
+.task-pick-item.tasks-filter-sub:hover {
+  color: var(--text);
+}
 /* A person row: pick to filter, then rename or clear. The actions stay quiet until hover so the
    menu still reads as a list of people rather than a row of controls. */
 .tasks-filter-person,

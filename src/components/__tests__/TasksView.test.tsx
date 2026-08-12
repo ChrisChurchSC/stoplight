@@ -438,6 +438,60 @@ describe('TasksView', () => {
     expect(cellUnder(rowNamed('Unfiled post')!, 'Folder').textContent, 'the no-folder bucket has a name').toBe('Drafts')
   })
 
+  /**
+   * THE CAMPAIGN FILTER OFFERS BOTH LEVELS. A flat list of campaigns stops being scannable at five
+   * or six per client; folders alone would drop single-campaign filtering, which gets MORE useful
+   * as the count grows. Picking a folder takes everything filed under it, picking a campaign takes
+   * one, and the two are different namespaces — hence the prefix on the folder's value.
+   */
+  it('filters by a whole folder, or by one campaign inside it', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-a', assetName: 'A post', campaign: 'One' }),
+        row({ id: 'row-b', assetName: 'B post', campaign: 'Two' }),
+        row({ id: 'row-c', assetName: 'C post', campaign: 'Three' }),
+      ],
+      campaignList: [
+        { name: 'One', client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum' },
+        { name: 'Two', client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum' },
+        { name: 'Three', client: 'Drafts', strategy: 'Current state', folder: 'Oxyle' },
+      ],
+      clientFilter: 'all',
+    })
+    act(() => root.render(<TasksView />))
+
+    const openMenu = () =>
+      act(() =>
+        [...host.querySelectorAll('.tasks-filter-btn')]
+          .find((b) => b.textContent?.includes('campaign') || b.textContent?.includes('Arbitrum') || b.textContent?.includes('One'))!
+          .dispatchEvent(new MouseEvent('click', { bubbles: true })),
+      )
+    const click = (sel: string, text: string) =>
+      act(() =>
+        [...host.querySelectorAll(sel)]
+          .find((b) => b.textContent?.includes(text))!
+          .dispatchEvent(new MouseEvent('click', { bubbles: true })),
+      )
+
+    // The folder row takes everything filed under it.
+    openMenu()
+    click('.tasks-filter-folder', 'Arbitrum')
+    expect(rows()).toHaveLength(2)
+    expect(rowNamed('C post'), 'the other folder stays out').toBeFalsy()
+
+    // And the pill says the folder's name — the filter value carries a sentinel prefix, which read
+    // straight through onto the button because only its leading NUL was invisible.
+    const pill = [...host.querySelectorAll('.tasks-filter-btn')].map((b) => b.textContent ?? '')
+    expect(pill.some((t) => t.includes('Arbitrum')), 'the pill names the folder').toBe(true)
+    expect(pill.some((t) => t.includes('folder:')), 'and not the sentinel').toBe(false)
+
+    // A campaign inside it takes just that one.
+    openMenu()
+    click('.tasks-filter-sub', 'Two')
+    expect(rows()).toHaveLength(1)
+    expect(rowNamed('B post')).toBeTruthy()
+  })
+
   it('groups by folder from its header, like the other columns', () => {
     useTrafficStore.setState({
       rows: [
