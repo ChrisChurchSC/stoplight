@@ -507,6 +507,20 @@ export function TasksView() {
   // Group the open tasks — into due-date buckets, or by the campaign or the person they belong to
   // (done tasks fall to their own section at the end whichever it is). Soonest-due first within
   // every group, so a group reads as its own running order.
+  /**
+   * Does finished work sit INSIDE its band, or in a pile of its own at the foot of the page?
+   *
+   * Read in both of the places that decide it, because they have to agree and they are forty lines
+   * apart. Fold done into the bands AND keep the pile, and every finished task appears twice; drop
+   * it from both and it vanishes from three of the four groupings. One flag means a change moves
+   * both, rather than one being edited and the other found later by a test.
+   *
+   * True for every grouping but due date: a person, a campaign and a folder are containers, and
+   * what they hold includes what is finished. Overdue and Upcoming are not containers — they are
+   * claims about work still to come, which a finished task cannot make.
+   */
+  const foldDoneIntoBands = groupBy !== 'due'
+
   const groups = useMemo(() => {
     const open = visible.filter((t) => !t.done)
     const byDue = (a: Task, b: Task) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt
@@ -517,17 +531,12 @@ export function TasksView() {
      * Group on a key, alphabetically, with the "nobody / nothing" bucket last rather than sorted
      * among the names.
      *
-     * These groupings take the DONE tasks too, at the bottom of the band they belong to. A person,
-     * a campaign, a folder is a container: what Chris finished is part of Chris's list, and pulling
-     * it into a separate Done pile at the foot of the page answers "what is finished across the
-     * whole workspace", which is not a question anyone has while looking at one person.
-     *
-     * Due-date grouping keeps its Done section, because a finished task has no live bucket to sit
-     * in — Overdue and Upcoming are about work that still has to happen.
+     * Whether the done tasks come too is foldDoneIntoBands, above — the same flag that decides
+     * whether a Done section renders, so the two cannot disagree.
      */
     const byKey = (keyOf: (t: Task) => string, last: string) => {
       const map = new Map<string, Task[]>()
-      for (const t of visible) {
+      for (const t of foldDoneIntoBands ? visible : open) {
         const key = keyOf(t)
         if (!map.has(key)) map.set(key, [])
         map.get(key)!.push(t)
@@ -545,9 +554,11 @@ export function TasksView() {
     for (const t of open) map.get(bucketOf(t.due, today))!.push(t)
     for (const list of map.values()) list.sort(byDue)
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
-  }, [visible, today, groupBy, folderOf])
-  // Only due-date grouping shows a Done section; the others fold finished work into its own band.
-  const doneTasks = useMemo(() => (groupBy === 'due' ? visible.filter((t) => t.done) : []), [visible, groupBy])
+  }, [visible, today, groupBy, folderOf, foldDoneIntoBands])
+  const doneTasks = useMemo(
+    () => (foldDoneIntoBands ? [] : visible.filter((t) => t.done)),
+    [visible, foldDoneIntoBands],
+  )
   /** How many are in each band, so the header's pill can say it. */
   const bandCounts = useMemo(() => {
     const m = new Map<string, number>(groups.map(([label, list]) => [label, list.length]))
