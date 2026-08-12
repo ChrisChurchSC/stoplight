@@ -96,11 +96,14 @@ const bucketOf = (due: string, today: string): Bucket => {
   return 'Upcoming'
 }
 
-/** What a due date says. "Due today" rather than the date it happens to be: the row is telling you
- *  when to act, and today is the answer, not August 11th. Late keeps its date — how late matters. */
+/** What a due date says. "Today" rather than the date it happens to be: the row is telling you when
+ *  to act, and today is the answer, not August 11th. Late keeps its date — how late matters.
+ *
+ *  No "Due" in front of it. The column is called Due date; repeating the word on all thirty rows
+ *  spends the width on something the heading already said. */
 const dueText = (due: string, today: string, blank: string): string => {
   if (!due) return blank
-  return due === today ? 'Due today' : `Due ${fmtDue(due)}`
+  return due === today ? 'Today' : fmtDue(due)
 }
 
 /** How a due date reads on the row. Late and due-today used to share one class, so both came out
@@ -408,6 +411,42 @@ export function TasksView() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+  /**
+   * WHICH BAND THE TOP OF THE LIST IS IN, so the column-header row can name it. The heading used to
+   * stick on its own line under the header; now it rides IN that line, in the one column that has
+   * no name of its own — the same row saying what these columns are and what stretch of the list
+   * you are looking at.
+   *
+   * Read off the headings' real positions rather than the scroll offset, because rows are not a
+   * fixed height and the groups are not a fixed size: the answer is "the last heading that has
+   * passed under the header", which is a question about the layout, not about pixels scrolled.
+   */
+  const [bandLabel, setBandLabel] = useState('')
+  useEffect(() => {
+    const scroller = stickyRef.current?.closest('.home-main-scroll')
+    const sticky = stickyRef.current
+    if (!scroller || !sticky) return
+    let queued = false
+    const measure = () => {
+      queued = false
+      const edge = sticky.getBoundingClientRect().bottom
+      const heads = [...scroller.querySelectorAll<HTMLElement>('.task-group-head')]
+      let current = ''
+      for (const h of heads) {
+        if (h.getBoundingClientRect().top <= edge + 1) current = h.dataset.band ?? ''
+        else break
+      }
+      setBandLabel(current)
+    }
+    const onScroll = () => {
+      if (queued) return
+      queued = true
+      requestAnimationFrame(measure)
+    }
+    measure()
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
+  })
   const [tintStore, setTintStore] = useState(loadTintStore)
   const { tints, store: nextTintStore, changed: tintsChanged } = useMemo(
     () => assignTints(knownAssignees, tintStore),
@@ -895,9 +934,13 @@ export function TasksView() {
       </div>
 
       <div className="task-grid task-colhead">
-        {/* No label: every row is a task, so "Task" named the table rather than the column, and it
-            was the one header here that is not a grouping control. */}
-        <div className="task-cell task-cell-name" aria-hidden="true" />
+        {/* The first column has no name — every row is a task — so it carries the band instead:
+            which stretch of the list the top of the view is in, changing as you scroll past each
+            heading. Empty until the first one goes under, so it never labels a view it is not
+            describing. */}
+        <div className="task-cell task-cell-name task-band" aria-live="polite">
+          {bandLabel}
+        </div>
         <ColHead label="Due date" col="due" />
         <ColHead label="Folder" col="folder" />
         <ColHead label="Campaign" col="campaign" className="task-cell-campaign" />
@@ -926,7 +969,7 @@ export function TasksView() {
             const late = groupBy === 'due' ? 0 : list.filter((t) => t.due && t.due < today).length
             return (
               <div key={bucket} className="task-group">
-                <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`}>
+                <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`} data-band={bucket}>
                   {bucket} <span className="task-group-count">{list.length}</span>
                   {late > 0 && (
                     <span className="task-group-late" title={`${late} overdue`}>
@@ -940,7 +983,7 @@ export function TasksView() {
           })}
           {doneTasks.length > 0 && (
             <div className="task-group">
-              <div className="task-group-head">
+              <div className="task-group-head" data-band="Done">
                 Done <span className="task-group-count">{doneTasks.length}</span>
               </div>
               {doneTasks.map((t) => (t.derived ? assetRow(t) : row(t)))}

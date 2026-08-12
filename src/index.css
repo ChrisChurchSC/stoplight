@@ -19305,6 +19305,15 @@ textarea.library-input {
 .tasks-head .tasks-new {
   flex: 0 0 auto;
 }
+/* The band the top of the list is in, riding in the column-header row. Same type as the headings
+   it echoes, so the row reads as one thing rather than a label glued onto a table head. */
+.task-band {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
 /* The channel mark in front of an asset's name. Fixed width so the names below it start on one
    left edge whether or not a row has a channel — a hand-made task has none. */
 .task-channel {
@@ -19595,17 +19604,10 @@ textarea.library-input {
  /* The Campaigns page's section heading (.flow-home-group-h): uppercase, tracked, with a pill
     count. Same job — naming a band of work — so it should not be a different shape here.
 
-    It also STICKS, directly under the page header, so the band you are reading names itself the
-    whole way down: OVERDUE holds until UPCOMING reaches it and pushes it off, then UPCOMING holds
-    until DONE does the same. --tasks-sticky-h is published by a ResizeObserver because the header
-    changes height — filters wrap, "Clear filters" appears — and any constant here would leave the
-    heading floating in a gap or hidden behind the column names. The -22px matches the header's own
-    offset, which is the scroll container's padding. */
+    The headings themselves scroll away: the band is named in the column-header row instead (see
+    .task-band), which is already holding still and already has an unused first column. One line
+    doing both jobs beats a heading parked under a heading. */
 .task-group-head {
-  position: sticky;
-  top: calc(var(--tasks-sticky-h, 190px) - 22px);
-  z-index: 4;
-  background: var(--bg);
   display: flex;
   align-items: center;
   gap: 8px;

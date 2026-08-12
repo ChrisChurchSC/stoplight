@@ -494,6 +494,30 @@ describe('TasksView', () => {
     expect(rowNamed('B post')).toBeTruthy()
   })
 
+  /**
+   * The column-header row names the band the top of the list is in, and the scroll handler finds it
+   * by reading `data-band` off each heading. That attribute is the whole contract between the two —
+   * drop it and the label silently stays blank forever, with nothing else to notice.
+   *
+   * The scrolling itself is not driven here: jsdom lays nothing out, so every getBoundingClientRect
+   * is zero and "which heading has passed under the header" has no meaning. What is checkable is
+   * that the pieces the handler needs exist and agree.
+   */
+  it('labels each band for the header row to read', () => {
+    act(() => root.render(<TasksView />))
+
+    const band = host.querySelector('.task-colhead .task-band')
+    expect(band, 'the first column carries the band').toBeTruthy()
+    expect(band!.textContent, 'and says nothing until a heading has gone under it').toBe('')
+
+    const heads = [...host.querySelectorAll('.task-group-head')]
+    expect(heads.length).toBeGreaterThan(0)
+    for (const h of heads) {
+      expect(h.getAttribute('data-band'), `heading "${h.textContent?.trim()}" is labelled`).toBeTruthy()
+      expect(h.textContent).toContain(h.getAttribute('data-band'))
+    }
+  })
+
   it('groups by folder from its header, like the other columns', () => {
     useTrafficStore.setState({
       rows: [
