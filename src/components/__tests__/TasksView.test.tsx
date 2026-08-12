@@ -102,6 +102,11 @@ const headerGrouped = (label: string) =>
  * test that shares it is a test that will be "fixed" by renumbering rather than read.
  */
 const cellUnder = (rowEl: Element, label: string) => cells(rowEl)[headerLabels().indexOf(label)]
+/** A filter control by what it filters, not by where it sits. These were selected positionally —
+ *  "the first .tasks-filter-btn" — which broke the moment the row was reordered to mirror the
+ *  columns, and would break again on the next rearrangement. */
+const filterBtn = (which: 'who' | 'campaign' | 'channel') =>
+  host.querySelector<HTMLElement>(`.tasks-filter-btn[data-filter="${which}"]`)!
 /** The bands rendered, in order. The headings that used to announce them are gone — the header row
  *  names the current one and space marks the breaks — so a group's identity lives on the group. */
 const bandsOnScreen = () => [...host.querySelectorAll<HTMLElement>('.task-group')].map((g) => g.dataset.band)
@@ -232,9 +237,7 @@ describe('TasksView', () => {
     expect(suggestion, 'a name in use is offered rather than retyped').toBeTruthy()
 
     // Correcting the spelling from the toolbar has to reach the asset AND the manual task.
-    act(() => {
-      host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     act(() => {
       ;[...host.querySelectorAll('.tasks-filter-act')]
         .find((b) => b.getAttribute('title')?.startsWith('Rename'))!
@@ -262,9 +265,8 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
     expect(rows()).toHaveLength(3)
 
-    const channelBtn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All work'))
-    expect(channelBtn, 'the kinds of work on the board are offered').toBeTruthy()
-    act(() => channelBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(filterBtn('channel'), 'the kinds of work on the board are offered').toBeTruthy()
+    act(() => filterBtn('channel').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     act(() => {
       ;[...host.querySelectorAll('.task-pick-item')]
         .find((b) => b.textContent === 'Instagram')!
@@ -287,10 +289,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     const open = () => {
-      const btn = [...host.querySelectorAll('.tasks-filter-btn')].find(
-        (b) => b.textContent?.includes('All work') || b.textContent?.includes('Custom tasks'),
-      )
-      act(() => btn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+      act(() => filterBtn('channel').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     }
     open()
     const entry = [...host.querySelectorAll('.task-pick-item')].find((b) => b.textContent === 'Custom tasks')
@@ -306,8 +305,7 @@ describe('TasksView', () => {
     useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
     act(() => root.render(<TasksView />))
 
-    const btn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All work'))
-    act(() => btn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    act(() => filterBtn('channel').dispatchEvent(new MouseEvent('click', { bubbles: true })))
 
     const labels = [...host.querySelectorAll('.task-pick-item')].map((b) => b.textContent)
     expect(labels).not.toContain('Custom tasks')
@@ -349,8 +347,7 @@ describe('TasksView', () => {
     localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan', 'row-2': 'Ryan' }))
     act(() => root.render(<TasksView />))
 
-    const openMenu = () =>
-      act(() => host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    const openMenu = () => act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     const pressX = () =>
       act(() => {
         ;[...host.querySelectorAll('.tasks-filter-act')]
@@ -388,7 +385,7 @@ describe('TasksView', () => {
     expect(host.querySelector('.tasks-sub')?.textContent).toContain('1 open')
 
     // Filter to somebody with nothing.
-    act(() => host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     act(() => {
       ;[...host.querySelectorAll('.task-pick-item')]
         .find((b) => b.textContent?.includes('Unassigned'))!
@@ -466,11 +463,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     const openMenu = () =>
-      act(() =>
-        [...host.querySelectorAll('.tasks-filter-btn')]
-          .find((b) => b.textContent?.includes('campaign') || b.textContent?.includes('Arbitrum') || b.textContent?.includes('One'))!
-          .dispatchEvent(new MouseEvent('click', { bubbles: true })),
-      )
+      act(() => filterBtn('campaign').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     const click = (sel: string, text: string) =>
       act(() =>
         [...host.querySelectorAll(sel)]
@@ -566,9 +559,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
     expect(rows()).toHaveLength(2)
 
-    act(() => {
-      host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     act(() => {
       host.querySelector<HTMLElement>('.tasks-filter-pick')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })

@@ -796,11 +796,94 @@ export function TasksView() {
       </header>
 
       <div className="tasks-toolbar">
+        {/* What KIND of work: "just the Instagram posts", which is how someone doing one kind of
+            thing reads the board. Named "All work" rather than "All channels" because the last
+            entry is Custom tasks, which is not a channel — the list is kinds of work, and channel
+            is what nearly all of them happen to be. */}
+        {channels.length > 0 && (
+          <div className="tasks-filter">
+            <button
+              className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
+              data-filter="channel"
+              onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
+            >
+              {filterChannel === CUSTOM_TASKS ? CUSTOM_TASKS_LABEL : filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All work'}
+              <span className="tasks-filter-caret">▾</span>
+            </button>
+            {openFilter === 'channel' && (
+              <>
+                <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
+                <div className="task-pick-menu tasks-filter-menu" role="menu">
+                  <button className={`task-pick-item${filterChannel ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterChannel(''); setOpenFilter(null) }}>
+                    <span className="task-pick-name">All work</span>
+                  </button>
+                  {channels.map(([id, label]) => (
+                    <button
+                      key={id}
+                      className={`task-pick-item${filterChannel === id ? ' on' : ''}`}
+                      role="menuitem"
+                      onClick={() => { setFilterChannel(id); setOpenFilter(null) }}
+                    >
+                      <span className="task-pick-name">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="tasks-filter">
+          <button
+            className={`tasks-filter-btn${filterCampaign ? ' on' : ''}`}
+            data-filter="campaign"
+            onClick={() => setOpenFilter(openFilter === 'campaign' ? null : 'campaign')}
+          >
+            {campaignFilterLabel()}
+            <span className="tasks-filter-caret">▾</span>
+          </button>
+          {openFilter === 'campaign' && (
+            <>
+              <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
+              <div className="task-pick-menu tasks-filter-menu" role="menu">
+                <button className={`task-pick-item${filterCampaign ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterCampaign(''); setOpenFilter(null) }}>
+                  <span className="task-pick-name">All campaigns</span>
+                </button>
+                {campaignsByFolder.map(([folder, names]) => (
+                  <Fragment key={folder}>
+                    {/* The folder itself is selectable — one click for everything filed under it,
+                        which is the coarse cut most days want. */}
+                    <button
+                      className={`task-pick-item tasks-filter-folder${filterCampaign === FOLDER_PREFIX + folder ? ' on' : ''}`}
+                      role="menuitem"
+                      onClick={() => { setFilterCampaign(FOLDER_PREFIX + folder); setOpenFilter(null) }}
+                    >
+                      <span className="task-pick-name">{folder}</span>
+                      <span className="tasks-filter-count">{names.length}</span>
+                    </button>
+                    {names.map((name) => (
+                      <button
+                        key={name}
+                        className={`task-pick-item tasks-filter-sub${filterCampaign === name ? ' on' : ''}`}
+                        role="menuitem"
+                        onClick={() => { setFilterCampaign(name); setOpenFilter(null) }}
+                      >
+                        <span className="task-pick-name">{shortCampaign(name)}</span>
+                      </button>
+                    ))}
+                  </Fragment>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Assignee: filters the list, and is also where a name gets corrected or cleared —
             renaming here rewrites every task holding it, manual and derived alike. */}
         <div className="tasks-filter">
           <button
             className={`tasks-filter-btn${filterWho ? ' on' : ''}`}
+            data-filter="who"
             onClick={() => setOpenFilter(openFilter === 'who' ? null : 'who')}
           >
             {filterWho === UNASSIGNED ? NO_ASSIGNEE : filterWho || 'Everyone'}
@@ -872,86 +955,6 @@ export function TasksView() {
             </>
           )}
         </div>
-
-        <div className="tasks-filter">
-          <button
-            className={`tasks-filter-btn${filterCampaign ? ' on' : ''}`}
-            onClick={() => setOpenFilter(openFilter === 'campaign' ? null : 'campaign')}
-          >
-            {campaignFilterLabel()}
-            <span className="tasks-filter-caret">▾</span>
-          </button>
-          {openFilter === 'campaign' && (
-            <>
-              <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
-              <div className="task-pick-menu tasks-filter-menu" role="menu">
-                <button className={`task-pick-item${filterCampaign ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterCampaign(''); setOpenFilter(null) }}>
-                  <span className="task-pick-name">All campaigns</span>
-                </button>
-                {campaignsByFolder.map(([folder, names]) => (
-                  <Fragment key={folder}>
-                    {/* The folder itself is selectable — one click for everything filed under it,
-                        which is the coarse cut most days want. */}
-                    <button
-                      className={`task-pick-item tasks-filter-folder${filterCampaign === FOLDER_PREFIX + folder ? ' on' : ''}`}
-                      role="menuitem"
-                      onClick={() => { setFilterCampaign(FOLDER_PREFIX + folder); setOpenFilter(null) }}
-                    >
-                      <span className="task-pick-name">{folder}</span>
-                      <span className="tasks-filter-count">{names.length}</span>
-                    </button>
-                    {names.map((name) => (
-                      <button
-                        key={name}
-                        className={`task-pick-item tasks-filter-sub${filterCampaign === name ? ' on' : ''}`}
-                        role="menuitem"
-                        onClick={() => { setFilterCampaign(name); setOpenFilter(null) }}
-                      >
-                        <span className="task-pick-name">{shortCampaign(name)}</span>
-                      </button>
-                    ))}
-                  </Fragment>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* What KIND of work: "just the Instagram posts", which is how someone doing one kind of
-            thing reads the board. Named "All work" rather than "All channels" because the last
-            entry is Custom tasks, which is not a channel — the list is kinds of work, and channel
-            is what nearly all of them happen to be. */}
-        {channels.length > 0 && (
-          <div className="tasks-filter">
-            <button
-              className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
-              onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
-            >
-              {filterChannel === CUSTOM_TASKS ? CUSTOM_TASKS_LABEL : filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All work'}
-              <span className="tasks-filter-caret">▾</span>
-            </button>
-            {openFilter === 'channel' && (
-              <>
-                <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
-                <div className="task-pick-menu tasks-filter-menu" role="menu">
-                  <button className={`task-pick-item${filterChannel ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterChannel(''); setOpenFilter(null) }}>
-                    <span className="task-pick-name">All work</span>
-                  </button>
-                  {channels.map(([id, label]) => (
-                    <button
-                      key={id}
-                      className={`task-pick-item${filterChannel === id ? ' on' : ''}`}
-                      role="menuitem"
-                      onClick={() => { setFilterChannel(id); setOpenFilter(null) }}
-                    >
-                      <span className="task-pick-name">{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
 
         {(filterWho || filterCampaign || filterChannel) && (
           <button className="tasks-filter-clear" onClick={() => { setFilterWho(''); setFilterCampaign(''); setFilterChannel('') }}>

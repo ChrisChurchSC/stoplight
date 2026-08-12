@@ -19298,7 +19298,9 @@ textarea.library-input {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 10px 0 6px;
+  /* Room under the filters before the table starts. At 6px they crowded the column heads, which
+     made the controls read as part of the table rather than as the thing acting on it. */
+  margin: 10px 0 20px;
   font-size: 12px;
   color: var(--text-muted);
 }
