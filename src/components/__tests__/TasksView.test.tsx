@@ -516,6 +516,46 @@ describe('TasksView', () => {
     expect(new Set(rows.map((r) => r.dataset.band))).toEqual(new Set(bandsOnScreen()))
   })
 
+  /**
+   * A PERSON'S FINISHED WORK BELONGS TO THAT PERSON. Grouped by assignee, campaign or folder, the
+   * band is a container — pulling its done tasks into one pile at the foot of the page answers
+   * "what is finished across the whole workspace", which is not the question you have while looking
+   * at one person's list. Grouped by DUE DATE the pile is right: a finished task has no live bucket,
+   * because Overdue and Upcoming are about work that still has to happen.
+   */
+  it('sinks a person’s finished tasks to the bottom of their own band, not a Done pile', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-open', assetName: 'Still to do' }),
+        row({ id: 'row-done', assetName: 'Already shipped', status: 'posted' }),
+        row({ id: 'row-other', assetName: 'Nobody’s job' }),
+      ],
+      clientFilter: BRAND,
+    })
+    // Both of Chris's, one of them finished (a posted asset reads as done).
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-open': 'Chris', 'row-done': 'Chris' }))
+    act(() => root.render(<TasksView />))
+
+    groupByColumn('Assigned to')
+
+    expect(bandsOnScreen(), 'no Done band of its own').toEqual(['Chris', 'Unassigned'])
+
+    const chris = [...host.querySelectorAll<HTMLElement>('.task-group')].find((g) => g.dataset.band === 'Chris')!
+    const names = [...chris.querySelectorAll('.task-name-open')].map((n) => n.textContent)
+    expect(names, 'finished one sits under the live one, inside Chris').toEqual(['Still to do', 'Already shipped'])
+  })
+
+  it('keeps the Done section when the grouping is by due date', () => {
+    useTrafficStore.setState({
+      rows: [row({ id: 'row-open', assetName: 'Still to do' }), row({ id: 'row-done', assetName: 'Already shipped', status: 'posted' })],
+      clientFilter: BRAND,
+    })
+    act(() => root.render(<TasksView />))
+
+    // A finished task has no live due bucket, so grouped by date it needs a place of its own.
+    expect(bandsOnScreen()).toContain('Done')
+  })
+
   it('groups by folder from its header, like the other columns', () => {
     useTrafficStore.setState({
       rows: [

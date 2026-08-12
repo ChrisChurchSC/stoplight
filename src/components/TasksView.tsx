@@ -510,17 +510,29 @@ export function TasksView() {
   const groups = useMemo(() => {
     const open = visible.filter((t) => !t.done)
     const byDue = (a: Task, b: Task) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt
+    // Finished work sinks inside its own group rather than leaving it.
+    const doneLast = (a: Task, b: Task) => Number(a.done) - Number(b.done) || byDue(a, b)
 
-    // Group on a key, alphabetically, with the "nobody / nothing" bucket last rather than sorted
-    // among the names.
+    /**
+     * Group on a key, alphabetically, with the "nobody / nothing" bucket last rather than sorted
+     * among the names.
+     *
+     * These groupings take the DONE tasks too, at the bottom of the band they belong to. A person,
+     * a campaign, a folder is a container: what Chris finished is part of Chris's list, and pulling
+     * it into a separate Done pile at the foot of the page answers "what is finished across the
+     * whole workspace", which is not a question anyone has while looking at one person.
+     *
+     * Due-date grouping keeps its Done section, because a finished task has no live bucket to sit
+     * in — Overdue and Upcoming are about work that still has to happen.
+     */
     const byKey = (keyOf: (t: Task) => string, last: string) => {
       const map = new Map<string, Task[]>()
-      for (const t of open) {
+      for (const t of visible) {
         const key = keyOf(t)
         if (!map.has(key)) map.set(key, [])
         map.get(key)!.push(t)
       }
-      for (const list of map.values()) list.sort(byDue)
+      for (const list of map.values()) list.sort(doneLast)
       return [...map.entries()].sort(([a], [b]) => (a === last ? 1 : b === last ? -1 : a.localeCompare(b)))
     }
 
@@ -534,7 +546,8 @@ export function TasksView() {
     for (const list of map.values()) list.sort(byDue)
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
   }, [visible, today, groupBy, folderOf])
-  const doneTasks = useMemo(() => visible.filter((t) => t.done), [visible])
+  // Only due-date grouping shows a Done section; the others fold finished work into its own band.
+  const doneTasks = useMemo(() => (groupBy === 'due' ? visible.filter((t) => t.done) : []), [visible, groupBy])
   /** How many are in each band, so the header's pill can say it. */
   const bandCounts = useMemo(() => {
     const m = new Map<string, number>(groups.map(([label, list]) => [label, list.length]))
