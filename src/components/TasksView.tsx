@@ -141,6 +141,17 @@ function LateMark() {
   return <span className="task-due-mark" aria-hidden="true" />
 }
 
+/** The arrow that says this chip is a door. It rides with the chip's box, on hover: at rest the
+ *  campaign is just a label, and a mark on every row saying "clickable" is a mark nobody reads. The
+ *  same ↗ the detail drawer uses for "Open in flow", so the two mean one thing. */
+function OpenMark() {
+  return (
+    <svg className="task-chip-go" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+      <path d="M4 8L8 4M8 4H4.8M8 4v3.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 // A small tinted-initial avatar used for both the Record and Assigned-to chips.
 function Avatar({ name, tint }: { name: string; tint?: string }) {
   const ch = (name.trim()[0] ?? '?').toUpperCase()
@@ -596,6 +607,7 @@ export function TasksView() {
         {t.campaign ? (
           <button className="task-chip task-chip-set" onClick={() => openFlow(t.campaign!, 'flow')} title={`Open ${shortCampaign(t.campaign)}`}>
             <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
+            <OpenMark />
           </button>
         ) : (
           <span className="task-chip empty"><span className="task-chip-name muted">—</span></span>
@@ -661,6 +673,7 @@ export function TasksView() {
           <span className="task-chip task-chip-set">
             <button className="task-chip-open" onClick={() => openFlow(t.campaign!, 'flow')} title={`Open ${shortCampaign(t.campaign)}`}>
               <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
+              <OpenMark />
             </button>
             <button className="task-chip-edit" onClick={() => setPickCamp(t.id)} title="Change campaign" aria-label="Change campaign">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

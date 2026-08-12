@@ -19778,16 +19778,28 @@ textarea.library-input {
   width: 100%;
   color-scheme: light dark;
 }
+ /* The chip's box appears on HOVER. At rest a name is a name — thirty rows each carrying two
+    bordered boxes made the table read as a grid of controls rather than a list of work, and the
+    box was announcing "editable" on every row at once when only the row under the cursor can be.
+    The padding and border stay in place at rest, transparent, so nothing shifts when they show. */
 .task-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 100%;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 7px;
   padding: 2px 8px 2px 4px;
+  transition: background 90ms ease, border-color 90ms ease;
 }
+.task-row:hover .task-chip,
+.task-chip:focus-within {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+ /* Nothing there to put a box around. */
+.task-row:hover .task-chip.empty,
 .task-chip.empty {
   background: none;
   border-color: transparent;
@@ -19823,6 +19835,23 @@ textarea.library-input {
 .task-chip-btn.empty:hover {
   border-color: var(--border);
   background: var(--surface);
+}
+ /* Shows with the chip's box, not before it: the arrow and the border are the same message, so
+    they arrive together. Width is held at rest so the name does not shuffle when it appears. */
+.task-chip-go {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  opacity: 0;
+  color: var(--text-faint);
+  transition: opacity 90ms ease;
+}
+.task-row:hover .task-chip-go {
+  opacity: 1;
+}
+.task-chip-set:hover .task-chip-go,
+.task-chip-open:hover .task-chip-go {
+  color: var(--accent);
 }
 /* A linked record: name click-through + a caret to change it. */
 .task-chip-set {
