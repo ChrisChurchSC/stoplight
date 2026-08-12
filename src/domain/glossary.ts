@@ -37,6 +37,19 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       'The board is the campaign. The cards you wire into its brief are what every asset it makes gets written from, and the assets are what it ships on its channels. The same campaign reads three ways: the flow, the grid, and the calendar.',
     seeAlso: ['brand', 'flight', 'folder', 'objective'],
   },
+  task: {
+    term: 'Task',
+    /**
+     * LEADS WITH WHERE TASKS COME FROM, because the surprising half is that most of them are not
+     * typed by anyone. Someone opening this tooltip is looking at thirty rows they did not create
+     * and wondering what they are.
+     */
+    short:
+      'A piece of work with a date and an owner. Most arrive on their own: every asset a campaign builds is a task here, due when it is scheduled. The rest you add yourself.',
+    more:
+      'An asset-task is the asset — its name and date come from the flow, and ticking it off marks the asset done without changing what it says. A hand-made task is anything else the work needs: book the photographer, chase the approval. Both can be assigned, and both can hang off a campaign.',
+    seeAlso: ['campaign', 'channel', 'folder'],
+  },
   flight: {
     term: 'Flight',
     short:

@@ -10,6 +10,7 @@ import { useAssetTasks } from '../lib/assetTasks'
 import { assignTints, loadTintStore, renameTint, ASSIGNEE_TINT_KEY } from '../lib/assigneeTint'
 import { CHANNELS } from '../domain/channels'
 import { ChannelIcon } from './ChannelIcon'
+import { InfoTip } from './InfoTip'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 
 /**
@@ -678,14 +679,16 @@ export function TasksView() {
   return (
     <>
     <div className="mtx tasks-view">
-      {/* One band, not three. Title, filters and the action shared a page that put title, filters
-          and column heads on separate rows — a hundred-odd pixels of chrome before the first task.
-          The action stays pinned to the far right of the row rather than sitting among the filters,
-          where a primary action reads as a fifth thing to filter by. */}
-      <header className="mtx-head tasks-head">
-        <div className="tasks-head-title">
-          <h2>Tasks</h2>
-          <span className="mtx-sub">
+      {/* Built to the Campaigns page's header, because they are the same kind of page and were
+          wearing different clothes: title at 24/800 with its glossary tip inline, the count on its
+          own line beneath at 13px, actions across the row. */}
+      <header className="tasks-head">
+        <div>
+          <h1 className="tasks-title">
+            Tasks
+            <InfoTip term="task" />
+          </h1>
+          <p className="tasks-sub">
             {/* When a filter is on, the count has to be the count of what is ON SCREEN — it read
                 "31 open" over a single row, and over no rows at all, which makes it a number about
                 nothing you can see. The whole is still worth saying, as the thing being sliced. */}
@@ -694,8 +697,12 @@ export function TasksView() {
               : openCount > 0
                 ? `${openCount} open${brand ? ` · ${brand}` : ''}`
                 : `A running to-do list for ${brand || 'this workspace'}`}
-          </span>
+          </p>
         </div>
+        <button className="tasks-new" onClick={addTask}>
+          ＋ New task
+        </button>
+      </header>
 
       <div className="tasks-toolbar">
         {/* Assignee: filters the list, and is also where a name gets corrected or cleared —
@@ -861,11 +868,6 @@ export function TasksView() {
           </button>
         )}
       </div>
-
-        <button className="tasks-new" onClick={addTask}>
-          ＋ New task
-        </button>
-      </header>
 
       <div className="task-grid task-colhead">
         {/* No label: every row is a task, so "Task" named the table rather than the column, and it

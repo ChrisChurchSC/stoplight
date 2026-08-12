@@ -382,7 +382,7 @@ describe('TasksView', () => {
     useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
     localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan' }))
     act(() => root.render(<TasksView />))
-    expect(host.querySelector('.mtx-sub')?.textContent).toContain('1 open')
+    expect(host.querySelector('.tasks-sub')?.textContent).toContain('1 open')
 
     // Filter to somebody with nothing.
     act(() => host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
@@ -397,7 +397,7 @@ describe('TasksView', () => {
       'Nothing matches these filters',
     )
     // The count is about what you can see, with the whole named as the thing being sliced.
-    expect(host.querySelector('.mtx-sub')?.textContent).toContain('0 of 1 open')
+    expect(host.querySelector('.tasks-sub')?.textContent).toContain('0 of 1 open')
   })
 
   /**
