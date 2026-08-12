@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { TasksView } from '../TasksView'
@@ -736,5 +736,77 @@ describe('TasksView', () => {
     // Campaigns alphabetically, with whatever has no campaign last rather than sorted among them.
     // Each heading drops its own brand prefix, so an unscoped list is not "Acme — Acme Fall Launch".
     expect(bandsOnScreen()).toEqual(['Fall Launch', 'Spring Push', 'No campaign'])
+  })
+
+  /**
+   * THE WHOLE ROW OPENS THE TASK, AND THE CONTROLS ON IT STILL DO THEIR OWN JOB.
+   *
+   * These two are one feature. A row-level click handler sits under every control the row carries,
+   * so the same gesture that ticks a task off also reaches the row — and the panel opening on top
+   * of the thing you just checked is worse than the small target it replaced. What keeps them apart
+   * is a test on the event's target, and nothing about that test is visible in a type or a build:
+   * drop it and both halves still compile, still render, and quietly do two things at once.
+   *
+   * So the guard is checked from both sides. Inert text opens the panel; the checkbox, the campaign
+   * chip and the assignee field are asked to leave it shut.
+   */
+  const drawer = () => host.querySelector('.task-drawer')
+  const clickOn = (el: Element) =>
+    act(() => {
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+  it('opens the task from anywhere on the row that is not a control', () => {
+    act(() => root.render(<TasksView />))
+    expect(drawer()).toBeNull()
+
+    // The folder cell is plain text — the kind of place a click used to land on nothing.
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+
+    expect(drawer(), 'the row opened the panel').toBeTruthy()
+    expect(drawer()!.textContent).toContain('Teaser post')
+  })
+
+  it('leaves the panel shut when the click was for a control on the row', () => {
+    localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: CAMPAIGN })]))
+    act(() => root.render(<TasksView />))
+    const rowEl = rowNamed('Book the photographer')!
+
+    clickOn(rowEl.querySelector('.task-check')!)
+    // Re-queried, not reused: ticking it moves the row into the Done band, so the node captured
+    // before the click is a stale one that keeps its old classes forever.
+    expect(rowNamed('Book the photographer')!.className, 'the checkbox still ticked').toContain('done')
+    expect(drawer(), 'ticking a task off is not asking to read it').toBeNull()
+
+    // The chip itself, not one of the two buttons inside it — a linked campaign draws it as a span,
+    // and the padding around those buttons is the part that used to fall through to the row.
+    clickOn(cellUnder(rowNamed('Book the photographer')!, 'Campaign').querySelector('.task-chip')!)
+    expect(drawer(), 'the campaign chip goes to the flow, not the panel').toBeNull()
+
+    // The assignee field is an input; a click into it is the start of typing, not a request to open.
+    clickOn(cellUnder(rowNamed('Book the photographer')!, 'Assigned to').querySelector('input')!)
+    expect(drawer()).toBeNull()
+  })
+
+  it('holds the panel on screen while it slides out', () => {
+    // The exit animation has something to animate only while the panel is still mounted. Unmounting
+    // on the click is why it used to vanish rather than leave, and is what this is here to stop:
+    // it is invisible to every other test, since they all only ever see it open or absent.
+    vi.useFakeTimers()
+    try {
+      act(() => root.render(<TasksView />))
+      clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+      expect(drawer()).toBeTruthy()
+
+      clickOn(host.querySelector('.task-drawer-scrim')!)
+
+      expect(drawer(), 'still mounted, on its way out').toBeTruthy()
+      expect(drawer()!.className, 'and playing the exit, not the entrance').toContain('closing')
+
+      act(() => void vi.advanceTimersByTime(400))
+      expect(drawer(), 'gone once the motion is over').toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

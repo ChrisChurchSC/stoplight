@@ -130,6 +130,9 @@ const CUSTOM_TASKS = '\u0000custom'
 /** A campaign-filter value that means "everything filed here", not one campaign. Prefixed because a
  *  folder path and a campaign name are different namespaces that would otherwise be indistinguishable. */
 const FOLDER_PREFIX = '\u0000folder:'
+
+/** Kept in step with the .task-drawer animation in index.css — see closeDrawer. */
+const DRAWER_MS = 190
 const CUSTOM_TASKS_LABEL = 'Custom tasks'
 
 /** The one mark on the row, and only on an overdue date. Colour alone cannot carry "late" — it
@@ -193,7 +196,7 @@ function useMenuNav(open: boolean, close: () => void) {
 function OpenMark() {
   return (
     <svg className="task-chip-go" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-      <path d="M4 8L8 4M8 4H4.8M8 4v3.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.8 8.2L8.2 3.8M8.2 3.8H4.6M8.2 3.8v3.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -346,6 +349,38 @@ export function TasksView() {
   const [editDue, setEditDue] = useState<string | null>(null)
   const [pickCamp, setPickCamp] = useState<string | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  /**
+   * The drawer stays mounted while it slides out. Unmounting on click is why it used to vanish
+   * rather than leave — an exit animation needs the thing to still be there to animate.
+   *
+   * DRAWER_MS must match the CSS duration; shorter and it disappears mid-slide, longer and it hangs
+   * on screen after the motion has finished. Under prefers-reduced-motion the animation is off and
+   * this is simply how long the unmount waits, which is not long enough to notice.
+   */
+  const [drawerClosing, setDrawerClosing] = useState(false)
+  const closeDrawer = () => {
+    setDrawerClosing(true)
+    setTimeout(() => {
+      setOpenTaskId(null)
+      setDrawerClosing(false)
+    }, DRAWER_MS)
+  }
+
+  /**
+   * The whole row opens the task, not just its name — a row of mostly-inert text where one word was
+   * the target. Anything that is itself a control keeps its own click: the checkbox, the campaign
+   * chip that opens a flow, the assignee field, the date, and the actions beside them. Without that
+   * test, ticking something off would also open the panel for it.
+   *
+   * `.task-chip` is in the list because a linked campaign draws the chip as a SPAN around two
+   * buttons, so the gap between them is not itself a control — aim at the campaign, miss by two
+   * pixels, and get the task panel instead of the flow. Guarding the container covers the padding
+   * as well as the buttons.
+   */
+  const openFromRow = (id: string) => (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a, .task-chip, [role="menu"], [role="listbox"]')) return
+    setOpenTaskId(id)
+  }
   const [groupBy, setGroupBy] = useState<GroupBy>('due')
   const [filterWho, setFilterWho] = useState('')
   const [filterCampaign, setFilterCampaign] = useState('')
@@ -673,7 +708,7 @@ export function TasksView() {
   // A derived asset-task: read-mostly. Check toggles per-asset done; the name and the flow chip
   // both open the asset's flow. No company / assignee / delete (those belong to manual tasks).
   const assetRow = (t: Task, band = '') => (
-    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band}>
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band} onClick={openFromRow(t.id)}>
       <div className="task-cell task-cell-name">
         <button
           className={`task-check${t.done ? ' on' : ''}`}
@@ -729,7 +764,7 @@ export function TasksView() {
   )
 
   const row = (t: Task, band = '') => (
-    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band}>
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band} onClick={openFromRow(t.id)}>
       <div className="task-cell task-cell-name">
         <button
           className={`task-check${t.done ? ' on' : ''}`}
@@ -1160,15 +1195,15 @@ export function TasksView() {
 
     {openTask && (
       <>
-        <div onClick={() => setOpenTaskId(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,24,40,.28)' }} />
+        <div className={`task-drawer-scrim${drawerClosing ? ' closing' : ''}`} onClick={closeDrawer} />
         {openTask.derived ? (
-          <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+          <aside className={`task-drawer${drawerClosing ? ' closing' : ''}`} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
             <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
               <button className={`task-check${openTask.done ? ' on' : ''}`} onClick={() => toggleAssetDone(openTask.rowId!)} aria-label={openTask.done ? 'Mark not done' : 'Mark done'} style={{ flex: '0 0 auto' }}>
                 {openTask.done && (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 6" /></svg>)}
               </button>
               <span style={{ flex: 1, fontSize: 12, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{openTask.done ? 'Completed asset' : 'Asset task'}</span>
-              <button onClick={() => setOpenTaskId(null)} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
+              <button onClick={closeDrawer} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
             </header>
             <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{openTask.text || 'Untitled asset'}</div>
@@ -1186,13 +1221,13 @@ export function TasksView() {
               </div>
               <div style={fieldRow}>
                 <span style={fieldLabel} />
-                <button onClick={() => { openFlow(openTask.campaign ?? '', 'grid'); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open in flow ↗</button>
+                <button onClick={() => { openFlow(openTask.campaign ?? '', 'grid'); closeDrawer() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open in flow ↗</button>
               </div>
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>This task is a built asset from a flow. Edit its content in the flow.</div>
             </div>
           </aside>
         ) : (
-        <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        <aside className={`task-drawer${drawerClosing ? ' closing' : ''}`} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
           <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
             <button className={`task-check${openTask.done ? ' on' : ''}`} onClick={() => patch(openTask.id, { done: !openTask.done })} aria-label={openTask.done ? 'Mark not done' : 'Mark done'} style={{ flex: '0 0 auto' }}>
               {openTask.done && (
@@ -1200,8 +1235,8 @@ export function TasksView() {
               )}
             </button>
             <span style={{ flex: 1, fontSize: 12, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{openTask.done ? 'Completed task' : 'Task'}</span>
-            <button onClick={() => { remove(openTask.id); setOpenTaskId(null) }} title="Delete task" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: 13 }}>Delete</button>
-            <button onClick={() => setOpenTaskId(null)} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
+            <button onClick={() => { remove(openTask.id); closeDrawer() }} title="Delete task" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: 13 }}>Delete</button>
+            <button onClick={closeDrawer} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
           </header>
 
           <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1232,7 +1267,7 @@ export function TasksView() {
             {openTask.campaign && (
               <div style={fieldRow}>
                 <span style={fieldLabel} />
-                <button onClick={() => { openFlow(openTask.campaign!, 'flow'); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {shortCampaign(openTask.campaign)} ↗</button>
+                <button onClick={() => { openFlow(openTask.campaign!, 'flow'); closeDrawer() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {shortCampaign(openTask.campaign)} ↗</button>
               </div>
             )}
 
@@ -1247,7 +1282,7 @@ export function TasksView() {
             {openTask.record?.id && (
               <div style={fieldRow}>
                 <span style={fieldLabel} />
-                <button onClick={() => { openCompany(openTask.record!.id); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {openTask.record.name} ↗</button>
+                <button onClick={() => { openCompany(openTask.record!.id); closeDrawer() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {openTask.record.name} ↗</button>
               </div>
             )}
 
