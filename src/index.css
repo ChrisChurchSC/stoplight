@@ -19214,7 +19214,34 @@ textarea.library-input {
     two pages' content lands on the same edge. .mtx is not touched, because Reports and Priorities
     share it and neither sits in the same container. */
 .tasks-view {
-  padding: 6px 6px 20px;
+  /* No padding-top: it belongs to the sticky block, so that block's natural and stuck positions
+     are the same and the title does not hop as it catches. */
+  padding: 0 6px 20px;
+  /* Full width. The 1180px cap on .mtx made the table stop well short of where the Campaigns page
+     ends, and on a wide monitor the columns had room they were not using. .mtx keeps its cap —
+     Reports and Priorities share it and are not tables. */
+  max-width: none;
+}
+/* Title, filters and column heads hold still while the rows scroll under them. Sticky sticks to the
+   SCROLLPORT's top edge, which is above .home-main-scroll's 22px of padding — so the block pulls
+   itself up by the full inset and pays it back as its own padding. Without that the header snaps
+   flush to the tab bar the moment you scroll. Horizontally the same trick widens the background
+   past the page's padding, so rows passing underneath do not show at the edges. */
+.tasks-sticky {
+  position: sticky;
+  /* -22px, not 0. Sticky anchors to the scroll container's PADDING box, so top:0 parks the block
+     22px below the visible edge — .home-main-scroll's padding-top — and rows scroll up through the
+     band above it in full view. The offset and the negative margin are the same 22px so the block
+     sits in exactly one place whether stuck or not, which is what stops the title jumping as it
+     catches. */
+  top: -22px;
+  z-index: 6;
+  background: var(--bg);
+  /* Pulled up by the container's padding so its top edge lands on the visible edge, then paying the
+     whole inset back as padding — 44px, which is where the title sits unscrolled. Same box in both
+     states, so nothing moves at the moment it catches. */
+  margin: -22px -34px 0;
+  padding: 44px 34px 0;
 }
  /* Matched to the Campaigns page (.flow-home-head / -title / -sub). Two pages of the same kind
     were wearing different type: this one had a smaller title with its count inline beside it, so
@@ -19227,6 +19254,9 @@ textarea.library-input {
   margin-bottom: 12px;
 }
 .tasks-title {
+  /* h1's default 0.67em margin pushed the title 16px below its own header box. The Campaigns page
+     does not carry it, so the two titles sat on different lines despite identical containers. */
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 6px;

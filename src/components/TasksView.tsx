@@ -682,6 +682,11 @@ export function TasksView() {
       {/* Built to the Campaigns page's header, because they are the same kind of page and were
           wearing different clothes: title at 24/800 with its glossary tip inline, the count on its
           own line beneath at 13px, actions across the row. */}
+      {/* Everything down to the rule under the column heads holds still while the rows scroll: on a
+          board of thirty-odd tasks the column names and the filters that produced them were the
+          first things to leave the screen, which is exactly when you need to know what you are
+          reading and what is being hidden. */}
+      <div className="tasks-sticky">
       <header className="tasks-head">
         <div>
           <h1 className="tasks-title">
@@ -877,6 +882,7 @@ export function TasksView() {
         <ColHead label="Folder" col="folder" />
         <ColHead label="Campaign" col="campaign" className="task-cell-campaign" />
         <ColHead label="Assigned to" col="assignee" />
+      </div>
       </div>
 
       {allTasks.length === 0 ? (
