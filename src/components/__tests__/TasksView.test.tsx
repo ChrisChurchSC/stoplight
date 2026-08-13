@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { TasksView } from '../TasksView'
@@ -556,6 +556,85 @@ describe('TasksView', () => {
     expect(bandsOnScreen()).toContain('Done')
   })
 
+  /**
+   * THE MENUS WERE MOUSE-ONLY. Every item is a <button>, so Tab reached them — but Tab walks the
+   * whole page, and nothing told a screen reader a menu had opened at all. None of this shows in a
+   * screenshot, which is exactly why it went unnoticed through a dozen passes over this page.
+   */
+  it('says a filter menu has opened, and closes it on Escape', () => {
+    act(() => root.render(<TasksView />))
+    const btn = filterBtn('who')
+    expect(btn.getAttribute('aria-haspopup'), 'announced as a menu').toBe('menu')
+    expect(btn.getAttribute('aria-expanded'), 'and as shut').toBe('false')
+
+    act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(filterBtn('who').getAttribute('aria-expanded')).toBe('true')
+
+    const menu = host.querySelector<HTMLElement>('.tasks-filter-menu')!
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+
+    expect(host.querySelector('.tasks-filter-menu'), 'Escape shuts it').toBeFalsy()
+    expect(filterBtn('who').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('moves through a menu on the arrow keys', () => {
+    act(() => root.render(<TasksView />))
+    act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    const menu = host.querySelector<HTMLElement>('.tasks-filter-menu')!
+    const items = [...menu.querySelectorAll<HTMLElement>('button')]
+    expect(items.length).toBeGreaterThan(1)
+
+    // Opens on the current choice — "Everyone", which is where the filter is.
+    expect(document.activeElement).toBe(items[0])
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    expect(document.activeElement, 'down moves on').toBe(items[1])
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })))
+    expect(document.activeElement, 'and up comes back').toBe(items[0])
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })))
+    expect(document.activeElement, 'End jumps to the last').toBe(items[items.length - 1])
+  })
+
+  /**
+   * The typeahead is NOT a menu: it is a field you are still typing into, so the suggestions cannot
+   * take focus the way menu items do. The highlight moves, focus stays, and Enter takes the
+   * highlighted name — or, with nothing highlighted, exactly what was typed, which is the common
+   * case and must not be overwritten by whatever happens to be first in the list.
+   */
+  it('arrows through suggestions without leaving the field', () => {
+    useTrafficStore.setState({ rows: [row(), row({ id: 'row-2', assetName: 'Second post' })], clientFilter: BRAND })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const input = cellUnder(rowNamed('Second post')!, 'Assigned to').querySelector<HTMLInputElement>('input')!
+    // Really focused, not just sent a focus event — jsdom does not move focus for a dispatched one,
+    // and the claim being made here is about where focus actually is.
+    act(() => input.focus())
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+
+    expect(document.activeElement, 'focus never leaves the input').toBe(input)
+    expect(input.getAttribute('aria-activedescendant'), 'but something is highlighted').toBeTruthy()
+
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-2']).toBe('Ryan')
+  })
+
+  it('takes what you typed when no suggestion is highlighted', () => {
+    useTrafficStore.setState({ rows: [row(), row({ id: 'row-2', assetName: 'Second post' })], clientFilter: BRAND })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const input = cellUnder(rowNamed('Second post')!, 'Assigned to').querySelector<HTMLInputElement>('input')!
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(input, 'Rya')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    // "Ryan" is offered and NOT highlighted; Enter must take the three letters actually typed.
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-2']).toBe('Rya')
+  })
+
   it('groups by folder from its header, like the other columns', () => {
     useTrafficStore.setState({
       rows: [
@@ -657,5 +736,172 @@ describe('TasksView', () => {
     // Campaigns alphabetically, with whatever has no campaign last rather than sorted among them.
     // Each heading drops its own brand prefix, so an unscoped list is not "Acme — Acme Fall Launch".
     expect(bandsOnScreen()).toEqual(['Fall Launch', 'Spring Push', 'No campaign'])
+  })
+
+  /**
+   * THE WHOLE ROW OPENS THE TASK, AND THE CONTROLS ON IT STILL DO THEIR OWN JOB.
+   *
+   * These two are one feature. A row-level click handler sits under every control the row carries,
+   * so the same gesture that ticks a task off also reaches the row — and the panel opening on top
+   * of the thing you just checked is worse than the small target it replaced. What keeps them apart
+   * is a test on the event's target, and nothing about that test is visible in a type or a build:
+   * drop it and both halves still compile, still render, and quietly do two things at once.
+   *
+   * So the guard is checked from both sides. Inert text opens the panel; the checkbox, the campaign
+   * chip and the assignee field are asked to leave it shut.
+   */
+  const drawer = () => host.querySelector('.task-drawer')
+  /** React tracks an input's value on the node, so assigning `.value` directly is not seen. */
+  const setValue = (el: HTMLInputElement, v: string) =>
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(el, v)
+  const clickOn = (el: Element) =>
+    act(() => {
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+  it('opens the task from anywhere on the row that is not a control', () => {
+    act(() => root.render(<TasksView />))
+    expect(drawer()).toBeNull()
+
+    // The folder cell is plain text — the kind of place a click used to land on nothing.
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+
+    expect(drawer(), 'the row opened the panel').toBeTruthy()
+    expect(drawer()!.textContent).toContain('Teaser post')
+  })
+
+  it('leaves the panel shut when the click was for a control on the row', () => {
+    localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: CAMPAIGN })]))
+    act(() => root.render(<TasksView />))
+    const rowEl = rowNamed('Book the photographer')!
+
+    clickOn(rowEl.querySelector('.task-check')!)
+    // Re-queried, not reused: ticking it moves the row into the Done band, so the node captured
+    // before the click is a stale one that keeps its old classes forever.
+    expect(rowNamed('Book the photographer')!.className, 'the checkbox still ticked').toContain('done')
+    expect(drawer(), 'ticking a task off is not asking to read it').toBeNull()
+
+    // The chip itself, not one of the two buttons inside it — a linked campaign draws it as a span,
+    // and the padding around those buttons is the part that used to fall through to the row.
+    clickOn(cellUnder(rowNamed('Book the photographer')!, 'Campaign').querySelector('.task-chip')!)
+    expect(drawer(), 'the campaign chip goes to the flow, not the panel').toBeNull()
+
+    // The assignee field is an input; a click into it is the start of typing, not a request to open.
+    clickOn(cellUnder(rowNamed('Book the photographer')!, 'Assigned to').querySelector('input')!)
+    expect(drawer()).toBeNull()
+  })
+
+  it('holds the panel on screen while it slides out', () => {
+    // The exit animation has something to animate only while the panel is still mounted. Unmounting
+    // on the click is why it used to vanish rather than leave, and is what this is here to stop:
+    // it is invisible to every other test, since they all only ever see it open or absent.
+    vi.useFakeTimers()
+    try {
+      act(() => root.render(<TasksView />))
+      clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+      expect(drawer()).toBeTruthy()
+
+      clickOn(host.querySelector('.task-drawer-scrim')!)
+
+      expect(drawer(), 'still mounted, on its way out').toBeTruthy()
+      expect(drawer()!.className, 'and playing the exit, not the entrance').toContain('closing')
+
+      act(() => void vi.advanceTimersByTime(400))
+      expect(drawer(), 'gone once the motion is over').toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * THE PANEL COULD DO LESS THAN THE ROW THAT OPENED IT.
+   *
+   * It showed three read-only facts and a link out, while the row behind it could reassign the task
+   * and tick it off. Opening a task to act on it was a step backwards, and nothing failed — which is
+   * why it survived: every field rendered, none of them did anything.
+   *
+   * What is checked here is that the panel carries the facts the table carries and can write the two
+   * that matter. The date arithmetic behind rescheduling is checked in reschedulePatch.test.ts,
+   * where it can be examined without a store in the way.
+   */
+  it('carries the asset’s own status, which the task’s checkbox was standing in for', () => {
+    useTrafficStore.setState({ rows: [row({ status: 'approved' })], clientFilter: BRAND })
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+
+    // Two states, told apart. The task is open; the asset is approved. One "Status" row saying
+    // "Open" for an approved asset is what this replaced.
+    const status = drawer()!.querySelector<HTMLSelectElement>('select')!
+    expect(status.value, 'the asset’s lifecycle, not the checkbox').toBe('approved')
+    expect(drawer()!.textContent).toContain('Task status')
+    expect(drawer()!.textContent).toContain('Asset status')
+  })
+
+  it('shows the facts the table shows, so opening a row is not a step backwards', () => {
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+    const text = drawer()!.textContent ?? ''
+
+    expect(text, 'the channel it goes out on').toContain('Instagram')
+    expect(text, 'and the folder, which the table has a column for').toContain('Folder')
+    // A date you can change, not a date you can read: the panel is where you act on a task.
+    expect(drawer()!.querySelector('input[type="date"]'), 'due date is editable').toBeTruthy()
+  })
+
+  it('assigns from the panel, and the row agrees', () => {
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+
+    const field = drawer()!.querySelector<HTMLInputElement>('input:not([type="date"])')!
+    act(() => {
+      field.focus()
+      setValue(field, 'Laura')
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+
+    // The table is the check, not the panel's own field: assigning somewhere that only the panel
+    // could see would look identical here and be worth nothing.
+    // The name lives in the cell's own field, not its text — the text is the avatar and its actions.
+    const cell = cellUnder(rowNamed('Teaser post')!, 'Assigned to')
+    expect(cell.querySelector('input')!.value).toBe('Laura')
+  })
+
+  it('does not name the channel twice in the heading', () => {
+    // `text` spells the channel in front of the name for views that draw no icon; the line under
+    // the heading already says it. Together they read "Instagram · Instagram · Teaser post".
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+    const heading = drawer()!.querySelector('div')!.textContent ?? ''
+    expect(heading).not.toContain('·')
+  })
+
+  /**
+   * THE WAY OUT, AT THE FOOT OF THE PANEL. It was a 12px text link between two fields, in a panel
+   * whose job is to hand you to the flow when there is content to change.
+   *
+   * The guard is the half worth holding: a hand-made task need not belong to a campaign, and a
+   * button offering to open one that does not exist would still render, still look right, and take
+   * you nowhere. Rendering is not the test — rendering is what it does in the broken case too.
+   */
+  it('offers the flow at the foot of the panel, naming where it goes', () => {
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Teaser post')!, 'Folder'))
+
+    const cta = drawer()!.querySelector('.drawer-foot button')
+    expect(cta, 'a way out of the panel').toBeTruthy()
+    // Named, not generic: two campaigns are one click apart in this table.
+    expect(cta!.textContent).toContain('Fall Launch')
+  })
+
+  it('offers no door when the task belongs to no campaign', () => {
+    localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: '' })]))
+    act(() => root.render(<TasksView />))
+    clickOn(cellUnder(rowNamed('Book the photographer')!, 'Folder'))
+
+    expect(drawer(), 'the panel is open').toBeTruthy()
+    expect(drawer()!.querySelector('.drawer-foot'), 'and offers nowhere to go').toBeNull()
   })
 })
