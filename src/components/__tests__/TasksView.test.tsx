@@ -96,6 +96,20 @@ const headerGrouped = (label: string) =>
   [...host.querySelectorAll('.task-colhead-cell')].some(
     (c) => c.querySelector('.task-colhead-label')?.textContent === label && c.className.includes('grouped'),
   )
+/**
+ * A row's cell UNDER A NAMED COLUMN. Indexing by position meant every test broke the day a column
+ * was inserted, which is the same brittleness the grid itself has — and there it is a bug, so a
+ * test that shares it is a test that will be "fixed" by renumbering rather than read.
+ */
+const cellUnder = (rowEl: Element, label: string) => cells(rowEl)[headerLabels().indexOf(label)]
+/** A filter control by what it filters, not by where it sits. These were selected positionally —
+ *  "the first .tasks-filter-btn" — which broke the moment the row was reordered to mirror the
+ *  columns, and would break again on the next rearrangement. */
+const filterBtn = (which: 'who' | 'campaign' | 'channel') =>
+  host.querySelector<HTMLElement>(`.tasks-filter-btn[data-filter="${which}"]`)!
+/** The bands rendered, in order. The headings that used to announce them are gone — the header row
+ *  names the current one and space marks the breaks — so a group's identity lives on the group. */
+const bandsOnScreen = () => [...host.querySelectorAll<HTMLElement>('.task-group')].map((g) => g.dataset.band)
 /** The column labels, in header order. */
 const headerLabels = () =>
   cells(host.querySelector('.task-colhead')!).map((c) => c.querySelector('.task-colhead-label')?.textContent ?? c.textContent)
@@ -106,7 +120,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     // The campaign cell starts empty, and opens the picker.
-    const campaignCell = cells(rowNamed('Book the photographer')!)[2]
+    const campaignCell = cellUnder(rowNamed('Book the photographer')!, 'Campaign')
     act(() => {
       campaignCell.querySelector('.task-chip-btn')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -128,7 +142,7 @@ describe('TasksView', () => {
     // Rendering rewrites storage, so a link that survives the read/write round trip is one a
     // reload will still find.
     expect(stored().find((t) => t.id === 'task-1')?.campaign).toBe(CAMPAIGN)
-    expect(cells(rowNamed('Book the photographer')!)[2].textContent).toContain('Fall Launch')
+    expect(cellUnder(rowNamed('Book the photographer')!, 'Campaign').textContent).toContain('Fall Launch')
   })
 
   it('puts every row’s campaign under the campaign header, whatever kind of task it is', () => {
@@ -136,14 +150,16 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     const headers = headerLabels()
-    expect(headers).toEqual(['Task', 'Due date', 'Campaign', 'Assigned to'])
+    // The first column carries no label: every row is a task, so "Task" named the table rather
+    // than the column, and it was the only header here that is not a grouping control.
+    expect(headers).toEqual(['', 'Due date', 'Folder', 'Campaign', 'Assigned to'])
 
     // The derived asset-task (from the seeded row) and the manual one agree on the grid.
     const derived = rowNamed('Teaser post')!
     const manual = rowNamed('Book the photographer')!
     expect(cells(derived)).toHaveLength(headers.length)
     expect(cells(manual)).toHaveLength(headers.length)
-    expect(cells(derived)[2].textContent).toContain('Fall Launch')
+    expect(cellUnder(derived, 'Campaign').textContent).toContain('Fall Launch')
   })
 
   /**
@@ -186,7 +202,7 @@ describe('TasksView', () => {
   it('assigns an owner to an asset-task, and keeps it', () => {
     act(() => root.render(<TasksView />))
 
-    const input = cells(rowNamed('Teaser post')!)[3].querySelector('input')
+    const input = cellUnder(rowNamed('Teaser post')!, 'Assigned to').querySelector('input')
     expect(input, 'the derived row has an assignee field like any other').toBeTruthy()
 
     act(() => {
@@ -215,15 +231,13 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     // The unassigned row offers the name the workspace is already using.
-    const input = cells(rowNamed('Second post')!)[3].querySelector('input')!
+    const input = cellUnder(rowNamed('Second post')!, 'Assigned to').querySelector('input')!
     act(() => input.dispatchEvent(new FocusEvent('focusin', { bubbles: true })))
     const suggestion = [...host.querySelectorAll('.task-pick-item')].find((b) => b.textContent?.includes('Ryna'))
     expect(suggestion, 'a name in use is offered rather than retyped').toBeTruthy()
 
     // Correcting the spelling from the toolbar has to reach the asset AND the manual task.
-    act(() => {
-      host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     act(() => {
       ;[...host.querySelectorAll('.tasks-filter-act')]
         .find((b) => b.getAttribute('title')?.startsWith('Rename'))!
@@ -251,9 +265,8 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
     expect(rows()).toHaveLength(3)
 
-    const channelBtn = [...host.querySelectorAll('.tasks-filter-btn')].find((b) => b.textContent?.includes('All channels'))
-    expect(channelBtn, 'the channels on the board are offered').toBeTruthy()
-    act(() => channelBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(filterBtn('channel'), 'the kinds of work on the board are offered').toBeTruthy()
+    act(() => filterBtn('channel').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     act(() => {
       ;[...host.querySelectorAll('.task-pick-item')]
         .find((b) => b.textContent === 'Instagram')!
@@ -263,6 +276,303 @@ describe('TasksView', () => {
     expect(rowNamed('Teaser post'), 'the Instagram asset').toBeTruthy()
     expect(rowNamed('Launch page'), 'the landing page is another channel').toBeFalsy()
     expect(rowNamed('Book the photographer'), 'and a task with no channel is not on one').toBeFalsy()
+  })
+
+  /**
+   * A hand-made task is not a post and belongs to no channel, so a channel filter used to be the
+   * one question it could never answer — findable only by clearing every filter, which on a board
+   * of thirty posts is not findable. It is its own kind of work, so it has its own entry.
+   */
+  it('collects the hand-made tasks under an entry of their own', () => {
+    useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
+    localStorage.setItem(KEY, JSON.stringify([manualTask()]))
+    act(() => root.render(<TasksView />))
+
+    const open = () => {
+      act(() => filterBtn('channel').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    }
+    open()
+    const entry = [...host.querySelectorAll('.task-pick-item')].find((b) => b.textContent === 'Custom tasks')
+    expect(entry, 'the entry is offered because there is a hand-made task').toBeTruthy()
+
+    act(() => entry!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    expect(rowNamed('Book the photographer'), 'the hand-made one').toBeTruthy()
+    expect(rowNamed('Teaser post'), 'and none of the posts').toBeFalsy()
+  })
+
+  it('does not offer the entry when nothing is hand-made', () => {
+    useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
+    act(() => root.render(<TasksView />))
+
+    act(() => filterBtn('channel').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    const labels = [...host.querySelectorAll('.task-pick-item')].map((b) => b.textContent)
+    expect(labels).not.toContain('Custom tasks')
+  })
+
+  /**
+   * THE ROW'S ✕ REACHES ONE ROW. The Assignee menu has the same pair and they act on the person
+   * across every task; here they must not, because an ✕ beside a name in a cell reads as "take
+   * them off this" and quietly unassigning them from ten other tasks is not something a row should
+   * be able to do by accident.
+   */
+  it('unassigns only the row it was clicked on', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
+      clientFilter: BRAND,
+    })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan', 'row-2': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const clear = cellUnder(rowNamed('Teaser post')!, 'Assigned to').querySelector('.task-assignee-acts .tasks-filter-act:last-child')
+    expect(clear, 'the row carries the same actions as the menu').toBeTruthy()
+    act(() => clear!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })))
+
+    const stored = JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)
+    expect(stored['row-1'], 'the row that was clicked').toBeUndefined()
+    expect(stored['row-2'], 'and not the other one Ryan is on').toBe('Ryan')
+  })
+
+  /**
+   * THE MENU'S ✕ ASKS FIRST. It reaches every task the person holds, and it is one small glyph
+   * away from the row's ✕, which reaches one — the same shape doing something an order of
+   * magnitude larger. A single click is not enough authority for that.
+   */
+  it('asks before taking someone off every task, and does nothing if you decline', () => {
+    useTrafficStore.setState({
+      rows: [row(), row({ id: 'row-2', assetName: 'Second post' })],
+      clientFilter: BRAND,
+    })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan', 'row-2': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+
+    const openMenu = () => act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    const pressX = () =>
+      act(() => {
+        ;[...host.querySelectorAll('.tasks-filter-act')]
+          .find((b) => b.getAttribute('title')?.includes('every task'))!
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+    openMenu()
+    pressX()
+
+    // Armed, not done: it says what it is about to do, and how much of it.
+    expect(host.querySelector('.tasks-filter-confirm-text')?.textContent).toContain('Take Ryan off 2 tasks?')
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-1'], 'nothing yet').toBe('Ryan')
+
+    act(() => host.querySelector<HTMLElement>('.tasks-filter-confirm-no')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)['row-1'], 'declining leaves it alone').toBe('Ryan')
+
+    pressX()
+    act(() => host.querySelector<HTMLElement>('.tasks-filter-confirm-yes')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+
+    const after = JSON.parse(localStorage.getItem('stoplight.assetTaskAssignee.v1')!)
+    expect(after['row-1'], 'and confirming takes them off both').toBeUndefined()
+    expect(after['row-2']).toBeUndefined()
+  })
+
+  /**
+   * A FILTER THAT MATCHES NOTHING HAS TO SAY SO. Matching nothing is an ordinary thing for a filter
+   * to do; it rendered as column headers over a blank page, under a header still claiming
+   * thirty-one open — which is indistinguishable from the page having broken.
+   */
+  it('says so when the filters match nothing, and counts what is on screen', () => {
+    useTrafficStore.setState({ rows: [row()], clientFilter: BRAND })
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-1': 'Ryan' }))
+    act(() => root.render(<TasksView />))
+    expect(host.querySelector('.tasks-sub')?.textContent).toContain('1 open')
+
+    // Filter to somebody with nothing.
+    act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    act(() => {
+      ;[...host.querySelectorAll('.task-pick-item')]
+        .find((b) => b.textContent?.includes('Unassigned'))!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(rows(), 'nothing matches').toHaveLength(0)
+    expect(host.querySelector('.mtx-empty')?.textContent, 'and it says why rather than going blank').toContain(
+      'Nothing matches these filters',
+    )
+    // The count is about what you can see, with the whole named as the thing being sliced.
+    expect(host.querySelector('.tasks-sub')?.textContent).toContain('0 of 1 open')
+  })
+
+  /**
+   * THE FOLDER IS WHAT SAYS WHOSE WORK IT IS WHEN THE NAME DOES NOT.
+   *
+   * campaignStoredName only prefixes a campaign with a brand when it HAS one, so a campaign made
+   * without a brand keeps whatever was typed: "Rebrand Launch" filed under Arbitrum carries nothing
+   * at all saying Arbitrum, and its rows read the same as anyone's. The folder is the thing the
+   * person filing it actually chose, and the only reliable answer for those campaigns.
+   */
+  it('shows the folder a campaign is filed under, even when its name says nothing', () => {
+    const PLAIN = 'Rebrand Launch' // no brand prefix — exactly the case the name cannot answer
+    useTrafficStore.setState({
+      rows: [row({ id: 'row-p', assetName: 'Teaser post', campaign: PLAIN })],
+      campaignList: [{ name: PLAIN, client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum' }],
+      clientFilter: 'all',
+    })
+    act(() => root.render(<TasksView />))
+
+    expect(cellUnder(rowNamed('Teaser post')!, 'Campaign').textContent, 'the name alone is ambiguous').toContain(PLAIN)
+    expect(cellUnder(rowNamed('Teaser post')!, 'Folder').textContent, 'the folder resolves it').toBe('Arbitrum')
+  })
+
+  it('reads a nested folder as its whole path, and an unfiled campaign as Drafts', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-n', assetName: 'Nested post', campaign: 'Deep one' }),
+        row({ id: 'row-u', assetName: 'Unfiled post', campaign: 'Loose one' }),
+      ],
+      campaignList: [
+        { name: 'Deep one', client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum/Q3' },
+        { name: 'Loose one', client: 'Drafts', strategy: 'Current state' },
+      ],
+      clientFilter: 'all',
+    })
+    act(() => root.render(<TasksView />))
+
+    // Whole path: the top segment is usually the brand, and dropping it loses what the column is for.
+    expect(cellUnder(rowNamed('Nested post')!, 'Folder').textContent).toBe('Arbitrum / Q3')
+    expect(cellUnder(rowNamed('Unfiled post')!, 'Folder').textContent, 'the no-folder bucket has a name').toBe('Drafts')
+  })
+
+  /**
+   * THE CAMPAIGN FILTER OFFERS BOTH LEVELS. A flat list of campaigns stops being scannable at five
+   * or six per client; folders alone would drop single-campaign filtering, which gets MORE useful
+   * as the count grows. Picking a folder takes everything filed under it, picking a campaign takes
+   * one, and the two are different namespaces — hence the prefix on the folder's value.
+   */
+  it('filters by a whole folder, or by one campaign inside it', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-a', assetName: 'A post', campaign: 'One' }),
+        row({ id: 'row-b', assetName: 'B post', campaign: 'Two' }),
+        row({ id: 'row-c', assetName: 'C post', campaign: 'Three' }),
+      ],
+      campaignList: [
+        { name: 'One', client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum' },
+        { name: 'Two', client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum' },
+        { name: 'Three', client: 'Drafts', strategy: 'Current state', folder: 'Oxyle' },
+      ],
+      clientFilter: 'all',
+    })
+    act(() => root.render(<TasksView />))
+
+    const openMenu = () =>
+      act(() => filterBtn('campaign').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    const click = (sel: string, text: string) =>
+      act(() =>
+        [...host.querySelectorAll(sel)]
+          .find((b) => b.textContent?.includes(text))!
+          .dispatchEvent(new MouseEvent('click', { bubbles: true })),
+      )
+
+    // The folder row takes everything filed under it.
+    openMenu()
+    click('.tasks-filter-folder', 'Arbitrum')
+    expect(rows()).toHaveLength(2)
+    expect(rowNamed('C post'), 'the other folder stays out').toBeFalsy()
+
+    // And the pill says the folder's name — the filter value carries a sentinel prefix, which read
+    // straight through onto the button because only its leading NUL was invisible.
+    const pill = [...host.querySelectorAll('.tasks-filter-btn')].map((b) => b.textContent ?? '')
+    expect(pill.some((t) => t.includes('Arbitrum')), 'the pill names the folder').toBe(true)
+    expect(pill.some((t) => t.includes('folder:')), 'and not the sentinel').toBe(false)
+
+    // A campaign inside it takes just that one.
+    openMenu()
+    click('.tasks-filter-sub', 'Two')
+    expect(rows()).toHaveLength(1)
+    expect(rowNamed('B post')).toBeTruthy()
+  })
+
+  /**
+   * The column-header row names the band the top of the list is in, and the scroll handler finds it
+   * by reading `data-band` off each heading. That attribute is the whole contract between the two —
+   * drop it and the label silently stays blank forever, with nothing else to notice.
+   *
+   * The scrolling itself is not driven here: jsdom lays nothing out, so every getBoundingClientRect
+   * is zero and "which heading has passed under the header" has no meaning. What is checkable is
+   * that the pieces the handler needs exist and agree.
+   */
+  it('labels every row with its band, which is what the header row reads', () => {
+    act(() => root.render(<TasksView />))
+
+    // The header cell is always present; what fills it is decided by layout, and jsdom lays nothing
+    // out — every rect is zero, so "which row is under the header" has no meaning here. What is
+    // checkable is the contract the scroll handler depends on: rows say which band they are in.
+    expect(host.querySelector('.task-colhead .task-cell-name'), 'the header cell exists to hold it').toBeTruthy()
+
+    const rows = [...host.querySelectorAll<HTMLElement>('.task-row')]
+    expect(rows.length).toBeGreaterThan(0)
+    for (const r of rows) {
+      expect(r.dataset.band, `row "${r.textContent?.trim().slice(0, 24)}" carries its band`).toBeTruthy()
+    }
+    // And every band a row claims is one the page actually groups by.
+    expect(new Set(rows.map((r) => r.dataset.band))).toEqual(new Set(bandsOnScreen()))
+  })
+
+  /**
+   * A PERSON'S FINISHED WORK BELONGS TO THAT PERSON. Grouped by assignee, campaign or folder, the
+   * band is a container — pulling its done tasks into one pile at the foot of the page answers
+   * "what is finished across the whole workspace", which is not the question you have while looking
+   * at one person's list. Grouped by DUE DATE the pile is right: a finished task has no live bucket,
+   * because Overdue and Upcoming are about work that still has to happen.
+   */
+  it('sinks a person’s finished tasks to the bottom of their own band, not a Done pile', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-open', assetName: 'Still to do' }),
+        row({ id: 'row-done', assetName: 'Already shipped', status: 'posted' }),
+        row({ id: 'row-other', assetName: 'Nobody’s job' }),
+      ],
+      clientFilter: BRAND,
+    })
+    // Both of Chris's, one of them finished (a posted asset reads as done).
+    localStorage.setItem('stoplight.assetTaskAssignee.v1', JSON.stringify({ 'row-open': 'Chris', 'row-done': 'Chris' }))
+    act(() => root.render(<TasksView />))
+
+    groupByColumn('Assigned to')
+
+    expect(bandsOnScreen(), 'no Done band of its own').toEqual(['Chris', 'Unassigned'])
+
+    const chris = [...host.querySelectorAll<HTMLElement>('.task-group')].find((g) => g.dataset.band === 'Chris')!
+    const names = [...chris.querySelectorAll('.task-name-open')].map((n) => n.textContent)
+    expect(names, 'finished one sits under the live one, inside Chris').toEqual(['Still to do', 'Already shipped'])
+  })
+
+  it('keeps the Done section when the grouping is by due date', () => {
+    useTrafficStore.setState({
+      rows: [row({ id: 'row-open', assetName: 'Still to do' }), row({ id: 'row-done', assetName: 'Already shipped', status: 'posted' })],
+      clientFilter: BRAND,
+    })
+    act(() => root.render(<TasksView />))
+
+    // A finished task has no live due bucket, so grouped by date it needs a place of its own.
+    expect(bandsOnScreen()).toContain('Done')
+  })
+
+  it('groups by folder from its header, like the other columns', () => {
+    useTrafficStore.setState({
+      rows: [
+        row({ id: 'row-a', assetName: 'A post', campaign: 'One' }),
+        row({ id: 'row-b', assetName: 'B post', campaign: 'Two' }),
+      ],
+      campaignList: [
+        { name: 'One', client: 'Drafts', strategy: 'Current state', folder: 'Arbitrum' },
+        { name: 'Two', client: 'Drafts', strategy: 'Current state', folder: 'Oxyle' },
+      ],
+      clientFilter: 'all',
+    })
+    act(() => root.render(<TasksView />))
+
+    groupByColumn('Folder')
+    expect(headerGrouped('Folder')).toBe(true)
+    expect(bandsOnScreen()).toEqual(['Arbitrum', 'Oxyle'])
   })
 
   it('gives two owners two colours, where the shared hash gave them one', () => {
@@ -275,7 +585,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
 
     const tintOf = (name: string) =>
-      cells(rowNamed(name)!)[3].querySelector<HTMLElement>('.task-avatar')!.style.background
+      cellUnder(rowNamed(name)!, 'Assigned to').querySelector<HTMLElement>('.task-avatar')!.style.background
     expect(tintOf('Teaser post')).toBeTruthy()
     expect(tintOf('Teaser post'), 'Laura and Ryan are told apart').not.toBe(tintOf('Second post'))
   })
@@ -289,9 +599,7 @@ describe('TasksView', () => {
     act(() => root.render(<TasksView />))
     expect(rows()).toHaveLength(2)
 
-    act(() => {
-      host.querySelector<HTMLElement>('.tasks-filter-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    act(() => filterBtn('who').dispatchEvent(new MouseEvent('click', { bubbles: true })))
     act(() => {
       host.querySelector<HTMLElement>('.tasks-filter-pick')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -300,7 +608,15 @@ describe('TasksView', () => {
     expect(rowNamed('Teaser post'), 'the one assigned to them').toBeTruthy()
   })
 
-  it('does not say the channel twice when the asset already names it', () => {
+  /**
+   * THE CHANNEL IS A MARK, NOT A WORD, in the table. Spelled out it half-repeated the asset's own
+   * name — "LinkedIn post · LinkedIn image post #1" — and rows whose names carried no channel were
+   * left looking like a different column.
+   *
+   * `text` KEEPS the spelled-out form. HomeAgenda renders it with no icon beside it, so stripping
+   * the channel there would drop the only thing saying what the asset is.
+   */
+  it('shows the channel as an icon and the asset’s own name', () => {
     useTrafficStore.setState({
       rows: [
         row({ id: 'row-lp', assetName: 'Landing page', channel: 'landing-page' }),
@@ -308,98 +624,19 @@ describe('TasksView', () => {
       ],
       clientFilter: BRAND,
     })
+    // Seeded before the only render: `tasks` is read once on mount, so a second root.render on the
+    // same root would not pick it up.
+    localStorage.setItem(KEY, JSON.stringify([manualTask()]))
     act(() => root.render(<TasksView />))
 
     const label = (t: string) => rowNamed(t)!.querySelector('.task-name-open')!.textContent
-    // "Landing page · Landing page" was the old rendering of a self-naming asset.
-    expect(label('Landing page')).toBe('Landing page')
-    // A name that does not already carry its channel still gets it.
-    expect(label('Teaser post')).toBe('Instagram · Teaser post')
-  })
+    expect(label('Teaser post'), 'the name alone, with no channel spelled in front').toBe('Teaser post')
+    expect(rowNamed('Teaser post')!.querySelector('.task-channel'), 'and the channel as a mark').toBeTruthy()
+    expect(label('Landing page'), 'including the one whose name IS its channel').toBe('Landing page')
 
-  /**
-   * LATE AND DUE-TODAY ARE NOT THE SAME NEWS. They shared one class and one red, which reads well
-   * enough under an "Overdue" heading and not at all once grouping by campaign or assignee takes
-   * those headings away — a week late and due this afternoon looked identical, and the only thing
-   * that had been telling them apart was a heading no longer on screen.
-   */
-  it('tells a late task from one due today, and counts the late ones on a group', () => {
-    const at = (offsetDays: number) => {
-      const d = new Date()
-      d.setDate(d.getDate() + offsetDays)
-      d.setHours(10, 0, 0, 0)
-      return d.toISOString()
-    }
-    useTrafficStore.setState({
-      rows: [
-        row({ id: 'row-late', assetName: 'Late post', scheduledAt: at(-3) }),
-        row({ id: 'row-today', assetName: 'Today post', scheduledAt: at(0) }),
-        row({ id: 'row-later', assetName: 'Later post', scheduledAt: at(9) }),
-      ],
-      clientFilter: BRAND,
-    })
-    act(() => root.render(<TasksView />))
-
-    const due = (name: string) => cells(rowNamed(name)!)[1].querySelector('.task-due-text')!.className
-    expect(due('Late post')).toContain('late')
-    expect(due('Today post')).toContain('soon')
-    expect(due('Today post'), 'due today is not dressed as overdue').not.toContain('late')
-    expect(due('Later post')).not.toMatch(/late|soon/)
-
-    // Grouped by campaign the buckets are gone, so the group itself has to report what has slipped.
-    groupByColumn('Campaign')
-    expect(host.querySelector('.task-group-late')?.textContent).toBe('1 late')
-  })
-
-  /**
-   * THE TABLE KEEPS ITS SHAPE WHICHEVER HEADER IS PRESSED. The campaign column used to hide itself
-   * while it was the grouping — its chips did repeat the heading above them — but once the header
-   * became the control, a column that vanishes on click reads as breakage and takes away the only
-   * thing that would put it back.
-   *
-   * This checks the markup, which is as far as it can reach: the old hiding was a CSS rule keyed to
-   * a class on the view, and jsdom applies no stylesheet, so no assertion here would have caught
-   * it. What keeps it gone is that the class is gone too — there is nothing left in the markup that
-   * says which column is grouping, so a rule of that kind has nothing to select.
-   */
-  it('keeps every column in place whichever header is grouping', () => {
-    act(() => root.render(<TasksView />))
-    const before = headerLabels()
-
-    for (const col of ['Campaign', 'Assigned to', 'Due date']) {
-      groupByColumn(col)
-      expect(headerLabels(), `columns hold while grouped by ${col}`).toEqual(before)
-      expect(cells(rowNamed('Teaser post')!), `and the rows still match them`).toHaveLength(before.length)
-    }
-  })
-
-  /**
-   * The header IS the switch, so it has to say so and it has to turn itself off. Grouping by
-   * campaign is the case that cannot rely on the header alone: that column hides itself, taking
-   * the control with it, which is what the toolbar chip is for.
-   */
-  it('marks the header it is grouping by, and ungroups when clicked again', () => {
-    act(() => root.render(<TasksView />))
-    expect(headerGrouped('Assigned to')).toBe(false)
-
-    groupByColumn('Assigned to')
-    expect(headerGrouped('Assigned to'), 'the header shows it is the grouping').toBe(true)
-
-    groupByColumn('Assigned to')
-    expect(headerGrouped('Assigned to'), 'and clicking it again lets go').toBe(false)
-    expect(headerGrouped('Due date'), 'falling back to the default grouping').toBe(true)
-  })
-
-  it('ungroups from the campaign header, which is still there to click', () => {
-    act(() => root.render(<TasksView />))
-
-    groupByColumn('Campaign')
-    expect(headerGrouped('Campaign')).toBe(true)
-
-    // The header it was grouped by is still on screen and still the way out — no rescue control.
-    groupByColumn('Campaign')
-    expect(headerGrouped('Campaign')).toBe(false)
-    expect(headerGrouped('Due date')).toBe(true)
+    // A hand-made task is on no channel, so it carries no mark — the fixed-width slot is what keeps
+    // its name on the same left edge as the rest.
+    expect(rowNamed('Book the photographer')!.querySelector('.task-channel')).toBeFalsy()
   })
 
   it('regroups by campaign, gathering each campaign’s tasks under its own head', () => {
@@ -411,15 +648,14 @@ describe('TasksView', () => {
     localStorage.setItem(KEY, JSON.stringify([manualTask({ campaign: CAMPAIGN }), manualTask({ id: 'task-2', text: 'Unfiled errand' })]))
     act(() => root.render(<TasksView />))
 
-    const heads = () => [...host.querySelectorAll('.task-group-head')].map((h) => h.firstChild?.textContent?.trim())
-    // Every heading is a due-date bucket until the control is touched (which bucket depends on
-    // where the fixture's dates fall relative to the day the suite runs).
-    expect(heads().every((h) => ['Overdue', 'Today', 'Upcoming', 'No date'].includes(h!))).toBe(true)
+    // Every band is a due-date bucket until the control is touched (which bucket depends on where
+    // the fixture's dates fall relative to the day the suite runs).
+    expect(bandsOnScreen().every((h) => ['Overdue', 'Today', 'Upcoming', 'No date'].includes(h!))).toBe(true)
 
     groupByColumn('Campaign')
 
     // Campaigns alphabetically, with whatever has no campaign last rather than sorted among them.
     // Each heading drops its own brand prefix, so an unscoped list is not "Acme — Acme Fall Launch".
-    expect(heads()).toEqual(['Fall Launch', 'Spring Push', 'No campaign'])
+    expect(bandsOnScreen()).toEqual(['Fall Launch', 'Spring Push', 'No campaign'])
   })
 })

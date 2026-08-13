@@ -2897,8 +2897,8 @@ button.mf-open:focus-visible,
 }
 .railnav .nav-item:hover { background: var(--surface-2); }
 .railnav .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
-.railnav .nav-ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
-.railnav .nav-ico svg { width: 17px; height: 17px; }
+.railnav .nav-ico { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+.railnav .nav-ico svg { width: 18px; height: 18px; }
 /* The campaign rail carries no labels (see CampaignNav), so the icon is the whole control: it gets
    a square hit area and a couple of extra pixels, because it is now the only thing naming the
    destination on screen. */
@@ -2911,13 +2911,27 @@ button.mf-open:focus-visible,
 .railnav-back:hover { color: var(--text); }
 .railnav-sep { height: 1px; width: 22px; margin: 3px auto 4px; background: var(--border); flex: none; }
 .railnav .nav-label { flex: none; white-space: normal; }
+/* The count hangs off the ICON's corner, not the button's. Anchored to the button it grew inward
+   from the right edge and drove straight through a centred 18px glyph — 8px of overlap at two
+   digits, and worse at three, on a rail only 59px wide. There is no room to sit BESIDE the icon
+   here, so it sits deliberately ON its corner, the way a notification badge does, and a ring in the
+   rail's own colour is what keeps that reading as layered rather than collided. */
+.railnav .nav-ico { position: relative; overflow: visible; }
 .railnav .nav-count {
-  position: absolute; top: 4px; right: 10px;
-  min-width: 15px; padding: 0 4px; line-height: 15px;
-  border-radius: 7px; font-size: 9.5px; font-weight: 700; text-align: center;
+  position: absolute; top: -5px; left: 100%; margin-left: -7px;
+  min-width: 13px; padding: 0 3px; line-height: 13px;
+  border-radius: 7px; font-size: 8.5px; font-weight: 700; text-align: center;
   background: var(--surface-2); color: var(--text-muted);
+  box-shadow: 0 0 0 2px var(--bg);
 }
-.railnav .nav-count.overdue { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.railnav .nav-item.active .nav-count { box-shadow: 0 0 0 2px var(--accent-soft); }
+.railnav .nav-item:hover .nav-count { box-shadow: 0 0 0 2px var(--surface-2); }
+.railnav .nav-item.active:hover .nav-count { box-shadow: 0 0 0 2px var(--accent-soft); }
+/* Mixed into the rail's own background rather than into `transparent`. The status chips elsewhere
+   mix with transparent quite happily — they sit on flat surfaces — but this one sits ON an icon,
+   and a 16% wash let the glyph read straight through the number. Same tint, opaque. */
+.railnav .nav-count.overdue { background: color-mix(in srgb, var(--red) 16%, var(--bg)); color: var(--red); }
+.railnav .nav-item.active .nav-count.overdue { background: color-mix(in srgb, var(--red) 16%, var(--accent-soft)); }
 /* Chats section (recent saved reports) */
 .hsb-chats {
   margin-top: 8px;
@@ -19237,21 +19251,88 @@ textarea.library-input {
 }
 
 /* Tasks page — an Attio-style task list: Task / Due date / Record / Assigned to, grouped by due. */
-.tasks-head {
-  align-items: center;
+ /* Tasks sits inside .home-main-scroll, which already pads 22/28; .mtx then pads 18/22 on top, so
+    the page started 16px further right and 12px lower than Campaigns — which has no parent padding
+    and does all 28/34 itself. These numbers are the REMAINDER: 28 + 6 = 34 and 22 + 6 = 28, so the
+    two pages' content lands on the same edge. .mtx is not touched, because Reports and Priorities
+    share it and neither sits in the same container. */
+.tasks-view {
+  /* No padding-top: it belongs to the sticky block, so that block's natural and stuck positions
+     are the same and the title does not hop as it catches. */
+  padding: 0 6px 20px;
+  /* Full width. The 1180px cap on .mtx made the table stop well short of where the Campaigns page
+     ends, and on a wide monitor the columns had room they were not using. .mtx keeps its cap —
+     Reports and Priorities share it and are not tables. */
+  max-width: none;
 }
+/* Title, filters and column heads hold still while the rows scroll under them. Sticky sticks to the
+   SCROLLPORT's top edge, which is above .home-main-scroll's 22px of padding — so the block pulls
+   itself up by the full inset and pays it back as its own padding. Without that the header snaps
+   flush to the tab bar the moment you scroll. Horizontally the same trick widens the background
+   past the page's padding, so rows passing underneath do not show at the edges. */
+.tasks-sticky {
+  position: sticky;
+  /* -22px, not 0. Sticky anchors to the scroll container's PADDING box, so top:0 parks the block
+     22px below the visible edge — .home-main-scroll's padding-top — and rows scroll up through the
+     band above it in full view. The offset and the negative margin are the same 22px so the block
+     sits in exactly one place whether stuck or not, which is what stops the title jumping as it
+     catches. */
+  top: -22px;
+  z-index: 6;
+  background: var(--bg);
+  /* Pulled up by the container's padding so its top edge lands on the visible edge, then paying the
+     whole inset back as padding — 44px, which is where the title sits unscrolled. Same box in both
+     states, so nothing moves at the moment it catches. */
+  margin: -22px -34px 0;
+  padding: 44px 34px 0;
+}
+ /* Matched to the Campaigns page (.flow-home-head / -title / -sub). Two pages of the same kind
+    were wearing different type: this one had a smaller title with its count inline beside it, so
+    they did not read as siblings in the same product. */
+.tasks-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.tasks-title {
+  /* h1's default 0.67em margin pushed the title 16px below its own header box. The Campaigns page
+     does not carry it, so the two titles sat on different lines despite identical containers. */
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.tasks-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+ /* The Campaigns page's action button (.flow-home-new), to the pixel. That page's PRIMARY action —
+    "New campaign" — is an outlined button, so a filled accent one here made Tasks look like it had
+    a louder job to offer than the page it sits beside in the rail. The convention is outlined; this
+    was the outlier. */
 .tasks-new {
+  flex: none;
   margin-left: auto;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  padding: 7px 14px;
-  border-radius: 8px;
+  padding: 8px 13px;
+  border-radius: 9px;
   cursor: pointer;
   white-space: nowrap;
+}
+.tasks-new:hover {
+  border-color: var(--text-faint);
 }
 .tasks-new:hover {
   filter: brightness(0.95);
@@ -19260,9 +19341,36 @@ textarea.library-input {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 14px 0 6px;
+  /* Room under the filters before the table starts. At 6px they crowded the column heads, which
+     made the controls read as part of the table rather than as the thing acting on it. */
+  margin: 10px 0 20px;
   font-size: 12px;
   color: var(--text-muted);
+}
+.tasks-head .tasks-new {
+  flex: 0 0 auto;
+}
+/* The band the top of the list is in, riding in the column-header row. Same type as the headings
+   it echoes, so the row reads as one thing rather than a label glued onto a table head. */
+ /* Reuses .task-group-head so the two cannot drift apart — only the padding differs, because this
+    one sits inside a table head rather than standing as its own row.
+
+    The height is RESERVED, empty or not. What goes in here is decided by measuring where the
+    headings sit relative to this header's bottom edge — so if filling it changed the header's
+    height, the label would move the edge that chooses the label, and the whole table shuddered at
+    the top of the scroll. Same box always; only the text in it changes. */
+.task-band {
+  padding: 0;
+  min-height: 19px;
+}
+/* The channel mark in front of an asset's name. Fixed width so the names below it start on one
+   left edge whether or not a row has a channel — a hand-made task has none. */
+.task-channel {
+  flex: 0 0 auto;
+  width: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .tasks-toolbar-label {
   font-weight: 600;
@@ -19344,6 +19452,27 @@ textarea.library-input {
 .tasks-filter-menu {
   min-width: 240px;
 }
+/* Folder rows lead their campaigns, told apart by weight and indent rather than by a divider — the
+   list is already two kinds of thing and does not need a third.
+
+   Compounded with .task-pick-item deliberately. On its own `.tasks-filter-sub` is the same
+   specificity as `.task-pick-item`, which sets `padding: 7px 10px` four hundred lines further down
+   — so the indent silently lost to source order and both levels rendered flush. Second time today
+   a single-class rule in this file has been decided by position; a compound selector cannot be. */
+.task-pick-item.tasks-filter-folder {
+  font-weight: 650;
+  color: var(--text);
+}
+.task-pick-item.tasks-filter-folder .task-pick-name {
+  flex: 1;
+}
+.task-pick-item.tasks-filter-sub {
+  padding-left: 26px;
+  color: var(--text-muted);
+}
+.task-pick-item.tasks-filter-sub:hover {
+  color: var(--text);
+}
 /* A person row: pick to filter, then rename or clear. The actions stay quiet until hover so the
    menu still reads as a list of people rather than a row of controls. */
 .tasks-filter-person,
@@ -19366,10 +19495,16 @@ textarea.library-input {
   cursor: pointer;
   text-align: left;
 }
+ /* Same pill as the group heads' counts (.task-group-count) — it is the same fact, so it should
+    not be a different shape depending on where you read it. */
 .tasks-filter-count {
   margin-left: auto;
   font-size: 11px;
+  font-weight: 700;
   color: var(--text-faint);
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 1px 7px;
   font-variant-numeric: tabular-nums;
 }
 .tasks-filter-act {
@@ -19391,6 +19526,42 @@ textarea.library-input {
 .tasks-filter-act:hover {
   color: var(--text);
   background: var(--surface-2);
+}
+ /* The armed state of a destructive ✕ — it replaces the row it is about, so the thing being
+    confirmed stays where the click happened rather than opening over the top of it. */
+.tasks-filter-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tasks-filter-confirm-text {
+  flex: 1 1 100%;
+  font-size: 12px;
+  color: var(--text);
+}
+.tasks-filter-confirm-no,
+.tasks-filter-confirm-yes {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.tasks-filter-confirm-no:hover {
+  color: var(--text);
+}
+.tasks-filter-confirm-yes {
+  border-color: var(--due-late);
+  color: var(--due-late);
+}
+.tasks-filter-confirm-yes:hover {
+  background: var(--due-late);
+  color: #fff;
 }
 .tasks-filter-edit .task-input {
   flex: 1;
@@ -19414,9 +19585,47 @@ textarea.library-input {
 .task-assignee {
   position: relative;
 }
+/* The folder a campaign is filed under — plain text, not a chip: it is where the work lives, not
+   something to open, and a second chip beside the campaign's would read as a second link.
+   
+   The unfiled modifier is `task-folder-none`, NOT `empty`. There is a global `.empty` carrying
+   `padding: 48px 20px` for empty-state blocks (line ~721), and the other modifiers in this file
+   named `empty` escape it only by setting their own padding later in the source. Relying on that is
+   how this cell came out 123px tall and blew its whole row open. A namespaced modifier cannot
+   collide at all, whatever order the file ends up in. */
+.task-folder {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+.task-folder-none {
+  color: var(--text-faint);
+}
+/* Row actions, quiet until the row is under the cursor — the same treatment the Assignee menu
+   gives them, so they read as the same pair doing the same kind of thing at a smaller reach. */
+.task-assignee-acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.task-assignee-acts .tasks-filter-act {
+  opacity: 0;
+}
+.task-row:hover .task-assignee-acts .tasks-filter-act,
+.task-assignee-acts .tasks-filter-act:focus-visible {
+  opacity: 1;
+}
 .task-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px 210px 190px;
+  /* The task name is CAPPED and the rest share what is left. It used to be the 1fr against four
+     fixed columns, so every pixel a wider window added went to the one column that needed it least
+     — a task name and its due date drifting a third of a screen apart. */
+  grid-template-columns: minmax(0, 460px) minmax(130px, 1fr) minmax(110px, 0.8fr) minmax(160px, 1.1fr) minmax(150px, 1fr);
   align-items: center;
 }
 /* Grouped by campaign, every row's chip does repeat the heading above it. It is left alone: the
@@ -19430,19 +19639,42 @@ textarea.library-input {
   font-weight: 600;
   color: var(--text-faint);
 }
+/* "Task" lines up with the GROUP HEADINGS and the checkboxes below it, not with the task names.
+   It used to clear the checkbox column (34px) to sit over the names, which put the one header that
+   starts the row 30px right of "Overdue" — the two labels that begin each band of the page, not
+   agreeing on where the page begins. 2px because the header row is inset 4px and the group heads
+   are inset 6px from the same container; the two land on the same edge. */
 .task-colhead .task-cell-name {
-  padding-left: 34px;
+  padding-left: 2px;
+}
+ /* A wide gap AND a heading at the break. The gap is what you see first — a boundary registers
+    faster than a word — and the heading is what tells you which band is starting, which the gap
+    alone cannot: the header row only renames itself once that band reaches it, several rows after
+    you have already crossed. */
+.task-group + .task-group {
+  margin-top: 48px;
+}
+.task-group:first-child {
+  margin-top: 0;
 }
 .task-group {
   margin-top: 2px;
 }
+ /* The Campaigns page's section heading (.flow-home-group-h): uppercase, tracked, with a pill
+    count. Same job — naming a band of work — so it should not be a different shape here.
+
+    The headings themselves scroll away: the band is named in the column-header row instead (see
+    .task-band), which is already holding still and already has an unused first column. One line
+    doing both jobs beats a heading parked under a heading. */
 .task-group-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 6px 6px;
+  padding: 10px 6px 6px;
   font-size: 12px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
 }
 .task-group-head.overdue {
@@ -19460,7 +19692,7 @@ textarea.library-input {
   font-weight: 700;
   color: var(--text-faint);
   background: var(--surface-2);
-  border-radius: 5px;
+  border-radius: 999px;
   padding: 1px 7px;
 }
 .task-row {
@@ -19530,19 +19762,26 @@ textarea.library-input {
   color: var(--text-faint);
   text-decoration: line-through;
 }
+ /* Shared by both kinds of row, but only one of them is a control: a hand-made task renders this
+    as a <button> that opens the date editor, an asset-task as a <span> whose date belongs to the
+    flow and cannot be changed here. The pointer and the hover box therefore hang off the BUTTON,
+    not the class — on the class they lit up twenty-nine rows that do nothing when clicked. The
+    padding stays shared, so both forms sit on the same baseline. */
 .task-due-text {
   border: 0;
   background: none;
   font: inherit;
   font-size: 13px;
   color: var(--text-muted);
-  cursor: pointer;
   padding: 8px 4px;
   border-radius: 6px;
   text-align: left;
   width: 100%;
 }
-.task-due-text:hover {
+button.task-due-text {
+  cursor: pointer;
+}
+button.task-due-text:hover {
   background: var(--surface);
 }
 /* Due-date tones are their own tokens rather than --amber / --red, which are tuned for fills and
@@ -19591,16 +19830,28 @@ textarea.library-input {
   width: 100%;
   color-scheme: light dark;
 }
+ /* The chip's box appears on HOVER. At rest a name is a name — thirty rows each carrying two
+    bordered boxes made the table read as a grid of controls rather than a list of work, and the
+    box was announcing "editable" on every row at once when only the row under the cursor can be.
+    The padding and border stay in place at rest, transparent, so nothing shifts when they show. */
 .task-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 100%;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 7px;
   padding: 2px 8px 2px 4px;
+  transition: background 90ms ease, border-color 90ms ease;
 }
+.task-row:hover .task-chip,
+.task-chip:focus-within {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+ /* Nothing there to put a box around. */
+.task-row:hover .task-chip.empty,
 .task-chip.empty {
   background: none;
   border-color: transparent;
@@ -19636,6 +19887,23 @@ textarea.library-input {
 .task-chip-btn.empty:hover {
   border-color: var(--border);
   background: var(--surface);
+}
+ /* Shows with the chip's box, not before it: the arrow and the border are the same message, so
+    they arrive together. Width is held at rest so the name does not shuffle when it appears. */
+.task-chip-go {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  opacity: 0;
+  color: var(--text-faint);
+  transition: opacity 90ms ease;
+}
+.task-row:hover .task-chip-go {
+  opacity: 1;
+}
+.task-chip-set:hover .task-chip-go,
+.task-chip-open:hover .task-chip-go {
+  color: var(--accent);
 }
 /* A linked record: name click-through + a caret to change it. */
 .task-chip-set {

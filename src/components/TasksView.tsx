@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
+import { DRAFTS, folderSegments } from '../domain/campaignFolders'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useAssetTasks } from '../lib/assetTasks'
-import { assigneeTints } from '../lib/assigneeTint'
+import { assignTints, loadTintStore, renameTint, ASSIGNEE_TINT_KEY } from '../lib/assigneeTint'
 import { CHANNELS } from '../domain/channels'
+import { ChannelIcon } from './ChannelIcon'
+import { InfoTip } from './InfoTip'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 
 /**
@@ -55,6 +58,8 @@ interface Task {
    *  hand-made task has no channel — it is not a post, so the channel filter leaves it out. */
   rowId?: string
   channel?: string
+  /** A derived task's asset name without the channel in front — paired with the channel icon. */
+  assetName?: string
 }
 
 const KEY = 'stoplight.tasks.v1'
@@ -91,11 +96,14 @@ const bucketOf = (due: string, today: string): Bucket => {
   return 'Upcoming'
 }
 
-/** What a due date says. "Due today" rather than the date it happens to be: the row is telling you
- *  when to act, and today is the answer, not August 11th. Late keeps its date — how late matters. */
+/** What a due date says. "Today" rather than the date it happens to be: the row is telling you when
+ *  to act, and today is the answer, not August 11th. Late keeps its date — how late matters.
+ *
+ *  No "Due" in front of it. The column is called Due date; repeating the word on all thirty rows
+ *  spends the width on something the heading already said. */
 const dueText = (due: string, today: string, blank: string): string => {
   if (!due) return blank
-  return due === today ? 'Due today' : `Due ${fmtDue(due)}`
+  return due === today ? 'Today' : fmtDue(due)
 }
 
 /** How a due date reads on the row. Late and due-today used to share one class, so both came out
@@ -110,11 +118,19 @@ const dueTone = (t: { done: boolean; due: string }, today: string): string => {
 // How the list is grouped. By due date it answers "what is late and what is next"; by campaign,
 // "what is still outstanding on this piece of work" — the same tasks, cut the two ways they get
 // asked about. The heading a campaign-less task groups under.
-type GroupBy = 'due' | 'campaign' | 'assignee'
+type GroupBy = 'due' | 'campaign' | 'assignee' | 'folder'
 const NO_CAMPAIGN = 'No campaign'
 const NO_ASSIGNEE = 'Unassigned'
 /** Filter sentinel for "has nobody on it" — distinct from '' , which is the no-filter state. */
 const UNASSIGNED = '\u0000unassigned'
+/** The channel filter's entry for work that is not a post at all. A hand-made task has no channel,
+ *  and used to just fall out of a channel filter — findable by no filter, which on a board of
+ *  thirty posts means not findable. It is its own kind of work, so it gets its own answer. */
+const CUSTOM_TASKS = '\u0000custom'
+/** A campaign-filter value that means "everything filed here", not one campaign. Prefixed because a
+ *  folder path and a campaign name are different namespaces that would otherwise be indistinguishable. */
+const FOLDER_PREFIX = '\u0000folder:'
+const CUSTOM_TASKS_LABEL = 'Custom tasks'
 
 /** The one mark on the row, and only on an overdue date. Colour alone cannot carry "late" — it
  *  says nothing to a colourblind reader and nothing in a greyscale print — so the state that
@@ -123,6 +139,17 @@ const UNASSIGNED = '\u0000unassigned'
  *  Everything else stays unmarked, because a mark on every row is a mark you stop seeing. */
 function LateMark() {
   return <span className="task-due-mark" aria-hidden="true" />
+}
+
+/** The arrow that says this chip is a door. It rides with the chip's box, on hover: at rest the
+ *  campaign is just a label, and a mark on every row saying "clickable" is a mark nobody reads. The
+ *  same ↗ the detail drawer uses for "Open in flow", so the two mean one thing. */
+function OpenMark() {
+  return (
+    <svg className="task-chip-go" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+      <path d="M4 8L8 4M8 4H4.8M8 4v3.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }
 
 // A small tinted-initial avatar used for both the Record and Assigned-to chips.
@@ -144,6 +171,7 @@ function Avatar({ name, tint }: { name: string; tint?: string }) {
 function AssigneeField({ value, names, tints, onCommit }: { value: string; names: string[]; tints: Map<string, string>; onCommit: (name: string) => void }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
   // Follow the stored value when it changes underneath (a rename from the toolbar, another tab).
   useEffect(() => setDraft(value), [value])
   const q = draft.trim().toLowerCase()
@@ -157,6 +185,7 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
     <span className={`task-chip${draft ? '' : ' empty'} task-assignee`}>
       {draft && <Avatar name={draft} tint={tints.get(draft)} />}
       <input
+        ref={inputRef}
         className="task-input task-chip-input"
         value={draft}
         placeholder="Unassigned"
@@ -177,6 +206,28 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
           }
         }}
       />
+      {/* The same two actions as the Assignee menu, and deliberately NOT the same reach: there they
+          act on the person across every task, here on this one row. An ✕ beside a name in a cell
+          reads as "take them off this", and quietly unassigning them from eleven other tasks is not
+          something a row should be able to do by accident. */}
+      {draft && (
+        <span className="task-assignee-acts">
+          <button
+            className="tasks-filter-act"
+            title="Change who this is assigned to"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              inputRef.current?.focus()
+              inputRef.current?.select()
+            }}
+          >
+            ✎
+          </button>
+          <button className="tasks-filter-act" title="Unassign this task" onMouseDown={(e) => { e.preventDefault(); commit('') }}>
+            ✕
+          </button>
+        </span>
+      )}
       {open && matches.length > 0 && (
         <>
           <div className="task-pick-scrim" onClick={() => setOpen(false)} />
@@ -227,19 +278,60 @@ export function TasksView() {
   // The name currently being corrected in the Assignee menu, and the text being typed for it.
   const [editWho, setEditWho] = useState<string | null>(null)
   const [editWhoDraft, setEditWhoDraft] = useState('')
+  // The person whose ✕ has been pressed but not yet confirmed. This one reaches every task they
+  // hold, which is not something to do on a single click of a small glyph.
+  const [confirmWho, setConfirmWho] = useState<string | null>(null)
   // The brand's campaigns, for the Campaign picker. The ingested content-library backfill is not a
   // campaign you'd assign work to, so it stays out of the list.
   const campaigns = useMemo(
     () => canvases.filter((c) => (brand ? c.client === brand : true) && c.name !== CONTENT_LIBRARY_CAMPAIGN).map((c) => c.name),
     [canvases, brand],
   )
-  // The channels actually on the board, so the filter only ever offers work that exists. Hand-made
-  // tasks have no channel and are not counted here.
-  const channels = useMemo(() => {
-    const seen = new Map<string, string>()
-    for (const t of assetTasks) if (t.channel && !seen.has(t.channel)) seen.set(t.channel, CHANNELS[t.channel as keyof typeof CHANNELS]?.label ?? t.channel)
-    return [...seen.entries()].sort(([, a], [, b]) => a.localeCompare(b))
-  }, [assetTasks])
+  /**
+   * A campaign's FOLDER, which on the Campaigns page is the heading it sits under. It is resolved
+   * from the campaign rather than stored on the task, so refiling a campaign moves its tasks with
+   * it and there is one answer rather than a copy per row.
+   *
+   * This is the column that stops the table going ambiguous. A campaign made without a brand keeps
+   * the name it was typed — campaignStoredName only prefixes when there IS a brand — so "Rebrand
+   * Launch" filed under Arbitrum carries nothing at all saying Arbitrum, and the row reads the same
+   * as one belonging to anybody. The folder is what the person filing it actually chose.
+   */
+  const folderOf = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of canvases) if (c.folder) m.set(c.name, c.folder)
+    return m
+  }, [canvases])
+  // Nested folders are a path ("Arbitrum/Q3"); show it whole, because the top segment is usually
+  // the brand and dropping it would lose exactly what this column is for.
+  const folderLabel = (campaign: string) => {
+    const path = folderOf.get(campaign)
+    return path ? folderSegments(path).join(' / ') : DRAFTS
+  }
+  /**
+   * The campaign filter's contents, grouped by folder. A flat list of campaigns stops being
+   * scannable at five or six per client, and "all the Oxyle work" is the cut most days want — but
+   * folders ALONE would drop single-campaign filtering, which gets more useful as the count grows,
+   * not less. So: both, at the level you point at.
+   */
+  const campaignsByFolder = useMemo(() => {
+    const groups = new Map<string, string[]>()
+    for (const name of campaigns) {
+      const key = folderOf.get(name) ? folderSegments(folderOf.get(name)!).join(' / ') : DRAFTS
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(name)
+    }
+    // Folders alphabetically, unfiled last — the same order the rest of the page uses.
+    return [...groups.entries()].sort(([a], [b]) => (a === DRAFTS ? 1 : b === DRAFTS ? -1 : a.localeCompare(b)))
+  }, [campaigns, folderOf])
+  /** What the campaign pill reads. The filter value is a folder OR a campaign, and the folder form
+   *  carries a sentinel prefix — passing that to shortCampaign left the prefix on screen, with only
+   *  the leading NUL invisible, so the pill read "folder:Oxyle". */
+  const campaignFilterLabel = () => {
+    if (!filterCampaign) return 'All campaigns'
+    if (filterCampaign.startsWith(FOLDER_PREFIX)) return filterCampaign.slice(FOLDER_PREFIX.length)
+    return shortCampaign(filterCampaign)
+  }
   // Campaign names are stored brand-qualified ("Acme — Fall Launch"); show just the campaign part.
   // Keyed off the campaign's OWN brand rather than the selected one, so an unscoped list drops the
   // prefix too — otherwise a brand-qualified name renders as "Arbitrum — Arbitrum Campaign 1" and
@@ -285,6 +377,19 @@ export function TasksView() {
   )
   const openCount = allTasks.filter((t) => !t.done).length
 
+  // The channels actually on the board, so the filter only ever offers work that exists. Hand-made
+  // tasks have no channel and are not counted here.
+  const channels = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const t of assetTasks) if (t.channel && !seen.has(t.channel)) seen.set(t.channel, CHANNELS[t.channel as keyof typeof CHANNELS]?.label ?? t.channel)
+    const list = [...seen.entries()].sort(([, a], [, b]) => a.localeCompare(b))
+    // Hand-made tasks last, and only when there are some — the same shape as "No campaign" and
+    // "Unassigned": the named things in order, then the ones that are none of them.
+    if (brandTasks.length) list.push([CUSTOM_TASKS, CUSTOM_TASKS_LABEL])
+    return list
+  }, [assetTasks, brandTasks])
+
+
   // THE NAMES IN USE, with how many tasks each carries. There is no roster to keep: a name exists
   // because something is assigned to it, appears the moment it is first typed, and goes when the
   // last task holding it is reassigned. That is also why a rename has to rewrite every task at once
@@ -295,14 +400,92 @@ export function TasksView() {
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [allTasks])
   const knownAssignees = useMemo(() => assigneeCounts.map(([n]) => n), [assigneeCounts])
-  // One colour each, resolved over the whole set at once — see assigneeTint for why a hash cannot
-  // make that promise. assigneeCounts is already sorted, which is what keeps it stable.
-  const tints = useMemo(() => assigneeTints(knownAssignees), [knownAssignees])
+  // One colour each, decided on first sight of a name and then kept — see assigneeTint for why it
+  // is remembered rather than derived. Resolving is pure; the write happens in the effect below.
+  /**
+   * The sticky header's height, published as a CSS variable so the GROUP headings can park directly
+   * beneath it. It cannot be a constant: the header grows a "Clear filters" link, the filter pills
+   * wrap on a narrow window, and the subtitle changes length — any fixed number would leave the
+   * group heading either floating in a gap or tucked under the column names.
+   */
+  const stickyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = stickyRef.current
+    if (!el) return
+    const publish = () => el.style.setProperty('--tasks-sticky-h', `${Math.round(el.getBoundingClientRect().height)}px`)
+    publish()
+    // Measured once regardless, then watched where the browser can watch. jsdom has no
+    // ResizeObserver, and neither do a few older engines — the one-off measure is what the CSS
+    // actually needs, and the observer only keeps it true as the header reflows.
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(publish)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  /**
+   * WHICH BAND THE TOP OF THE LIST IS IN, so the column-header row can name it. The heading used to
+   * stick on its own line under the header; now it rides IN that line, in the one column that has
+   * no name of its own — the same row saying what these columns are and what stretch of the list
+   * you are looking at.
+   *
+   * Read off the headings' real positions rather than the scroll offset, because rows are not a
+   * fixed height and the groups are not a fixed size: the answer is "the last heading that has
+   * passed under the header", which is a question about the layout, not about pixels scrolled.
+   */
+  const [bandLabel, setBandLabel] = useState('')
+  useEffect(() => {
+    const scroller = stickyRef.current?.closest('.home-main-scroll')
+    const sticky = stickyRef.current
+    if (!scroller || !sticky) return
+    let queued = false
+    const measure = () => {
+      queued = false
+      // The header opens on the first band and hands over as each later heading scrolls past it.
+      // Starting from the first group rather than from nothing is what makes OVERDUE right at rest
+      // without a heading under it repeating the word.
+      const edge = sticky.getBoundingClientRect().bottom
+      let current = scroller.querySelector<HTMLElement>('.task-group')?.dataset.band ?? ''
+      // `.task-group >` matters: the band in the header wears .task-group-head too, for its type.
+      // Matching it here meant the tracker read its own output — the band sits above the edge, so
+      // it counted as a heading that had passed, blanked the label (it carries no data-band),
+      // which removed the span, which changed the header's height, which measured again. That was
+      // the shudder at the top of the scroll.
+      for (const h of scroller.querySelectorAll<HTMLElement>('.task-group > .task-group-head')) {
+        if (h.getBoundingClientRect().top <= edge + 1) current = h.dataset.band ?? ''
+        else break
+      }
+      setBandLabel(current)
+    }
+    const onScroll = () => {
+      if (queued) return
+      queued = true
+      requestAnimationFrame(measure)
+    }
+    measure()
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
+  })
+  const [tintStore, setTintStore] = useState(loadTintStore)
+  const { tints, store: nextTintStore, changed: tintsChanged } = useMemo(
+    () => assignTints(knownAssignees, tintStore),
+    [knownAssignees, tintStore],
+  )
+  useEffect(() => {
+    if (!tintsChanged) return
+    persistState(ASSIGNEE_TINT_KEY, nextTintStore)
+    setTintStore(nextTintStore)
+  }, [tintsChanged, nextTintStore])
 
   /** Rename an owner across both kinds of task at once (to '' unassigns them everywhere). */
   const renameAssignee = (from: string, to: string) => {
     setTasks((prev) => prev.map((t) => (t.assignee === from ? { ...t, assignee: to.trim() } : t)))
     renameAssetAssignee(from, to)
+    // Correcting a spelling should not recolour the person.
+    const moved = renameTint(tintStore, from, to.trim())
+    if (moved !== tintStore) {
+      persistState(ASSIGNEE_TINT_KEY, moved)
+      setTintStore(moved)
+    }
     if (filterWho === from) setFilterWho(to.trim())
   }
 
@@ -312,8 +495,11 @@ export function TasksView() {
       allTasks.filter(
         (t) =>
           (!filterWho || (filterWho === UNASSIGNED ? !t.assignee : t.assignee === filterWho)) &&
-          (!filterCampaign || (t.campaign || '') === filterCampaign) &&
-          (!filterChannel || t.channel === filterChannel),
+          (!filterCampaign ||
+            (filterCampaign.startsWith(FOLDER_PREFIX)
+              ? folderLabel(t.campaign ?? '') === filterCampaign.slice(FOLDER_PREFIX.length)
+              : (t.campaign || '') === filterCampaign)) &&
+          (!filterChannel || (filterChannel === CUSTOM_TASKS ? !t.derived : t.channel === filterChannel)),
       ),
     [allTasks, filterWho, filterCampaign, filterChannel],
   )
@@ -321,23 +507,45 @@ export function TasksView() {
   // Group the open tasks — into due-date buckets, or by the campaign or the person they belong to
   // (done tasks fall to their own section at the end whichever it is). Soonest-due first within
   // every group, so a group reads as its own running order.
+  /**
+   * Does finished work sit INSIDE its band, or in a pile of its own at the foot of the page?
+   *
+   * Read in both of the places that decide it, because they have to agree and they are forty lines
+   * apart. Fold done into the bands AND keep the pile, and every finished task appears twice; drop
+   * it from both and it vanishes from three of the four groupings. One flag means a change moves
+   * both, rather than one being edited and the other found later by a test.
+   *
+   * True for every grouping but due date: a person, a campaign and a folder are containers, and
+   * what they hold includes what is finished. Overdue and Upcoming are not containers — they are
+   * claims about work still to come, which a finished task cannot make.
+   */
+  const foldDoneIntoBands = groupBy !== 'due'
+
   const groups = useMemo(() => {
     const open = visible.filter((t) => !t.done)
     const byDue = (a: Task, b: Task) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt
+    // Finished work sinks inside its own group rather than leaving it.
+    const doneLast = (a: Task, b: Task) => Number(a.done) - Number(b.done) || byDue(a, b)
 
-    // Group on a key, alphabetically, with the "nobody / nothing" bucket last rather than sorted
-    // among the names.
+    /**
+     * Group on a key, alphabetically, with the "nobody / nothing" bucket last rather than sorted
+     * among the names.
+     *
+     * Whether the done tasks come too is foldDoneIntoBands, above — the same flag that decides
+     * whether a Done section renders, so the two cannot disagree.
+     */
     const byKey = (keyOf: (t: Task) => string, last: string) => {
       const map = new Map<string, Task[]>()
-      for (const t of open) {
+      for (const t of foldDoneIntoBands ? visible : open) {
         const key = keyOf(t)
         if (!map.has(key)) map.set(key, [])
         map.get(key)!.push(t)
       }
-      for (const list of map.values()) list.sort(byDue)
+      for (const list of map.values()) list.sort(doneLast)
       return [...map.entries()].sort(([a], [b]) => (a === last ? 1 : b === last ? -1 : a.localeCompare(b)))
     }
 
+    if (groupBy === 'folder') return byKey((t) => folderLabel(t.campaign ?? ''), DRAFTS)
     if (groupBy === 'campaign') return byKey((t) => (t.campaign ? shortCampaign(t.campaign) : NO_CAMPAIGN), NO_CAMPAIGN)
     if (groupBy === 'assignee') return byKey((t) => t.assignee || NO_ASSIGNEE, NO_ASSIGNEE)
 
@@ -346,8 +554,20 @@ export function TasksView() {
     for (const t of open) map.get(bucketOf(t.due, today))!.push(t)
     for (const list of map.values()) list.sort(byDue)
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
-  }, [visible, today, groupBy])
-  const doneTasks = useMemo(() => visible.filter((t) => t.done), [visible])
+  }, [visible, today, groupBy, folderOf, foldDoneIntoBands])
+  const doneTasks = useMemo(
+    () => (foldDoneIntoBands ? [] : visible.filter((t) => t.done)),
+    [visible, foldDoneIntoBands],
+  )
+  /** How many are in each band, so the header's pill can say it. */
+  const bandCounts = useMemo(() => {
+    const m = new Map<string, number>(groups.map(([label, list]) => [label, list.length]))
+    if (doneTasks.length) m.set('Done', doneTasks.length)
+    return m
+  }, [groups, doneTasks])
+
+  const visibleOpen = visible.filter((t) => !t.done).length
+  const filtered = Boolean(filterWho || filterCampaign || filterChannel)
   // The task whose detail drawer is open — from allTasks so derived asset-tasks open their own detail
   // too (read live so edits to a manual task reflect immediately).
   const openTask = allTasks.find((t) => t.id === openTaskId) ?? null
@@ -367,8 +587,8 @@ export function TasksView() {
 
   // A derived asset-task: read-mostly. Check toggles per-asset done; the name and the flow chip
   // both open the asset's flow. No company / assignee / delete (those belong to manual tasks).
-  const assetRow = (t: Task) => (
-    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`}>
+  const assetRow = (t: Task, band = '') => (
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band}>
       <div className="task-cell task-cell-name">
         <button
           className={`task-check${t.done ? ' on' : ''}`}
@@ -381,13 +601,21 @@ export function TasksView() {
             </svg>
           )}
         </button>
+        {/* The channel as a mark, not a word. Spelled out it half-repeated the asset's own name —
+            "LinkedIn post · LinkedIn image post #1" — and the rows whose names carried no channel
+            were left looking like a different column. */}
+        {t.channel && (
+          <span className="task-channel" title={CHANNELS[t.channel as keyof typeof CHANNELS]?.label ?? t.channel}>
+            <ChannelIcon channel={t.channel as Parameters<typeof ChannelIcon>[0]['channel']} size={13} />
+          </span>
+        )}
         <button
           className="task-input task-name-input task-name-open"
           onClick={() => setOpenTaskId(t.id)}
           title="Open task details"
           style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'var(--text)', padding: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         >
-          {t.text}
+          {t.assetName ?? t.text}
         </button>
       </div>
       <div className="task-cell">
@@ -396,10 +624,14 @@ export function TasksView() {
           {dueText(t.due, today, 'No date')}
         </span>
       </div>
+      <div className="task-cell task-cell-folder">
+        <span className={`task-folder${folderOf.get(t.campaign ?? '') ? '' : ' task-folder-none'}`}>{folderLabel(t.campaign ?? '')}</span>
+      </div>
       <div className="task-cell task-rec-cell task-cell-campaign">
         {t.campaign ? (
           <button className="task-chip task-chip-set" onClick={() => openFlow(t.campaign!, 'flow')} title={`Open ${shortCampaign(t.campaign)}`}>
             <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
+            <OpenMark />
           </button>
         ) : (
           <span className="task-chip empty"><span className="task-chip-name muted">—</span></span>
@@ -411,8 +643,8 @@ export function TasksView() {
     </div>
   )
 
-  const row = (t: Task) => (
-    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`}>
+  const row = (t: Task, band = '') => (
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band}>
       <div className="task-cell task-cell-name">
         <button
           className={`task-check${t.done ? ' on' : ''}`}
@@ -457,11 +689,15 @@ export function TasksView() {
           </button>
         )}
       </div>
+      <div className="task-cell task-cell-folder">
+        <span className={`task-folder${folderOf.get(t.campaign ?? '') ? '' : ' task-folder-none'}`}>{folderLabel(t.campaign ?? '')}</span>
+      </div>
       <div className="task-cell task-rec-cell task-cell-campaign">
         {t.campaign ? (
           <span className="task-chip task-chip-set">
             <button className="task-chip-open" onClick={() => openFlow(t.campaign!, 'flow')} title={`Open ${shortCampaign(t.campaign)}`}>
               <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
+              <OpenMark />
             </button>
             <button className="task-chip-edit" onClick={() => setPickCamp(t.id)} title="Change campaign" aria-label="Change campaign">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -553,20 +789,125 @@ export function TasksView() {
   return (
     <>
     <div className="mtx tasks-view">
-      <header className="mtx-head tasks-head">
-        <h2>Tasks</h2>
-        <span className="mtx-sub">{openCount > 0 ? `${openCount} open${brand ? ` · ${brand}` : ''}` : `A running to-do list for ${brand || 'this workspace'}`}</span>
+      {/* Built to the Campaigns page's header, because they are the same kind of page and were
+          wearing different clothes: title at 24/800 with its glossary tip inline, the count on its
+          own line beneath at 13px, actions across the row. */}
+      {/* Everything down to the rule under the column heads holds still while the rows scroll: on a
+          board of thirty-odd tasks the column names and the filters that produced them were the
+          first things to leave the screen, which is exactly when you need to know what you are
+          reading and what is being hidden. */}
+      <div className="tasks-sticky" ref={stickyRef}>
+      <header className="tasks-head">
+        <div>
+          <h1 className="tasks-title">
+            Tasks
+            <InfoTip term="task" />
+          </h1>
+          <p className="tasks-sub">
+            {/* When a filter is on, the count has to be the count of what is ON SCREEN — it read
+                "31 open" over a single row, and over no rows at all, which makes it a number about
+                nothing you can see. The whole is still worth saying, as the thing being sliced. */}
+            {filtered
+              ? `${visibleOpen} of ${openCount} open${brand ? ` · ${brand}` : ''}`
+              : openCount > 0
+                ? `${openCount} open${brand ? ` · ${brand}` : ''}`
+                : `A running to-do list for ${brand || 'this workspace'}`}
+          </p>
+        </div>
         <button className="tasks-new" onClick={addTask}>
           ＋ New task
         </button>
       </header>
 
       <div className="tasks-toolbar">
+        {/* What KIND of work: "just the Instagram posts", which is how someone doing one kind of
+            thing reads the board. Named "All work" rather than "All channels" because the last
+            entry is Custom tasks, which is not a channel — the list is kinds of work, and channel
+            is what nearly all of them happen to be. */}
+        {channels.length > 0 && (
+          <div className="tasks-filter">
+            <button
+              className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
+              data-filter="channel"
+              onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
+            >
+              {filterChannel === CUSTOM_TASKS ? CUSTOM_TASKS_LABEL : filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All work'}
+              <span className="tasks-filter-caret">▾</span>
+            </button>
+            {openFilter === 'channel' && (
+              <>
+                <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
+                <div className="task-pick-menu tasks-filter-menu" role="menu">
+                  <button className={`task-pick-item${filterChannel ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterChannel(''); setOpenFilter(null) }}>
+                    <span className="task-pick-name">All work</span>
+                  </button>
+                  {channels.map(([id, label]) => (
+                    <button
+                      key={id}
+                      className={`task-pick-item${filterChannel === id ? ' on' : ''}`}
+                      role="menuitem"
+                      onClick={() => { setFilterChannel(id); setOpenFilter(null) }}
+                    >
+                      <span className="task-pick-name">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="tasks-filter">
+          <button
+            className={`tasks-filter-btn${filterCampaign ? ' on' : ''}`}
+            data-filter="campaign"
+            onClick={() => setOpenFilter(openFilter === 'campaign' ? null : 'campaign')}
+          >
+            {campaignFilterLabel()}
+            <span className="tasks-filter-caret">▾</span>
+          </button>
+          {openFilter === 'campaign' && (
+            <>
+              <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
+              <div className="task-pick-menu tasks-filter-menu" role="menu">
+                <button className={`task-pick-item${filterCampaign ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterCampaign(''); setOpenFilter(null) }}>
+                  <span className="task-pick-name">All campaigns</span>
+                </button>
+                {campaignsByFolder.map(([folder, names]) => (
+                  <Fragment key={folder}>
+                    {/* The folder itself is selectable — one click for everything filed under it,
+                        which is the coarse cut most days want. */}
+                    <button
+                      className={`task-pick-item tasks-filter-folder${filterCampaign === FOLDER_PREFIX + folder ? ' on' : ''}`}
+                      role="menuitem"
+                      onClick={() => { setFilterCampaign(FOLDER_PREFIX + folder); setOpenFilter(null) }}
+                    >
+                      <span className="task-pick-name">{folder}</span>
+                      <span className="tasks-filter-count">{names.length}</span>
+                    </button>
+                    {names.map((name) => (
+                      <button
+                        key={name}
+                        className={`task-pick-item tasks-filter-sub${filterCampaign === name ? ' on' : ''}`}
+                        role="menuitem"
+                        onClick={() => { setFilterCampaign(name); setOpenFilter(null) }}
+                      >
+                        <span className="task-pick-name">{shortCampaign(name)}</span>
+                      </button>
+                    ))}
+                  </Fragment>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Assignee: filters the list, and is also where a name gets corrected or cleared —
             renaming here rewrites every task holding it, manual and derived alike. */}
         <div className="tasks-filter">
           <button
             className={`tasks-filter-btn${filterWho ? ' on' : ''}`}
+            data-filter="who"
             onClick={() => setOpenFilter(openFilter === 'who' ? null : 'who')}
           >
             {filterWho === UNASSIGNED ? NO_ASSIGNEE : filterWho || 'Everyone'}
@@ -574,7 +915,7 @@ export function TasksView() {
           </button>
           {openFilter === 'who' && (
             <>
-              <div className="task-pick-scrim" onClick={() => { setOpenFilter(null); setEditWho(null) }} />
+              <div className="task-pick-scrim" onClick={() => { setOpenFilter(null); setEditWho(null); setConfirmWho(null) }} />
               <div className="task-pick-menu tasks-filter-menu" role="menu">
                 <button className={`task-pick-item${filterWho ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterWho(''); setOpenFilter(null) }}>
                   <span className="task-pick-name">Everyone</span>
@@ -603,6 +944,23 @@ export function TasksView() {
                       <button className="tasks-filter-act" title="Save" onClick={() => { renameAssignee(name, editWhoDraft); setEditWho(null) }}>✓</button>
                     </div>
                   ) : (
+                    confirmWho === name ? (
+                      <div key={name} className="task-pick-item tasks-filter-confirm">
+                        <span className="tasks-filter-confirm-text">
+                          Take {name} off {n} {n === 1 ? 'task' : 'tasks'}?
+                        </span>
+                        <button className="tasks-filter-confirm-no" onClick={() => setConfirmWho(null)}>Cancel</button>
+                        <button
+                          className="tasks-filter-confirm-yes"
+                          onClick={() => {
+                            renameAssignee(name, '')
+                            setConfirmWho(null)
+                          }}
+                        >
+                          Unassign
+                        </button>
+                      </div>
+                    ) : (
                     <div key={name} className={`task-pick-item tasks-filter-person${filterWho === name ? ' on' : ''}`}>
                       <button className="tasks-filter-pick" role="menuitem" onClick={() => { setFilterWho(name); setOpenFilter(null) }}>
                         <Avatar name={name} tint={tints.get(name)} />
@@ -610,78 +968,17 @@ export function TasksView() {
                         <span className="tasks-filter-count">{n}</span>
                       </button>
                       <button className="tasks-filter-act" title={`Rename ${name} everywhere`} onClick={() => { setEditWho(name); setEditWhoDraft(name) }}>✎</button>
-                      <button className="tasks-filter-act" title={`Unassign ${name} from everything`} onClick={() => renameAssignee(name, '')}>✕</button>
+                      {/* Asks first. The row's ✕ takes one task; this one takes every task they
+                          hold, and the two are a glyph apart in a menu. */}
+                      <button className="tasks-filter-act" title={`Unassign ${name} from every task`} onClick={() => setConfirmWho(name)}>✕</button>
                     </div>
+                    )
                   ),
                 )}
               </div>
             </>
           )}
         </div>
-
-        <div className="tasks-filter">
-          <button
-            className={`tasks-filter-btn${filterCampaign ? ' on' : ''}`}
-            onClick={() => setOpenFilter(openFilter === 'campaign' ? null : 'campaign')}
-          >
-            {filterCampaign ? shortCampaign(filterCampaign) : 'All campaigns'}
-            <span className="tasks-filter-caret">▾</span>
-          </button>
-          {openFilter === 'campaign' && (
-            <>
-              <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
-              <div className="task-pick-menu tasks-filter-menu" role="menu">
-                <button className={`task-pick-item${filterCampaign ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterCampaign(''); setOpenFilter(null) }}>
-                  <span className="task-pick-name">All campaigns</span>
-                </button>
-                {campaigns.map((name) => (
-                  <button
-                    key={name}
-                    className={`task-pick-item${filterCampaign === name ? ' on' : ''}`}
-                    role="menuitem"
-                    onClick={() => { setFilterCampaign(name); setOpenFilter(null) }}
-                  >
-                    <span className="task-pick-name">{shortCampaign(name)}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Channel: "just the Instagram work", which is how a person doing one kind of thing reads
-            the board. Hand-made tasks have no channel, so a channel filter is asking for posts. */}
-        {channels.length > 0 && (
-          <div className="tasks-filter">
-            <button
-              className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
-              onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
-            >
-              {filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All channels'}
-              <span className="tasks-filter-caret">▾</span>
-            </button>
-            {openFilter === 'channel' && (
-              <>
-                <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
-                <div className="task-pick-menu tasks-filter-menu" role="menu">
-                  <button className={`task-pick-item${filterChannel ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterChannel(''); setOpenFilter(null) }}>
-                    <span className="task-pick-name">All channels</span>
-                  </button>
-                  {channels.map(([id, label]) => (
-                    <button
-                      key={id}
-                      className={`task-pick-item${filterChannel === id ? ' on' : ''}`}
-                      role="menuitem"
-                      onClick={() => { setFilterChannel(id); setOpenFilter(null) }}
-                    >
-                      <span className="task-pick-name">{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
 
         {(filterWho || filterCampaign || filterChannel) && (
           <button className="tasks-filter-clear" onClick={() => { setFilterWho(''); setFilterCampaign(''); setFilterChannel('') }}>
@@ -691,42 +988,66 @@ export function TasksView() {
       </div>
 
       <div className="task-grid task-colhead">
-        <div className="task-cell task-cell-name">Task</div>
+        {/* The first column has no name — every row is a task — so it carries the band instead:
+            which stretch of the list the top of the view is in, changing as you scroll past each
+            heading. Empty until the first one goes under, so it never labels a view it is not
+            describing. */}
+        <div className="task-cell task-cell-name" aria-live="polite">
+          {/* Rendered even when there is nothing to say. The label is what DECIDES the label: a
+              filled band made this header 15px taller, which moved the edge the tracker measures
+              against, which flipped the label, which changed the height again — the table visibly
+              shuddering at the top of the scroll. An always-present box with a reserved height
+              breaks the loop; what varies is only the text inside it. */}
+          <span className={`task-group-head task-band${bandLabel === 'Overdue' ? ' overdue' : ''}`}>
+            {bandLabel}
+            {bandLabel && bandCounts.get(bandLabel) ? (
+              <span className="task-group-count">{bandCounts.get(bandLabel)}</span>
+            ) : null}
+          </span>
+        </div>
         <ColHead label="Due date" col="due" />
+        <ColHead label="Folder" col="folder" />
         <ColHead label="Campaign" col="campaign" className="task-cell-campaign" />
         <ColHead label="Assigned to" col="assignee" />
+      </div>
       </div>
 
       {allTasks.length === 0 ? (
         <div className="mtx-empty">No tasks for {brand || 'this workspace'} yet. Build a campaign, or add one with “＋ New task”.</div>
+      ) : visible.length === 0 ? (
+        // Matching nothing is a normal thing for a filter to do, and it used to render as an empty
+        // page under a header still claiming thirty-one — indistinguishable from broken.
+        <div className="mtx-empty">
+          Nothing matches these filters.{' '}
+          <button className="tasks-filter-clear" onClick={() => { setFilterWho(''); setFilterCampaign(''); setFilterChannel('') }}>
+            Clear filters
+          </button>
+        </div>
       ) : (
         <>
-          {groups.map(([bucket, list]) => {
-            // Grouped by due date the "Overdue" heading says it. Grouped by campaign or assignee
-            // there is no such heading, so each group has to say how much of it is late itself —
-            // otherwise the one number on the head counts a campaign's work without saying that
-            // half of it has already slipped.
-            const late = groupBy === 'due' ? 0 : list.filter((t) => t.due && t.due < today).length
-            return (
-              <div key={bucket} className="task-group">
-                <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`}>
-                  {bucket} <span className="task-group-count">{list.length}</span>
-                  {late > 0 && (
-                    <span className="task-group-late" title={`${late} overdue`}>
-                      {late} late
-                    </span>
-                  )}
+          {groups.map(([bucket, list], i) => (
+            <div key={bucket} className="task-group" data-band={bucket}>
+              {/* The FIRST band has no heading of its own: it is always the one sitting against the
+                  header, so its name lives up there from the start and a heading here would say it
+                  twice. Every later band gets one at its break, because a gap says something
+                  changed and cannot say what — and by the time the header adopts that name, this
+                  heading has already scrolled out of sight. One label, always, no overlap. */}
+              {i > 0 && (
+                <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`} data-band={bucket}>
+                  {bucket}
+                  <span className="task-group-count">{list.length}</span>
                 </div>
-                {list.map((t) => (t.derived ? assetRow(t) : row(t)))}
-              </div>
-            )
-          })}
+              )}
+              {list.map((t) => (t.derived ? assetRow(t, bucket) : row(t, bucket)))}
+            </div>
+          ))}
           {doneTasks.length > 0 && (
-            <div className="task-group">
-              <div className="task-group-head">
-                Done <span className="task-group-count">{doneTasks.length}</span>
+            <div className="task-group" data-band="Done">
+              <div className="task-group-head" data-band="Done">
+                Done
+                <span className="task-group-count">{doneTasks.length}</span>
               </div>
-              {doneTasks.map((t) => (t.derived ? assetRow(t) : row(t)))}
+              {doneTasks.map((t) => (t.derived ? assetRow(t, 'Done') : row(t, 'Done')))}
             </div>
           )}
         </>
