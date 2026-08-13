@@ -5,7 +5,7 @@ import { CHANNELS } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard, remapBuiltTargets, renameEndpoint,
+  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, opensRecordStep, pruneBoard, remapBuiltTargets, renameEndpoint,
 } from '../domain/flowBoard'
 import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
@@ -9260,11 +9260,13 @@ export function FlowsView() {
    * every event it received (a drag, a click, Escape, a press that lands on a card behind it).
    *
    * So it has moved to the moment it answers — the toolbar, between naming the kind and the card
-   * landing. A card now arrives meaning something, and its face is a face. Kinds with no records
-   * behind them (a Note, a Data source) skip this entirely and drop as they always did.
+   * landing. A card now arrives meaning something, and its face is a face. A Note has no records
+   * behind it and skips this entirely, and so does any kind whose list cannot be answered — see
+   * opensRecordStep, which is where Data source stopped being a button that opened a sentence.
    */
   const startAddObject = (kind: CanvasObjectKind, after?: (id: string) => void) => {
-    if (!objectOptions(kind)) { after?.(addObject(kind)); return }
+    const opts = objectOptions(kind)
+    if (!opts || !opensRecordStep(kind, opts.length)) { after?.(addObject(kind)); return }
     setAddRecordQuery('')
     setAddRecordFor(kind)
     addAfterRef.current = after ?? null

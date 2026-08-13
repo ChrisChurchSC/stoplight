@@ -86,6 +86,33 @@ export const CREATABLE_OBJECT_KINDS = new Set<CanvasObjectKind>([
   'brand', 'product', 'concept', 'season', 'pattern',
 ])
 
+/**
+ * WHETHER PRESSING A KIND ON THE TOOLBAR OPENS THE RECORD STEP, or just drops the card.
+ *
+ * The record step is the list between naming a kind and the card landing, and it is worth a step
+ * only when it can end in a card. It can end in a card two ways: there is something to pick, or the
+ * kind can mint what it needs from a name. A kind with neither has a menu that cannot be answered,
+ * and the toolbar button becomes a button that opens a sentence.
+ *
+ * WHICH IS EXACTLY WHAT DATA SOURCE WAS. It is the one kind that carries a record list and is
+ * deliberately not creatable (see CREATABLE_OBJECT_KINDS above: a data set is a table, and minting
+ * one from a name produces an empty spreadsheet titled after a question nobody can answer). On a
+ * brand with no data sets its list came back EMPTY rather than absent, so it took the menu path
+ * meant for kinds that have records, drew a menu with nothing in it and no "+ New" underneath, and
+ * no card ever landed. Pressing Data source did nothing but print a note — one which, on a bound
+ * brand, read "Make one below and it joins the library" directly above the absence of any below.
+ *
+ * A Data source card with no table yet is a legitimate card. It says a table goes here, and its
+ * inspector is where one is connected, pasted, uploaded or pulled. So it drops, as the toolbar's
+ * own comment had claimed it did all along.
+ *
+ * `optionCount` rather than the options themselves: the decision is about whether a list can be
+ * answered, not about what is in it, and passing the array would tempt a caller to filter here.
+ * A kind with NO record list at all (a Note) never reaches this — the caller drops it on the null.
+ */
+export const opensRecordStep = (kind: CanvasObjectKind, optionCount: number): boolean =>
+  optionCount > 0 || CREATABLE_OBJECT_KINDS.has(kind)
+
 export interface CanvasObject {
   id: string
   kind: CanvasObjectKind

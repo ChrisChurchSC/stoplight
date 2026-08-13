@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, type CanvasObjectKind } from '../flowBoard'
+import { CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, opensRecordStep, type CanvasObjectKind } from '../flowBoard'
 import { OBJECT_META } from '../canvasObjectMeta'
 
 /**
@@ -38,5 +38,40 @@ describe('creatable object kinds', () => {
     // way to make one, a brand-new workspace has no first brand and the campaign never binds.
     expect(REF_TYPE_FOR_OBJECT_KIND.brand).toBeUndefined()
     expect(CREATABLE_OBJECT_KINDS.has('brand')).toBe(true)
+  })
+})
+
+/**
+ * AND THE EXCEPTION ABOVE HAS TO NOT DEAD-END THE TOOLBAR.
+ *
+ * Data source is the one kind carrying a record list that cannot mint from a name, which is right,
+ * and which meant that on a brand with no data sets the toolbar button opened a menu holding an
+ * empty list and no "+ New" — no card, no way forward, and a note reading "Make one below" above
+ * nothing. Pressing the button did nothing but print a sentence. These pin the rule that decides it.
+ */
+describe('opening the record step', () => {
+  it('drops the card instead of opening a list that cannot be answered', () => {
+    // The reported bug, exactly: Data source on a brand holding no data sets.
+    expect(opensRecordStep('data-source', 0)).toBe(false)
+  })
+
+  it('still opens the picker once there are data sets to pick', () => {
+    expect(opensRecordStep('data-source', 3)).toBe(true)
+  })
+
+  it('opens on an empty list for every kind that can make what it needs', () => {
+    // This is the case the dead-end fix must NOT break: an empty library is where "+ New …" earns
+    // its place, and dropping a blank card there would take the create route away from every kind.
+    for (const kind of CREATABLE_OBJECT_KINDS) {
+      expect(opensRecordStep(kind, 0), `${kind} lost its + New`).toBe(true)
+    }
+  })
+
+  it('leaves Data source as the only kind that can decline the step', () => {
+    // A second such kind added later gets the same trap for free, so it is caught here rather than
+    // by somebody pressing the button on an empty brand.
+    const declines = (Object.keys(REF_TYPE_FOR_OBJECT_KIND) as CanvasObjectKind[])
+      .filter((k) => !opensRecordStep(k, 0))
+    expect(declines).toEqual(['data-source'])
   })
 })

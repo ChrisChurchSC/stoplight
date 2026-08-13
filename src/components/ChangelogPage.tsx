@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.87',
+    dateLabel: 'August 13, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Pressing Data source on the toolbar puts a card on the board. On a brand with no data sets yet it opened a list with nothing in it and no way to make anything, so the button did nothing but print a note, and on a bound brand that note read “Make one below and it joins the library” directly above the absence of any below. It was the one card kind this could happen to: every other card can make the record it needs from a name, and a data set is a table, so it deliberately cannot. A Data source card with no table yet is still a real card. It says a table goes here, and the panel beside it is where one is connected, pasted, uploaded or pulled. The card lands now, and the picker still opens exactly as before once there are tables to choose between.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.86',
     dateLabel: 'August 13, 2026',
     groups: [
