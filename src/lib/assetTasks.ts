@@ -70,6 +70,37 @@ const taskLabel = (channelLabel: string, assetName: string): string => {
 const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
+/**
+ * The inverse of the `due` above: given the day someone picked, what an asset row becomes.
+ *
+ * It lives beside `ymd` deliberately. `due` is a local calendar day read OFF a moment, so writing
+ * one back has to land on the same local day it will be read as — do it in UTC and every asset west
+ * of Greenwich reads back a day early, which no amount of care at the call site would fix.
+ *
+ * Two things are carried rather than reset:
+ *  - The TIME OF DAY. `scheduledAt` is a moment and a date input only knows the day, so writing the
+ *    day alone drops the asset to midnight and restacks a campaign's staggered posts onto one
+ *    instant — the same jumbling that made the seeding bug so hard to see.
+ *  - The LENGTH, for a row with an `endsAt`. Both ends move together, as a calendar drag moves them;
+ *    moving only the start eventually pushes it past the end and inverts the range.
+ *
+ * Returns null when there is nothing to do, so a cleared input is not a write.
+ */
+export function reschedulePatch(
+  row: { scheduledAt?: string; endsAt?: string },
+  day: string,
+): { scheduledAt: string; endsAt?: string } | null {
+  if (!day) return null
+  const from = Date.parse(row.scheduledAt ?? '')
+  const next = new Date(Number.isNaN(from) ? Date.now() : from)
+  const [y, m, d] = day.split('-').map(Number)
+  if (!y || !m || !d) return null
+  next.setFullYear(y, m - 1, d)
+  const ends = Date.parse(row.endsAt ?? '')
+  if (Number.isNaN(ends) || Number.isNaN(from)) return { scheduledAt: next.toISOString() }
+  return { scheduledAt: next.toISOString(), endsAt: new Date(ends + (next.getTime() - from)).toISOString() }
+}
+
 export function useAssetTasks(brand: string): {
   assetTasks: AssetTask[]
   toggleAssetDone: (rowId: string) => void
