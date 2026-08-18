@@ -31,14 +31,22 @@ additive: nothing changes until both env vars are set.
    it empty. `npm test` now fails if the code writes to a table the SQL never creates
    (`src/adapters/__tests__/schemaCoverage.test.ts`), but it cannot tell whether YOUR database has
    had the SQL run against it.
-3. In **Project settings → API**, copy the **Project URL** and the **anon public**
-   key.
+3. In **Project settings → API Keys**, copy the **Project URL** and the browser-safe
+   key. Supabase now issues these as **publishable** keys (`sb_publishable_…`) and keeps
+   the classic anon JWT (`eyJ…`) on a separate **Legacy anon, service_role** tab. Either
+   works — `src/lib/supabase.ts` hands the string straight to `createClient` and never
+   looks at its shape — so prefer the publishable key on a new project.
+
+   Take the **publishable** one, never the secret. A key labelled `sb_secret_…` or
+   `service_role` bypasses RLS entirely, and putting one in a `VITE_` variable ships it
+   to every browser that loads the app.
 4. Put them in `.env`:
    ```
    VITE_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-   VITE_SUPABASE_ANON_KEY=eyJ...
+   VITE_SUPABASE_ANON_KEY=sb_publishable_...
    ```
-   The anon key is meant for the browser; RLS is what protects the data.
+   The variable keeps its name for compatibility; what it holds is whichever browser-safe
+   key you copied. That key is meant to be public — RLS is what protects the data.
 5. Restart the dev server. You'll now get a sign-in screen. The first time you sign
    in, a workspace is created and you're added as its owner.
 6. Optional: to offer **Sign in with Google** as well as email and password, follow
