@@ -1,5 +1,6 @@
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { needsWorkspaceName } from '../domain/workspaceNaming'
 
 /**
  * Session + workspace resolution for the Supabase backend. Only meaningful when
@@ -250,4 +251,90 @@ export async function claimInvite(token: string): Promise<{ ok: boolean; error?:
   if (error) return { ok: false, error: error.message }
   if (typeof data === 'string') setActiveWorkspaceId(data)
   return { ok: true }
+}
+
+/**
+ * Start the Google redirect. Nothing after this resolves in the normal case: on success the
+ * browser leaves for accounts.google.com and comes back to `redirectTo` with the tokens on it,
+ * where supabase-js picks them up and onAuthChange fires. Only a failure to *start* returns here.
+ *
+ * `redirectTo` must be listed in the Supabase project's allowed redirect URLs, exactly as the
+ * password-reset link must — the failure mode is identical and just as confusing, a bounce to the
+ * site root with no token attached and no error anywhere. Sending window.location.origin rather
+ * than a fixed URL is what lets localhost, Vercel previews and production each come back to
+ * themselves instead of all landing on whichever origin is the project's Site URL.
+ *
+ * prompt=select_account because Google's default is to reuse the one account already signed in,
+ * silently. On a shared machine that hands someone else's workspace to whoever clicks, and even
+ * alone it makes "I picked the wrong account" unrecoverable from inside this app — the only fix
+ * would be signing out of Google itself, somewhere else entirely.
+ */
+export async function signInWithGoogle(): Promise<string | null> {
+  if (!supabase) return 'Backend not configured'
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/` : undefined,
+      queryParams: { prompt: 'select_account' },
+    },
+  })
+  return error?.message ?? null
+}
+
+/**
+ * Does this account still owe us the one question sign-up would have asked?
+ *
+ * True only for a Google account on its very first sign-in. See domain/workspaceNaming.ts for why
+ * the question is worth a screen of its own rather than a fallback name.
+ *
+ * Every failure answers false, which is the deliberate direction to be wrong in. A false negative
+ * costs a suboptimal workspace name; a false positive stops an existing user at a form asking them
+ * to name a workspace they already have and which this screen has no power to rename. So a network
+ * hiccup on the membership lookup — the same one resolveWorkspaceId() refuses to read as "no
+ * memberships yet" — sends people into the app rather than into a wall.
+ */
+export async function needsWorkspaceSetup(): Promise<boolean> {
+  if (!supabase) return false
+  const { data: userData, error: userErr } = await supabase.auth.getUser()
+  const user = userData?.user
+  if (userErr || !user) return false
+
+  const meta = (user.user_metadata ?? {}) as { company?: string }
+  const hasCompany = !!(meta.company ?? '').trim()
+  if (hasCompany) return false
+
+  const { data: memberships, error: memErr } = await supabase
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('user_id', user.id)
+    .limit(1)
+  if (memErr) return false
+
+  return needsWorkspaceName({ hasCompany, hasWorkspace: (memberships ?? []).length > 0 })
+}
+
+/**
+ * Answer it: store the company on the account, then create the workspace under that name.
+ *
+ * The order is the point. resolveWorkspaceId() reads company out of user_metadata, so writing it
+ * first is what makes the workspace come out called "Initech" — and the cache is cleared in
+ * between because a resolve that already ran during this session would otherwise hand back an id
+ * created under the fallback name.
+ *
+ * Storing it on the account rather than in local state also means the answer survives the device:
+ * this is the same field the sign-up form fills, read by the same line of the same function.
+ */
+export async function saveWorkspaceName(company: string): Promise<string | null> {
+  if (!supabase) return 'Backend not configured'
+  const name = company.trim()
+  if (!name) return 'A company or team name is required.'
+
+  // Merges into user_metadata rather than replacing it, so the full_name and avatar Google set on
+  // the way in are still there afterwards — firstNameOf() reads full_name for every greeting.
+  const { error } = await supabase.auth.updateUser({ data: { company: name } })
+  if (error) return error.message
+
+  workspaceId = null
+  const id = await getActiveWorkspaceId()
+  return id ? null : 'Your workspace could not be created. Please try again.'
 }
