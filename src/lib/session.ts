@@ -212,8 +212,30 @@ async function resolveWorkspaceId(): Promise<string | null> {
       .insert({ name, created_by: user.id })
       .select('id')
       .single()
-    if (wsErr || !ws) return null
-    id = ws.id as string
+
+    /**
+     * A unique violation here is the OTHER tab winning, not a failure.
+     *
+     * The lookup above is check-then-act: two sessions starting together both find nothing and
+     * both insert. `workspaces_one_per_creator` (migration 0011) is what makes the second insert
+     * lose instead of quietly creating a second home for the same person's work — which is exactly
+     * how this account ended up with 1 898 assets in one workspace and 1 817 in another it could
+     * not open. Losing is the correct outcome; what matters is adopting the winner rather than
+     * returning null and leaving the caller with no workspace at all.
+     */
+    if (wsErr?.code === '23505') {
+      const { data: won } = await supabase
+        .from('workspaces')
+        .select('id')
+        .eq('created_by', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+      id = (won?.[0] as { id?: string } | undefined)?.id
+      if (!id) return null
+    } else {
+      if (wsErr || !ws) return null
+      id = ws.id as string
+    }
   }
 
   // The membership row is what every RLS policy actually checks — is_member/is_editor read
