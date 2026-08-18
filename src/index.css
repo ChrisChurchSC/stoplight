@@ -4642,6 +4642,33 @@ button.mf-open:focus-visible,
 /* Collapse button pinned to the panel's top-right; sits above the panel content. */
 .flow-panel-collapse { position: absolute; top: 14px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .flow-panel-collapse:hover { background: var(--surface-2); color: var(--text); }
+/* A CARD-LEVEL ACTION, sharing the corner with the panel's own controls. Same size and hover as the
+   collapse button beside it, and offset to clear it: the collapse is absolute at right 12 and 28
+   wide, so this ends where that begins. In the header's flex row rather than absolute, so a long
+   title shortens against it instead of running underneath. */
+.flow-panel-action {
+  flex: 0 0 auto;
+  /* ON THE TITLE'S LINE, pushed to its end. As a child of the header's own row it took its width from
+     the definition underneath, and "Brand · Who this campaign writes as" wrapped to two lines. Beside
+     the title it competes with something that already shortens. margin-right clears the collapse
+     button, which is absolute at right 12 and 28 wide. */
+  margin-left: auto;
+  margin-right: 34px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease, background 120ms ease;
+}
+.flow-panel-action svg { width: 16px; height: 16px }
+.flow-panel-action:hover { background: var(--surface-2); color: var(--text) }
+.flow-panel-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
 .flow-panel-collapse svg { width: 15px; height: 15px; }
 /* Collapsed brief: a thin rail with a reopen button */
 .flow-panel-rail { width: 48px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
@@ -5061,22 +5088,6 @@ button.mf-open:focus-visible,
 .flow-save-status.on { color: var(--green, #15803d) }
 .flow-save-status:disabled { cursor: default }
 .flow-save-status:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
-
-/* A GROUP'S NAME, so the order the panel asks in can be seen. Hairline above rather than a boxed
-   heading: the groups are steps in one question, not separate panels. */
-.flow-insp-sec {
-  display: block;
-  margin: 18px 0 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-/* Nothing above the first one to divide it from. */
-.flow-insp-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0 }
 
 .flow-insp-open {
   margin-top: 8px;
@@ -5590,23 +5601,6 @@ button.mf-open:focus-visible,
    Auto width and a row of its own: as .flow-insp-open it was a full-width bordered box the height of
    the Name input directly above it, which is how a button offering to file the card away came to read
    as a second, empty name field. */
-.flow-insp-promote { margin-top: 16px; }
-.flow-insp-promote-go {
-  display: inline-block;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  border-radius: 8px;
-  padding: 5px 11px;
-  font: inherit; font-size: 11.5px; font-weight: 600;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.flow-insp-promote-go:hover { color: var(--text); border-color: var(--border-strong, var(--border)); }
-.flow-insp-promote-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.flow-insp-promote-note {
-  display: block; margin-top: 6px;
-  font-size: 10.5px; line-height: 1.45; color: var(--text-faint);
-}
 /* THE NAME IS A CHIP AGAIN, closed on all four sides. It used to be the lid of the always-open text
    box below it — shared border, no seam — which was right while the two were one object. The text
    now sits behind a disclosure, so a chip with its bottom edge rubbed out would be a lid on nothing.
@@ -25286,7 +25280,6 @@ table.aud-sheet td.stick .aud-cell {
     .flow-insert,
     .flow-insp-del,
     .flow-insp-open,
-    .flow-insp-promote-go,
     .flow-inspect-del,
     .flow-inspect-regen,
     .flow-lib-folder-head,

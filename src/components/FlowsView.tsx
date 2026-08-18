@@ -8451,6 +8451,21 @@ export function FlowsView() {
      * NEEDS_BRAND_TO_MINT kinds, and only before a record exists — the field stays on the card,
      * where what you type is at least kept.
      */
+    /**
+     * HOW MANY LOOSE CARDS THIS WOULD BUNDLE, which is also whether the action exists at all.
+     *
+     * The same pool convertSelection acts on, so a label cannot promise one card and bundle three.
+     * Zero on a card already inside a smart object: that one is saved by definition, and its own
+     * panel is where the library rung is decided.
+     */
+    const promoteCount = placementOf(nt.id)
+      ? 0
+      : // The same expression `convertible` reads in the right-click menu, so the icon and the menu
+        // cannot disagree about whether there is anything to convert or how much of it there is.
+        (selected.size ? [...selected] : sel ? [sel] : []).filter(
+          (id) => objects.some((o) => o.id === id) && !placementOf(id),
+        ).length
+
     const nameRec = recordForCard(nt)
     const recordName = nameRec ? String(nameRec.current[nameRec.nameKey] ?? '').trim() : ''
     const canNameRecord = !!nameRec && (!!nt.refId || !NEEDS_BRAND_TO_MINT.has(nt.kind) || !!brand)
@@ -8482,6 +8497,38 @@ export function FlowsView() {
                   took a third of the width off the definition underneath and wrapped it to three
                   lines. It qualifies the card's name, so it belongs beside the name. */}
               {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
+          {/* MAKING IT REUSABLE IS A THING YOU DO TO THE CARD, not a thing the card says about
+              itself, so it sits with the panel's own controls rather than in the body.
+
+              It spent a while at the foot of the panel under a heading called "Keeping it": a rule,
+              an uppercase label and eighteen pixels of margin spent on one rare button, with a
+              heading that did not say what it meant until you read the button under it. And a
+              full-width box at the bottom of a panel is the shape of a primary action, which this is
+              not. As an icon it costs a corner and stops competing with the fields.
+
+              The count is in the label because the selection decides it: bundling three cards while
+              saying "this" would be the label lying about what the click does. */}
+          {/* THE WORDS THE CANVAS ALREADY USES, plus the keystroke it already has. This action was not
+              new when it arrived in the panel: the right-click menu has offered it all along as
+              "Make a smart object" / "Bundle into a smart object" on ⌘⇧B. Two names for one act is
+              how you end up believing they are two acts, and a tooltip is a free place to teach a
+              shortcut to somebody who found the long way round. */}
+          {promoteCount > 0 && (
+            <button
+              className="flow-panel-action"
+              title={`${promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}  ⌘⇧B`}
+              aria-label={promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}
+              onClick={() => convertSelection()}
+            >
+              {/* Two diamonds, one inside the other: an instance of a thing, which is what a smart
+                  object is. Nothing in the app drew one before, so this follows the house language
+                  rather than an existing mark: 24 grid, 1.7 stroke, currentColor, round joins. */}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 2.8 21.2 12 12 21.2 2.8 12z" />
+                <path d="M12 8.6 15.4 12 12 15.4 8.6 12z" />
+              </svg>
+            </button>
+          )}
             </span>
             {/* Once the title is the card's NAME, the header stops saying what kind of card it is —
                 the glyph is the only thing left carrying that, and a colour is not a word. So the
@@ -8491,15 +8538,6 @@ export function FlowsView() {
               {title === meta.label ? meta.menuDesc : `${meta.label} · ${meta.menuDesc}`}
             </span>
           </span>
-          {/* WHETHER IT IS SAVED, AS A STATE OF THE BOARD — not a button at the top of every panel.
-              It was the first row of the body, above the card's own name, reading "Save" with
-              "Edits save on their own; this does it now." beside it: the most prominent thing in the
-              panel was a control admitting it was optional, and a button in that position reads as a
-              duty. The panel below already learned this the hard way — see the applybar's note on
-              opening with the word the button uses, which had people pressing it twice to be sure.
-
-              Still pressable, and still does what it did: flushing now is worth having when the
-              workspace mirror is behind. It just no longer asks. */}
         </div>
         <div className="flow-inspect">
           {/* NAME IT. Above the fill box on purpose: it is one line, it is not authoring, and it is
@@ -9116,9 +9154,26 @@ export function FlowsView() {
           {(() => {
             const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
             const targets = downstreamTargets(board, nt.id)
-            // Nothing when it feeds nothing. An unwired card is the normal state of a card you are
-            // still filling in, and a paragraph explaining that was the loudest thing on the panel.
-            if (!targets.length) return null
+            /**
+             * AND IT SAYS SO WHEN IT REACHES NOTHING, which it used to answer by not being there.
+             *
+             * The paragraph that explained this was cut for being the loudest thing on the panel,
+             * and taking the whole readout with it went one step too far: a card wired to nothing
+             * then looked exactly like a card whose readout does not exist, and the silent failure
+             * this panel can produce is a card filled in perfectly that no asset reads. One short
+             * line under the label is not the paragraph that was cut.
+             */
+            if (!targets.length) {
+              return (
+                <>
+                  <label className="flow-inspect-label">Where it applies</label>
+                  <div className="flow-inspect-note">
+                    Nothing yet. Wire this card to the campaign, or to a channel, and what it says
+                    reaches the assets underneath.
+                  </div>
+                </>
+              )
+            }
             const named = targets.map((t) => {
               if (t === 'campaign') return { id: t, label: 'The whole campaign', sub: 'every asset', tone: CAMPAIGN_TONE, channel: undefined as ChannelId | undefined }
               const d = viewDelivs.find((x) => x.key === t)
@@ -9129,9 +9184,15 @@ export function FlowsView() {
             })
             return (
               <>
-                {/* The count went. On one target it read "Applied to · 1" above a single row that
-                    already named it, which is a number you can see. */}
-                <span className="flow-insp-sec">Where it applies{named.length > 1 ? ` · ${named.length}` : ''}</span>
+                {/* A LABEL, LIKE THE FIELDS ABOVE IT. It was an uppercase section head with a rule,
+                    which was the right device while there were two of these down here and a wrong one
+                    now that it is alone: a rule separates groups, and there is nothing left to
+                    separate from. The panel reads as one rhythm this way, label and content the whole
+                    way down, rather than fields in one voice and everything else in another.
+
+                    The count went with it. On one target it read "Applied to · 1" above a single row
+                    that already named it, which is a number you can see. */}
+                <label className="flow-inspect-label">Where it applies{named.length > 1 ? ` · ${named.length}` : ''}</label>
                 {/* Same shape as the brief's Deliverables list, and clickable for the same reason:
                     these name things that exist on the board, so reading one and wanting to open it
                     is the obvious next move. It used to be an inert label/value pair that looked
@@ -9153,57 +9214,6 @@ export function FlowsView() {
             )
           })()}
 
-          {/* KEEPING IT, AFTER WHAT IT REACHES. It sat above this readout on purpose once — it had
-              been rescued from below the fold — and with the groups named that ordering read as the
-              panel asking about filing before it had told you what the card does. It is still high
-              enough to see without scrolling, because "Where it applies" is two rows on most cards. */}
-          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT.
-              It sat under the Name field, on the argument that a control nobody scrolls to is a
-              control nobody has — which is true, and it had been buried under Applied to before
-              that. What it cost up there was the top of the panel: three rows in, between naming
-              the card and saying what it is, a button offering to file the card somewhere, wearing
-              .flow-insp-open — a full-width bordered box the same height as the input directly
-              above it, so it read as a second empty text field. Two of the first four rows were
-              about where the card is kept rather than what it says.
-
-              So it comes down to here, under the box that answers the card, and stops looking like
-              a field. It is still above Applied to, the fold it was rescued from, and the panel it
-              now follows is short: a name, a prompt and an upload.
-
-              Only for a loose card. One already inside a smart object is saved by definition, and
-              the object's own panel is where its library rung is decided (see "Add to the brand
-              library" there). */}
-          {!placementOf(nt.id) && (() => {
-            // The same pool convertSelection will actually act on, so the label cannot promise one
-            // card and bundle three. Called with no state changes first, because it reads the
-            // selection from this render and a setSel here would not have landed by then.
-            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
-              (id) => objects.some((o) => o.id === id) && !placementOf(id),
-            ).length
-            if (!n) return null
-            return (
-              <>
-              <span className="flow-insp-sec">Keeping it</span>
-              <div className="flow-insp-promote">
-                <button
-                  className="flow-insp-promote-go"
-                  title="Keep this on the shelf: place it on another campaign instead of rebuilding it"
-                  onClick={() => convertSelection()}
-                >
-                  {/* NOT "Save". That word meant two unrelated things six rows apart — write my
-                      edits, and promote this card into something reusable — and the panel already
-                      has a documented history of the word being pressed twice for reassurance. It
-                      cannot borrow "Add to the brand library" either: that is the NEXT rung, and it
-                      lives on the smart object's own panel. So it says what it makes. */}
-                  {n > 1 ? `Make these ${n} cards a smart object` : 'Make this a smart object'}
-                </button>
-                {/* One line, not two. The second sentence explained a rung of the library you reach
-                    from a panel you have not opened yet, which is a thing to say there. */}
-                <span className="flow-insp-promote-note">Kept on this campaign until you add it to the brand library.</span>
-              </div>
-              </>
-            )
-          })()}
           {nt.kind === 'data-source' &&
           (() => {
             const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
