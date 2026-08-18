@@ -8523,9 +8523,13 @@ export function FlowsView() {
               {/* Two diamonds, one inside the other: an instance of a thing, which is what a smart
                   object is. Nothing in the app drew one before, so this follows the house language
                   rather than an existing mark: 24 grid, 1.7 stroke, currentColor, round joins. */}
+              {/* Drawn to the same extent as the collapse glyph beside it — 4 to 20 on the 24 grid,
+                  where that one's panel rect runs 4 to 20. At 2.8 to 21.2 it was the same box and the
+                  same 16px, but a bigger drawing inside it, so the pair read as mismatched even once
+                  their centres agreed to the pixel. */}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 2.8 21.2 12 12 21.2 2.8 12z" />
-                <path d="M12 8.6 15.4 12 12 15.4 8.6 12z" />
+                <path d="M12 4 20 12 12 20 4 12z" />
+                <path d="M12 9 15 12 12 15 9 12z" />
               </svg>
             </button>
           )}

@@ -4640,7 +4640,10 @@ button.mf-open:focus-visible,
   position: relative;
 }
 /* Collapse button pinned to the panel's top-right; sits above the panel content. */
-.flow-panel-collapse { position: absolute; top: 14px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+/* top matches .flow-panel-head's padding-top, which is what everything else in the header is
+   measured from. At 14 it floated 2px above its own header content — invisible while it was the only
+   control up there, and plainly crooked next to a second icon that is laid out in the title row. */
+.flow-panel-collapse { position: absolute; top: 16px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .flow-panel-collapse:hover { background: var(--surface-2); color: var(--text); }
 /* A CARD-LEVEL ACTION, sharing the corner with the panel's own controls. Same size and hover as the
    collapse button beside it, and offset to clear it: the collapse is absolute at right 12 and 28
@@ -4677,7 +4680,7 @@ button.mf-open:focus-visible,
    and 3px right of where it had just been and the icon appeared to hop as the panel closed. Same
    size, and placed against the rail's right edge rather than centred in it, because centring a
    narrower button in a 48px rail would have moved it 2px the other way. */
-.flow-panel-rail { width: 48px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: flex-end; padding: 14px 12px 0 0; }
+.flow-panel-rail { width: 48px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: flex-end; padding: 16px 12px 0 0; }
 .flow-panel-rail-btn { width: 28px; height: 28px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
 .flow-panel-rail-btn:hover { border-color: var(--accent); color: var(--accent); }
 .flow-panel-rail-btn svg { width: 16px; height: 16px; }
