@@ -41,6 +41,11 @@ additive: nothing changes until both env vars are set.
    The anon key is meant for the browser; RLS is what protects the data.
 5. Restart the dev server. You'll now get a sign-in screen. The first time you sign
    in, a workspace is created and you're added as its owner.
+6. Optional: to offer **Sign in with Google** as well as email and password, follow
+   [`docs/google-sign-in.md`](google-sign-in.md). It needs no new env vars — the
+   credentials live in the Supabase dashboard, not in `.env` — but it does need a
+   Google Cloud OAuth client, and the redirect URI it asks for is Supabase's callback
+   rather than this app's address, which is the step everyone gets wrong once.
 
 ## What's wired so far
 
