@@ -14843,6 +14843,76 @@ a.flow-top-credits.out:hover { color: var(--danger, #e5484d); opacity: 0.82; }
   text-align: center;
 }
 
+/* ---- Continue with Google: the same button on both signed-out screens ---- */
+
+/* White, on a card that is otherwise dark. Google's terms allow a light or a dark button, and this
+   card is already dark — a #131314 button would land within a hair of the input wells and read as
+   another empty field rather than as the alternative to filling them in. White is also simply how
+   this button is recognised; a sign-in affordance nobody spots is one nobody uses. */
+.auth-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  background: #fff;
+  /* Set, not inherited. The card's ink is #e9ecf1, which on white is 1.1:1 — the label would be
+     invisible. #1f1f1f is Google's own value for the light button and 15.3:1 here. */
+  color: #1f1f1f;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth-google:hover:not(:disabled) {
+  background: #f4f5f7;
+  border-color: #c9ccd1;
+}
+.auth-google:focus-visible {
+  outline: none;
+  /* The app's accent, not Google's blue. This is our form, and one focus colour through all of it
+     is what makes tabbing from this button into the email field read as one sequence. */
+  box-shadow: 0 0 0 3px rgba(255, 99, 71, 0.35);
+}
+.auth-google:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* Fixed, and never recoloured — the mark is four brand colours by licence, so it takes no theme.
+   `flex: none` because a flex child with an SVG in it will happily be squeezed by a long label. */
+.auth-google-mark {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* The "or" rule, in the same label voice as .auth-label. A divider rather than a plain gap because
+   the button and the form beneath it are alternatives, not steps: separated by whitespace alone,
+   the button reads as something to do *before* filling the form in. */
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 2px;
+  color: #7d8694;
+  font-family: var(--font-label);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.auth-or::before,
+.auth-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #39404d;
+}
+
 /* ---- Sign up: the create-an-account page, on the same purple field as sign-in ---- */
 
 /* The sign-in card is three fields and always fits, so .auth-gate pins itself to the viewport and

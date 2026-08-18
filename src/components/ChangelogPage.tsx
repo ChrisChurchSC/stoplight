@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.88',
+    dateLabel: 'August 18, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Sign in with Google. The account you already have, on the two screens where an account is asked for, with the same button on both — there is no separate “sign up with Google”, because with Google there is no separate act: the redirect is identical and which one it turns out to be depends on an answer nobody has yet. It sits above the email fields rather than under them, since somebody whose account is a Google account is looking for that button, and putting it below the password box asks them to read past the thing they cannot use to reach the thing they can.',
+          'A Google account is asked what its company is called, once, on the way in. Google returns a name, an email and a picture, and never an employer — and the company is what names your workspace. Left alone, an account arriving this way would have been called “chris’s workspace” after the front of an email address, and it would have stayed that way, because a workspace has no rename anywhere in the app. So the question is asked before the workspace is made rather than after, prefilled with a reading of your email’s domain, and left blank where the domain says nothing about where you work. Anyone who answered it on the sign-up form is never asked again, and neither is anyone joining a workspace that already exists and already has a name.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.87',
     dateLabel: 'August 13, 2026',
     groups: [

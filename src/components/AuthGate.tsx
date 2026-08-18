@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { isSupabaseConfigured } from '../lib/supabase'
 import {
+  firstNameOf,
   getSession,
+  needsWorkspaceSetup,
   onAuthChange,
+  saveWorkspaceName,
   sendPasswordReset,
+  signInWithGoogle,
   signInWithPassword,
   updatePassword,
 } from '../lib/session'
@@ -15,8 +19,14 @@ import {
   validateResetRequest,
   type NewPasswordErrors,
 } from '../domain/passwordReset'
+import {
+  isWorkspaceNameValid,
+  suggestCompanyFromEmail,
+  validateWorkspaceName,
+} from '../domain/workspaceNaming'
 import { decodeShareToken } from '../lib/shareLink'
 import { AuthShell } from './AuthShell'
+import { AuthOrDivider, GoogleButton } from './GoogleButton'
 import { SignUpPage } from './SignUpPage'
 
 // A valid ?share= link is a self-contained grant (client + role live in the token), so a
@@ -78,6 +88,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [confirmPw, setConfirmPw] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [pwErrors, setPwErrors] = useState<NewPasswordErrors>({})
+  // undefined = not yet known, and it has to be a third state rather than a boolean starting at
+  // false. The gate cannot render the app until this is answered — defaulting to "no" would show
+  // the app for a frame and then yank it away to ask a question, which is worse than waiting.
+  const [naming, setNaming] = useState<boolean | undefined>(undefined)
+  const [company, setCompany] = useState('')
+  const [companyErr, setCompanyErr] = useState<string | null>(null)
+  const [googleBusy, setGoogleBusy] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -100,6 +117,38 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user && !recovering) setPath('/')
   }, [user, recovering])
+
+  /**
+   * Does this account still owe us the company that sign-up would have asked for?
+   *
+   * Anyone who came through the form already answered, and that is readable straight off the user
+   * we are already holding — so they are settled synchronously, with no request at all. Only an
+   * account with no company on it pays for the membership lookup, which in practice means a Google
+   * account on its first sign-in. Putting a network round trip in front of the app for everybody,
+   * to learn something almost everybody has already told us, is the version of this that gets
+   * noticed.
+   */
+  useEffect(() => {
+    if (!user) {
+      setNaming(undefined)
+      return
+    }
+    const meta = (user.user_metadata ?? {}) as { company?: string }
+    if ((meta.company ?? '').trim()) {
+      setNaming(false)
+      return
+    }
+    // Prefilled from the email's domain — and prefilled is the operative word. It lands in an
+    // editable field, in front of the person it describes, never as a silent default.
+    setCompany(suggestCompanyFromEmail(user.email ?? ''))
+    let mounted = true
+    void needsWorkspaceSetup().then((need) => {
+      if (mounted) setNaming(need)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [user])
 
   const showSignUp = () => {
     setErr('')
@@ -164,6 +213,39 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     } catch {
       /* the URL is cosmetic; the session is what matters */
     }
+  }
+
+  /**
+   * Hand off to Google. On success this never returns anywhere visible — the browser has already
+   * left for accounts.google.com — so the busy flag is cleared only on the failure path. Clearing
+   * it in a finally would flip the button back to its resting label during the pause before the
+   * page navigates, which reads as a click that did nothing.
+   */
+  const startGoogle = async () => {
+    setGoogleBusy(true)
+    setErr('')
+    const e = await signInWithGoogle()
+    if (e) {
+      setErr(e)
+      setGoogleBusy(false)
+    }
+  }
+
+  const submitCompany = async () => {
+    const problem = validateWorkspaceName(company)
+    setCompanyErr(problem)
+    if (!isWorkspaceNameValid(company)) return
+    setBusy(true)
+    setErr('')
+    const e = await saveWorkspaceName(company)
+    setBusy(false)
+    if (e) {
+      setErr(e)
+      return
+    }
+    // The workspace now exists under the name just given, so drop the latch rather than re-running
+    // the check that raised it.
+    setNaming(false)
   }
 
   // No backend configured → run as before, no auth.
@@ -249,6 +331,69 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           )}
           <button className="btn primary auth-submit" type="submit" disabled={busy}>
             {busy ? 'One moment…' : 'Set password and continue'}
+          </button>
+        </form>
+      </AuthShell>
+    )
+
+  // Still asking whether this account needs naming. The same lilac field as every other wait in
+  // this component: a neutral screen mid-flow reads as a page that failed to load.
+  if (user && naming === undefined)
+    return (
+      <div className="auth-gate auth-gate-loading">
+        <div className="auth-loading">Connecting…</div>
+      </div>
+    )
+
+  /**
+   * ALSO above the `user` gate, for the reason `recovering` is: there is a real session here, so a
+   * gate asking only "is there a user" would drop someone into the app and create their workspace
+   * under the fallback name — permanently, since nothing in the app can rename one.
+   */
+  if (user && naming)
+    return (
+      <AuthShell footer={false}>
+        <form
+          className="auth-card"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault()
+            void submitCompany()
+          }}
+        >
+          <h1 className="auth-title">
+            {firstNameOf(user) ? `Welcome, ${firstNameOf(user)}` : 'Welcome'}
+          </h1>
+          <p className="signup-sub">One question and your workspace is ready.</p>
+          <label className="auth-label" htmlFor="auth-company">
+            What is your company or team called?
+          </label>
+          <input
+            id="auth-company"
+            className="auth-input"
+            autoComplete="organization"
+            placeholder="Initech"
+            value={company}
+            aria-invalid={!!companyErr}
+            aria-describedby={companyErr ? 'auth-company-err' : 'auth-company-hint'}
+            onChange={(e) => setCompany(e.target.value)}
+          />
+          {companyErr ? (
+            <div className="auth-err" id="auth-company-err" role="alert">
+              {companyErr}
+            </div>
+          ) : (
+            <div className="signup-hint" id="auth-company-hint">
+              This names your workspace. Invite the rest of your team once you are in.
+            </div>
+          )}
+          {err && (
+            <div className="auth-err" role="alert">
+              {err}
+            </div>
+          )}
+          <button className="btn primary auth-submit" type="submit" disabled={busy}>
+            {busy ? 'Setting up your workspace…' : 'Continue'}
           </button>
         </form>
       </AuthShell>
@@ -342,6 +487,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       >
         {/* No longer a two-mode form: sign-up is its own page now, so every label here is fixed. */}
         <h1 className="auth-title">Sign in</h1>
+        {/* Above the fields, not below them. Someone whose account is a Google account is looking
+            for this button, and putting it under the password box asks them to read past the thing
+            they cannot use in order to find the thing they can. */}
+        <GoogleButton onClick={() => void startGoogle()} busy={googleBusy} disabled={busy} />
+        <AuthOrDivider />
         {/* Labelled, not placeholder-only. A placeholder is not a label: it is gone the moment
             you type, it is not what a screen reader announces as the field's name, and at 2.6:1
             on white it was the lowest-contrast text on the page doing the most important job. */}

@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from 'react'
 import { AuthShell } from './AuthShell'
+import { AuthOrDivider, GoogleButton } from './GoogleButton'
 import { MARKETER_ROLES } from '../domain/userPrefs'
 import {
   EMPTY_SIGNUP_FORM,
@@ -12,7 +13,7 @@ import {
   type SignUpField,
   type SignUpForm,
 } from '../domain/signup'
-import { signUpWithPassword } from '../lib/session'
+import { signInWithGoogle, signUpWithPassword } from '../lib/session'
 import { saveAccount } from '../lib/account'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -47,6 +48,7 @@ export function SignUpPage({ onSignIn }: { onSignIn: () => void }) {
   const [serverErr, setServerErr] = useState('')
   const [sentTo, setSentTo] = useState('')
   const [showPw, setShowPw] = useState(false)
+  const [googleBusy, setGoogleBusy] = useState(false)
   const uid = useId()
 
   const errors = useMemo(() => validateSignUp(form), [form])
@@ -56,6 +58,23 @@ export function SignUpPage({ onSignIn }: { onSignIn: () => void }) {
   // An error appears once you've left a field, or once you've tried to submit — never while you
   // are still typing the first character of an email address into an empty box.
   const shown = (field: SignUpField) => (touched[field] || attempted ? errors[field] : undefined)
+
+  /**
+   * Google answers none of the questions below, and does not have to. Name and email come back on
+   * the account itself, role is optional everywhere, and the company is asked once by AuthGate on
+   * the way in — so the whole form is skippable rather than something to fill in first.
+   *
+   * Busy is cleared only on failure: on success the browser has already left for Google.
+   */
+  const startGoogle = async () => {
+    setGoogleBusy(true)
+    setServerErr('')
+    const e = await signInWithGoogle()
+    if (e) {
+      setServerErr(e)
+      setGoogleBusy(false)
+    }
+  }
 
   const submit = async () => {
     setAttempted(true)
@@ -143,6 +162,9 @@ export function SignUpPage({ onSignIn }: { onSignIn: () => void }) {
       >
         <div className="auth-title">Create your account</div>
         <p className="signup-sub">A few details and your workspace is ready.</p>
+
+        <GoogleButton onClick={() => void startGoogle()} busy={googleBusy} disabled={busy} />
+        <AuthOrDivider />
 
         <div className="signup-row">
           {field('firstName', 'First name', ({ id, invalid, describedBy }) => (
