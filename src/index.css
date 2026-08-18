@@ -5003,10 +5003,8 @@ button.mf-open:focus-visible,
    the whole point is that it is not asking for anything, so it must not pull the eye off the card's
    name beside it. It keeps a button's affordances (focus ring, hover, press) because it is still
    pressable — it just stops looking like the first thing to do. */
-.flow-panel-save {
+.flow-save-status {
   flex: 0 0 auto;
-  /* Pushed to the end of the title's line; the title itself shrinks first. */
-  margin-left: auto;
   border: 1px solid transparent;
   background: none;
   border-radius: 7px;
@@ -5020,14 +5018,14 @@ button.mf-open:focus-visible,
   white-space: nowrap;
   transition: color 120ms ease, border-color 120ms ease;
 }
-.flow-panel-save:hover:not(:disabled) {
+.flow-save-status:hover:not(:disabled) {
   color: var(--text-muted);
   border-color: var(--border);
 }
 /* The one moment it is worth noticing: an edit has just been written. */
-.flow-panel-save.on { color: var(--green, #15803d) }
-.flow-panel-save:disabled { cursor: default }
-.flow-panel-save:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+.flow-save-status.on { color: var(--green, #15803d) }
+.flow-save-status:disabled { cursor: default }
+.flow-save-status:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
 
 /* A GROUP'S NAME, so the order the panel asks in can be seen. Hairline above rather than a boxed
    heading: the groups are steps in one question, not separate panels. */
@@ -5045,30 +5043,6 @@ button.mf-open:focus-visible,
 /* Nothing above the first one to divide it from. */
 .flow-insp-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0 }
 
-.flow-insp-saverow {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 12px;
-}
-.flow-insp-save {
-  flex: none;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  border-radius: 8px;
-  padding: 5px 12px;
-  font: inherit; font-size: 12px; font-weight: 600;
-  color: var(--text);
-  cursor: pointer;
-  /* The label swaps between Save / Saving… / Saved ✓, and a button that resizes under the cursor
-     as it works is a button that moves away from the second press. */
-  min-width: 74px;
-}
-.flow-insp-save:hover:not(:disabled) { border-color: var(--border-strong, var(--border)); }
-.flow-insp-save:disabled { opacity: 0.6; cursor: default; }
-.flow-insp-save:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.flow-insp-saverow-note {
-  min-width: 0;
-  font-size: 10.5px; line-height: 1.35; color: var(--text-faint);
-}
 .flow-insp-open {
   margin-top: 8px;
   width: 100%;
@@ -5411,11 +5385,39 @@ button.mf-open:focus-visible,
 .flow-doc { margin-top: 12px; }
 /* The classic divider, because these are alternatives and not a control with a fallback. Rules
    either side so it separates rather than labelling what follows. */
+/* ONE FIELD WITH TWO WAYS TO FILL IT. Under a single label ("Brand description") these were two
+   bordered regions with a word between them, and the question read as being asked twice.
+   They were one box once, and were split for a specific reason: an attached document rendered above
+   the textarea, so the box you write in opened with somebody else's prose in it. That reason is about
+   ORDER, not about the border — so the seam is closed here and nothing moves. The drop area keeps its
+   full width and its dashed edge, because it was deliberately grown out of being a footnote.
+   Only when there is something above to join: on a Company card there is nothing to generate, so the
+   document region is the whole field and keeps its own frame. */
+.flow-fillbox:has(+ .flow-doc) {
+  border-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-bottom: 10px;
+}
+.flow-fillbox + .flow-doc {
+  margin-top: 0;
+  padding: 0 10px 10px;
+  border: 1px solid var(--border);
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  background: var(--surface-2);
+}
+/* Inside a field now, so it does not need to be its own island as well. */
+.flow-fillbox + .flow-doc .flow-doc-drop { padding: 11px 12px; }
+
 .flow-doc-or {
   display: flex; align-items: center; gap: 8px;
   margin: 0 0 10px;
   font-size: 11px; color: var(--text-faint);
 }
+/* At the seam of the joined field, the rule either side of "or" is the divider between the two
+   halves, so it wants the box's own inset rather than a margin of its own. */
+.flow-fillbox + .flow-doc > .flow-doc-or { margin: 0 0 9px; }
 .flow-doc-or::before, .flow-doc-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .flow-doc-lead { display: block; margin-bottom: 7px; }
 .flow-doc-title { display: block; font-size: 12px; font-weight: 650; color: var(--text); }
@@ -25083,12 +25085,6 @@ table.aud-sheet td.stick .aud-cell {
    you use it, and the placeholder it replaced disappeared on the first keystroke. It ran a second
    line of caveats until they were cut, which is why the head is still a column: one child now, and
    the gap costs nothing if a second ever earns its place. */
-.flow-fill-head {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
-}
 .flow-fill-title {
   font-size: 12px;
   font-weight: 600;

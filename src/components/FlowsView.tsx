@@ -716,7 +716,7 @@ function SavedStatus({ state, at, onSave }: { state: 'idle' | 'saving' | 'saved'
 
   return (
     <button
-      className={`flow-panel-save${state === 'saved' ? ' on' : ''}`}
+      className={`flow-save-status${state === 'saved' ? ' on' : ''}`}
       disabled={state === 'saving'}
       title="Saves on its own, within a second of an edit. Press to write it now."
       onClick={onSave}
@@ -8482,12 +8482,6 @@ export function FlowsView() {
                   took a third of the width off the definition underneath and wrapped it to three
                   lines. It qualifies the card's name, so it belongs beside the name. */}
               {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
-              {/* ON THE TITLE'S LINE, not the header's. As a sibling of the whole heading it took its
-                  width from the definition underneath — "Brand · Who this campaign writes as" wrapped
-                  to two lines the moment the label grew from "Saved" to "Saved 1 min ago". Beside the
-                  title it competes with a short string instead, and the definition gets the full
-                  width back. Same reasoning as the Work in progress tag above it. */}
-              {boardsHydrated && <SavedStatus state={saveState} at={lastSavedAt} onSave={() => void saveNow()} />}
             </span>
             {/* Once the title is the card's NAME, the header stops saying what kind of card it is —
                 the glyph is the only thing left carrying that, and a colour is not a word. So the
@@ -8688,19 +8682,19 @@ export function FlowsView() {
                         All three are true and none is urgent: the box takes a description, and in a
                         panel this narrow the instruction is the only part that has to be legible at
                         a glance. */}
-                    <div className="flow-fill-head">
-                      {/* Generate fills only what is still empty, so over a record that already
-                          says something the ask is the gaps, not the whole thing. */}
-                      <span className="flow-fill-title">
-                        {said.length ? `Add to this ${kindLabel}` : `Describe this ${kindLabel}`}
-                      </span>
-                    </div>
                     <textarea
                       className="flow-fill-input"
                       rows={4}
                       value={prompting[nt.id] ?? ''}
-                      /* No placeholder: the heading above it already says what the box is for, and
-                         what used to sit here was an example (see FILL_PLACEHOLDER). */
+                      /* IN THE BOX, NOT OVER IT. This was a 600-weight heading on its own row above
+                         the textarea, which read as a third thing to get past once the field itself
+                         is labelled — and it stayed there while you typed, restating the label over
+                         your own words. As a placeholder it is faint, it is the same sentence, and it
+                         gets out of the way the moment there is anything to say. Still not an example
+                         (see FILL_PLACEHOLDER for why those went); still carries the one fact worth
+                         keeping — that over a record which already says something, Generate is being
+                         asked for the gaps rather than the whole thing. */
+                      placeholder={said.length ? `Add to this ${kindLabel}…` : `Describe this ${kindLabel}…`}
                       onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
                       /**
                        * A PASTE LONG ENOUGH TO BE A DOCUMENT BECOMES ONE, the same move a pasted
@@ -10505,6 +10499,13 @@ export function FlowsView() {
           )}
         </div>
         <div className="flow-top-right">
+          {/* WHETHER THE BOARD IS SAVED BELONGS TO THE BOARD, not to whichever card is selected.
+              It spent a day in the card panel's header, where it was the same sentence on all eleven
+              kinds of panel and competed for a narrow title row that already carried a name and a
+              definition. The credits readout moved here for the same reason and says so above: the
+              header is where facts about the thing you are working in live, and the canvas toolbar is
+              a row of things you DO to it. */}
+          {boardsHydrated && <SavedStatus state={saveState} at={lastSavedAt} onSave={() => void saveNow()} />}
           {/* WHAT IS LEFT TO SPEND, in the header rather than on the canvas toolbar. The balance is
               a property of the workspace, not of the board you happen to be looking at, and the
               toolbar it used to sit on is a row of things you DO to the canvas. Reads the provider
