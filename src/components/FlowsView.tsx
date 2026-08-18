@@ -83,6 +83,7 @@ import { FlowChat, type ChatIntent } from './FlowChat'
 import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
+import { PanelHead } from './PanelHead'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
 import type { ChannelId, TrafficRow } from '../domain/types'
@@ -979,17 +980,6 @@ export function FlowsView() {
    * an empty second name field on a card nobody asked it of is exactly the clutter it was moved out
    * of the way to avoid. A card that already HAS an override shows the field regardless.
    */
-  /**
-   * The card whose name is being edited in the panel header, and the text being typed for it.
-   *
-   * Editing happens in the title because the title is the name — a Name field under a heading already
-   * displaying that name asked you to name a thing it was showing you. `renameCancelled` exists
-   * because Escape has to leave without writing, and leaving the field is also how you commit: the
-   * blur that ends the edit cannot tell by itself which of the two just happened.
-   */
-  const [renaming, setRenaming] = useState<string | null>(null)
-  const [renameDraft, setRenameDraft] = useState('')
-  const renameCancelled = useRef(false)
   /**
    * ONE hidden picker for every card, same as the Data source card's: the card that asked is held in
    * a ref, since mounting an input per card puts dozens in the tree for a control used once.
@@ -8481,137 +8471,66 @@ export function FlowsView() {
     const canNameRecord = !!nameRec && (!!nt.refId || !NEEDS_BRAND_TO_MINT.has(nt.kind) || !!brand)
     return (
       <>
-        <div className="flow-panel-head">
-          <span className="flow-note-ic flow-insp-ic" style={{ color: meta.tone }} aria-hidden="true">
+        {/* The panel's own anatomy lives in PanelHead now — see there for why. Keyed on the card so
+            switching selection closes an open rename rather than carrying the box to the next card.
+
+            WHAT THE KIND IS goes in `sub`: a definition of the panel you are looking at belongs to
+            the panel's title, and below the rule it was the third muted paragraph in a row, so the
+            body opened on explanation instead of on the card. Dropped when the title already IS the
+            kind, since printing it twice says nothing.
+
+            `tag` says this one is not finished. The Data source card acquires, reads and cites a
+            table, and the parts that are missing are invisible from here: somebody meeting it for the
+            first time cannot tell a gap from a thing they have failed to find.
+
+            `actions` carries the words the canvas already uses and the keystroke it already has — the
+            right-click menu has offered this all along as "Make a smart object" on ⌘⇧B, and the count
+            comes from the same expression that menu reads. Making a card reusable is a thing you do
+            TO it, so it sits with the panel's controls rather than in the body.
+
+            `rename` writes the record, so renaming here renames it everywhere that record is used,
+            and the card itself only where there is no record to carry the name. */}
+        <PanelHead
+          key={nt.id}
+          tone={meta.tone}
+          icon={
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
-          </span>
-          {/* WHAT THE KIND IS, in the header under the card's own name rather than as the first
-              paragraph of the body. It is a definition of the panel you are looking at, so it
-              belongs to the panel's title; below the rule it was the third muted paragraph in a
-              row (this, then the fill box's help, then the fields' own placeholders) and the body
-              opened on explanation instead of on the card. */}
-          <span className="flow-panel-heading">
-            <span className="flow-panel-titlerow">
-              {/* The card's NAME heads its panel, falling back to the kind. With four Audience cards
-                  on a board, four panels headed "Audience" gave you no way to tell from the panel
-                  which one you had selected. */}
-              {/* THE TITLE IS THE NAME, so it is edited where it is shown. A Name field sat under a
-                  heading already displaying that name, asking you to name a thing it was showing you —
-                  and beneath it a second field for calling it something else on this board, which was
-                  a rare and deliberate act taking up a permanent row.
-
-                  The pencil appears on hovering the header, so the heading is a heading until you
-                  reach for it. Keyboard users get it on focus, or the panel would have a control they
-                  can tab to and never see.
-
-                  What it writes is unchanged from the field it replaces: the record, so renaming here
-                  renames it everywhere that record is used, and the card itself only where there is no
-                  record to carry the name. */}
-              {renaming === nt.id ? (
-                <input
-                  className="flow-panel-title-input"
-                  autoFocus
-                  value={renameDraft}
-                  placeholder={canNameRecord ? `Name this ${kindLabel}…` : 'Name this card…'}
-                  onChange={(e) => setRenameDraft(e.target.value)}
-                  onBlur={() => {
-                    if (!renameCancelled.current) {
-                      const next = renameDraft.trim()
-                      if (canNameRecord && nameRec) {
-                        nameRec.apply({ [nameRec.nameKey]: next })
-                        // A board-local name would mask what was just typed, and nothing makes one
-                        // any more, so an old one stops hiding the record it belongs to.
-                        if (nt.name) renameObject(nt.id, '')
-                      } else {
-                        renameObject(nt.id, next)
-                      }
-                    }
-                    renameCancelled.current = false
-                    setRenaming(null)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
-                    else if (e.key === 'Escape') { e.preventDefault(); renameCancelled.current = true; e.currentTarget.blur() }
-                  }}
-                />
-              ) : (
-                <>
-                  <span className="flow-panel-title" title={title}>{title}</span>
-                  <button
-                    className="flow-panel-rename"
-                    title={`Rename this ${kindLabel}`}
-                    aria-label={`Rename this ${kindLabel}`}
-                    onClick={() => {
-                      // The stored name, not the displayed one: with nothing named the title falls
-                      // back to the kind, and opening the box on "Brand" would offer that as a name.
-                      setRenameDraft(canNameRecord ? recordName : nt.name ?? '')
-                      setRenaming(nt.id)
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M12 20h8" />
-                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
-                    </svg>
-                  </button>
-                </>
-              )}
-              {/* SAY THAT THIS ONE IS NOT FINISHED.
-                  The card acquires, reads and cites a table, and the parts that are missing
-                  (connecting LinkedIn or Instagram, reading an .xlsx, comparing two periods) are
-                  invisible from here: somebody meeting it for the first time cannot tell a gap from
-                  a thing they have failed to find. A tag is cheaper than that confusion, and it
-                  comes off in one line.
-
-                  On the title's own line, not the header's: as a sibling of the whole heading it
-                  took a third of the width off the definition underneath and wrapped it to three
-                  lines. It qualifies the card's name, so it belongs beside the name. */}
-              {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
-          {/* MAKING IT REUSABLE IS A THING YOU DO TO THE CARD, not a thing the card says about
-              itself, so it sits with the panel's own controls rather than in the body.
-
-              It spent a while at the foot of the panel under a heading called "Keeping it": a rule,
-              an uppercase label and eighteen pixels of margin spent on one rare button, with a
-              heading that did not say what it meant until you read the button under it. And a
-              full-width box at the bottom of a panel is the shape of a primary action, which this is
-              not. As an icon it costs a corner and stops competing with the fields.
-
-              The count is in the label because the selection decides it: bundling three cards while
-              saying "this" would be the label lying about what the click does. */}
-          {/* THE WORDS THE CANVAS ALREADY USES, plus the keystroke it already has. This action was not
-              new when it arrived in the panel: the right-click menu has offered it all along as
-              "Make a smart object" / "Bundle into a smart object" on ⌘⇧B. Two names for one act is
-              how you end up believing they are two acts, and a tooltip is a free place to teach a
-              shortcut to somebody who found the long way round. */}
-          {promoteCount > 0 && (
-            <button
-              className="flow-panel-action"
-              title={`${promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}  ⌘⇧B`}
-              aria-label={promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}
-              onClick={() => convertSelection()}
-            >
-              {/* Two diamonds, one inside the other: an instance of a thing, which is what a smart
-                  object is. Nothing in the app drew one before, so this follows the house language
-                  rather than an existing mark: 24 grid, 1.7 stroke, currentColor, round joins. */}
-              {/* Drawn to the same extent as the collapse glyph beside it — 4 to 20 on the 24 grid,
-                  where that one's panel rect runs 4 to 20. At 2.8 to 21.2 it was the same box and the
-                  same 16px, but a bigger drawing inside it, so the pair read as mismatched even once
-                  their centres agreed to the pixel. */}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 4 20 12 12 20 4 12z" />
-                <path d="M12 9 15 12 12 15 9 12z" />
-              </svg>
-            </button>
-          )}
-            </span>
-            {/* Once the title is the card's NAME, the header stops saying what kind of card it is —
-                the glyph is the only thing left carrying that, and a colour is not a word. So the
-                kind rejoins its own definition here, and drops out again when the title already IS
-                the kind and printing it twice would say nothing. */}
-            <span className="flow-panel-sub">
-              {title === meta.label ? meta.menuDesc : `${meta.label} · ${meta.menuDesc}`}
-            </span>
-          </span>
-        </div>
+          }
+          title={title}
+          sub={title === meta.label ? meta.menuDesc : `${meta.label} · ${meta.menuDesc}`}
+          tag={nt.kind === 'data-source' ? <span className="flow-panel-wip">Work in progress</span> : undefined}
+          actions={
+            promoteCount > 0 ? (
+              <button
+                className="flow-panel-action"
+                title={`${promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}  ⌘⇧B`}
+                aria-label={promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}
+                onClick={() => convertSelection()}
+              >
+                {/* Two diamonds, one inside the other: an instance of a thing. Drawn to the same
+                    extent as the collapse glyph beside it, 4 to 20 on the 24 grid. */}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 4 20 12 12 20 4 12z" />
+                  <path d="M12 9 15 12 12 15 9 12z" />
+                </svg>
+              </button>
+            ) : undefined
+          }
+          rename={{
+            value: canNameRecord ? recordName : nt.name ?? '',
+            placeholder: canNameRecord ? `Name this ${kindLabel}…` : 'Name this card…',
+            what: `Rename this ${kindLabel}`,
+            onCommit: (next) => {
+              if (canNameRecord && nameRec) {
+                nameRec.apply({ [nameRec.nameKey]: next })
+                // A board-local name would mask what was just typed, and nothing makes one any more.
+                if (nt.name) renameObject(nt.id, '')
+              } else {
+                renameObject(nt.id, next)
+              }
+            },
+          }}
+        />
         <div className="flow-inspect">
           {nt.kind === 'data-source' && (
             <p className="flow-inspect-note flow-wip-note">
