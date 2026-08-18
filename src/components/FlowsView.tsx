@@ -8636,16 +8636,15 @@ export function FlowsView() {
               So the fields are gone from here. They still exist and are still filled: Generate writes
               them, and they are edited where records are edited. What a card asks you for now is the
               thing only you can give it, in the form you already have it in. */}
-          {/* WHAT IT SAYS. The panel asks for three things in the order you would do them — name it,
-              say what it is, and see where that reaches — and rendered them as eleven controls in one
-              flat column, so the order was real and invisible. A label and a hairline per group is
-              the cheapest thing that makes it legible, and it is the shape every other card's panel
-              can take: identity, then content, then reach, then keeping. */}
-          {/* A FIELD, LABELLED LIKE THE ONE ABOVE IT. It was a section heading — small, uppercase,
-              muted, with a rule over it — which set it apart from Name when the two are the same
-              kind of thing: the two boxes you fill in about this card. Name and this one now read as
-              one group of fields, and the hairline sections are kept for what follows, which is a
-              readout and an action rather than anything you type. */}
+          {/* WHAT IT SAYS. The panel asks three things in the order you would do them: what the card
+              is called, what it says, and where that reaches. They were eleven controls in one flat
+              column, so the order was real and invisible.
+
+              A rule between each, and a label on each, which is all it takes. Uppercase section heads
+              were tried here and were too much furniture for three groups — they made the two boxes
+              you type into look like different kinds of thing, when Name and the description are the
+              same kind of thing. */}
+          {TAKES_CONTEXT.has(nt.kind) && <div className="flow-inspect-rule" />}
           {TAKES_CONTEXT.has(nt.kind) && (
             <>
               {/* THE DEFINITION GOES IN THE ONE PLACE DEFINITIONS GO. This was two lines of grey
@@ -9144,6 +9143,7 @@ export function FlowsView() {
               </div>
             )
           })()}
+          <div className="flow-inspect-rule" />
           {/* APPLIED TO: what this card feeds. A readout, not a control: wires are drawn and cut on
               the canvas, and a second place to edit them would be a second thing to keep in step
               with the first. Naming the targets is what it is for, since a card three hops upstream

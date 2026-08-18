@@ -4650,10 +4650,11 @@ button.mf-open:focus-visible,
   flex: 0 0 auto;
   /* ON THE TITLE'S LINE, pushed to its end. As a child of the header's own row it took its width from
      the definition underneath, and "Brand · Who this campaign writes as" wrapped to two lines. Beside
-     the title it competes with something that already shortens. margin-right clears the collapse
-     button, which is absolute at right 12 and 28 wide. */
+     the title it competes with something that already shortens.
+     No margin against the collapse button: .flow-panel-head already reserves 48px on the right for
+     it, so the 34px added here was clearing an edge that was clear, and parked the two controls 42px
+     apart. Sitting at the end of the row leaves 8. */
   margin-left: auto;
-  margin-right: 34px;
   width: 28px;
   height: 28px;
   border: 0;
@@ -4983,6 +4984,15 @@ button.mf-open:focus-visible,
    campaign name is not a new thing: it is the field above, scoped. Following an input was enough to
    earn a rule for as long as every label after one did open something new, and the alias field is the
    first that does not, so it was drawing a line between a field and its own qualifier. */
+/* A RULE BETWEEN GROUPS, run out to the panel's edges. Inset to the body's padding it reads as
+   another element in the column, one more thing at the same indent as the fields; full width it reads
+   as the panel dividing, which is what it is for. The -14px matches .flow-inspect's own padding. */
+.flow-inspect-rule {
+  height: 1px;
+  background: var(--border);
+  margin: 16px -14px;
+}
+
 .flow-inspect-label.cont {
   border-top: 0;
   padding-top: 0;
