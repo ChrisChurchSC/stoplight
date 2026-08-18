@@ -8620,6 +8620,7 @@ export function FlowsView() {
             return (
               <div
                 className="flow-context"
+                style={{ position: 'relative' }}
                 /**
                  * DROP A FILE ANYWHERE ON EITHER PART, not just on the button. dropEffect has to be
                  * set on EVERY dragover or the browser refuses the drop, and preventDefault on both
@@ -8646,6 +8647,28 @@ export function FlowsView() {
                   if (file) void attachDocFile(nt.id, file)
                 }}
               >
+                {/* WHERE THE DASHED TARGET WENT: over the field, while a file is actually in the air.
+                    An overlay rather than a region that appears in the flow, because .flow-doc's own
+                    note already warns why — a border that arrives mid-drag shifts the thing you are
+                    aiming at out from under the cursor. This costs no layout at all.
+
+                    It is also the one place the landing note is worth reading. "It becomes this
+                    brand's own document" was on a panel visible at all times, explaining a decision
+                    nobody had made yet; here it is answering "what happens if I let go", at the
+                    moment that is the actual question. Only where there is a field to cover — a
+                    Company card's dashed target is on screen already. */}
+                {canGenerate && docDropOn === nt.id && (
+                  <div className="flow-drop-over" aria-hidden="true">
+                    <span className="flow-drop-over-ic">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" />
+                        <path d="M14 3v4h4" />
+                      </svg>
+                    </span>
+                    <span className="flow-drop-over-main">Drop to use it</span>
+                    <span className="flow-drop-over-sub">It becomes this {kindLabel}&rsquo;s own document.</span>
+                  </div>
+                )}
                 {/* THE PROMPT, AND ONLY THE PROMPT.
                     The document and its upload button used to sit inside this box, which made the
                     box mean two different things: a thing you write in, and a thing that holds a
@@ -8731,16 +8754,36 @@ export function FlowsView() {
                       >
                         {busy ? 'Generating…' : 'Generate'}
                       </button>
+                      {/* THE OTHER ROUTE, BESIDE THE FIRST ONE. It was a four-row dashed panel below
+                          an "or", which made one question look like two — and before that it was a
+                          small link under that "or", which made the second route look like a footnote
+                          to the first. A button next to Generate is neither: two ways to answer, the
+                          same size, on one line. Same handler the dashed target used.
+
+                          The dashed target is not gone, it is deferred: it appears over the field
+                          while a file is actually being dragged (see the overlay below), which is
+                          also where it can say where the file lands, at the moment that matters. */}
+                      <button
+                        className="flow-fill-doc-go"
+                        disabled={busy}
+                        title={`Give this ${kindLabel} a document instead — it becomes the ${kindLabel}'s own`}
+                        onClick={() => { docTargetRef.current = { cardId: nt.id, override: false }; docFileRef.current?.click() }}
+                      >
+                        Upload a .md
+                      </button>
                       {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
                     </div>
                   </div>
                 )}
-                {/* THE OTHER WAY TO ANSWER THE CARD, under the first and separated from it.
-                    The two are alternatives, not a control and its fallback, so the word between
-                    them is doing real work — and on a Company card, where there is nothing to
-                    generate, there is no "or" and this is simply the only way in. */}
-                <div className={`flow-doc${docDropOn === nt.id ? ' dropping' : ''}`}>
-                  {canGenerate && <span className="flow-doc-or">or</span>}
+                {/* WHAT AN UPLOADED DOCUMENT IS, once there is one — and on a Company card, the only
+                    way in, because there is nothing there to generate from. The "or" that used to
+                    head this went with the panel it divided: with Upload sitting beside Generate
+                    there is no second region for a word to sit between. */}
+                {/* The region outline answers only where the overlay does not. It existed to say
+                    "the whole region takes the drop, not just the button" — which the overlay now says
+                    for any card with a prompt box, and where this region is empty it was drawing a
+                    stray dashed strip under the overlay saying nothing. */}
+                <div className={`flow-doc${docDropOn === nt.id && !canGenerate ? ' dropping' : ''}`}>
                   {/* THE PITCH IS EMPTY-STATE COPY AND GOES WHEN THE STATE DOES.
                       A heading offering to take a document, and a paragraph explaining what that
                       would do, sitting above a document already attached, is the panel talking past
@@ -8750,7 +8793,13 @@ export function FlowsView() {
                       fact twice, thirty words apart, in a column this narrow. What stays true once
                       a document is attached is said by the document's own rows; this only earns its
                       place when there is nothing there. */}
-                  {!ref && (
+                  {/* AND ONLY WHERE IT IS THE WAY IN. On a card with a prompt box, Upload now sits
+                      beside Generate and this four-row dashed panel said the same thing a second
+                      time, twice the size, under a divider — one question wearing two answers. It
+                      still appears there, but over the field and only while a file is being dragged.
+                      A Company card has no prompt box, so here it is not a duplicate of anything:
+                      it is the only way in, and it keeps its full size and its lead. */}
+                  {!ref && !canGenerate && (
                     <>
                       {/* AND NO HEADING WHERE THE BUTTON IS ALREADY THE HEADING.
                           The cut above took the pitch out of the attached state; this takes it out
