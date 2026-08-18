@@ -8521,6 +8521,15 @@ export function FlowsView() {
             }}
           />
           {/* AND THE RARE CASE, ONE LINE DOWN: calling it something else on this board only.
+
+              NO NOTE UNDER IT ANY MORE. Three sentences explained where the alias shows, that the
+              record keeps its own name, and how to undo — and the field had come to say all three
+              itself. The label scopes it ("Name on this campaign"), the empty box shows the record's
+              name as its placeholder, and the ✕ beside it reads "Go back to Arbitrum". A paragraph
+              restating the controls under the controls is the thing this panel keeps being trimmed
+              of. If the safeguard ever needs saying again, the clause worth keeping is that Records
+              still calls it by its own name, and it belongs in a glossary entry rather than here.
+
               Worth keeping — a card can honestly need a name the library should not be called — but
               it is not what somebody opening a blank card came here to do, and for as long as it
               WAS the Name field the common act had nowhere to go. Offered only where the field
@@ -8557,11 +8566,6 @@ export function FlowsView() {
                   </svg>
                 </button>
               </span>
-              <div className="flow-inspect-note" style={{ marginTop: 6 }}>
-                The board and the grid call it this. Records still calls it
-                {recordName ? <strong> {recordName}</strong> : ` the ${kindLabel}'s own name`}. Clear
-                the box, or press the ✕, to go back to it.
-              </div>
             </>
           ) : (
             <button className="flow-doc-override-go" style={{ marginTop: 8 }} onClick={() => setAliasOpen(nt.id)}>
