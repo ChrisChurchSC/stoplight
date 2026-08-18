@@ -8529,16 +8529,38 @@ export function FlowsView() {
           {canNameRecord && (nt.name || aliasOpen === nt.id ? (
             <>
               <label className="flow-inspect-label">Name on this campaign</label>
-              <BufferedInput
-                className="flow-inspect-input"
-                value={nt.name ?? ''}
-                placeholder={recordName || `Name this ${kindLabel}…`}
-                onCommit={(v) => { renameObject(nt.id, v); if (!v.trim()) setAliasOpen(null) }}
-              />
+              {/* THE WAY BACK OUT, which there was not one of.
+                  Clearing the box was the documented way to close this, and BufferedInput only
+                  commits when the buffer differs from the value — so on a card with no alias, the
+                  box opens empty, blurs equal to what it started as, commits nothing, and the field
+                  never closes. "Clear the box to go back to it" cannot be performed on a box that is
+                  already clear. Someone who clicked the line to see what it did was stuck with a
+                  field they did not want until they selected another card.
+
+                  One button for both states, because they are the same act: stop calling it something
+                  else here. It only writes when there is something to unset. */}
+              <span className="flow-alias-field">
+                <BufferedInput
+                  className="flow-inspect-input"
+                  value={nt.name ?? ''}
+                  placeholder={recordName || `Name this ${kindLabel}…`}
+                  onCommit={(v) => { renameObject(nt.id, v); if (!v.trim()) setAliasOpen(null) }}
+                />
+                <button
+                  className="flow-alias-clear"
+                  title={nt.name ? `Go back to ${recordName || `the ${kindLabel}'s own name`}` : 'Never mind'}
+                  aria-label={nt.name ? 'Remove this campaign name' : 'Close without setting a campaign name'}
+                  onClick={() => { if (nt.name) renameObject(nt.id, ''); setAliasOpen(null) }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </span>
               <div className="flow-inspect-note" style={{ marginTop: 6 }}>
                 The board and the grid call it this. Records still calls it
                 {recordName ? <strong> {recordName}</strong> : ` the ${kindLabel}'s own name`}. Clear
-                the box to go back to it.
+                the box, or press the ✕, to go back to it.
               </div>
             </>
           ) : (

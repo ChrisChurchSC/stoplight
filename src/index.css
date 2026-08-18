@@ -4965,6 +4965,32 @@ button.mf-open:focus-visible,
   resize: vertical;
   outline: none;
 }
+/* The alias box and its way out. Inside the field rather than beside it, so the control that undoes
+   the field is part of the field and not another row to notice. */
+.flow-alias-field { position: relative; display: block }
+.flow-alias-field .flow-inspect-input { padding-right: 32px }
+.flow-alias-clear {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.flow-alias-clear svg { width: 12px; height: 12px }
+.flow-alias-clear:hover { color: var(--text); background: var(--surface) }
+.flow-alias-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+
 .flow-inspect-input:focus {
   border-color: var(--accent);
 }
