@@ -4819,49 +4819,6 @@ button.mf-open:focus-visible,
 .flow-panel .flow-panel-head {
   padding-right: 48px;
 }
-/* THE PENCIL, on hover of the header. Hidden at rest because the heading is a heading most of the
-   time, and revealed on focus as well, or the panel would carry a control a keyboard can reach and an
-   eye never finds. */
-.flow-panel-rename {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  background: none;
-  border-radius: 5px;
-  color: var(--text-faint);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
-}
-.flow-panel-rename svg { width: 14px; height: 14px }
-.flow-panel-head:hover .flow-panel-rename,
-.flow-panel-rename:focus-visible { opacity: 1 }
-.flow-panel-rename:hover { color: var(--text); background: var(--surface-2) }
-.flow-panel-rename:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
-
-/* Editing in place: the title's own type, in a box, on the line the title was on. Negative margin so
-   the header does not grow by the box's padding as it opens. */
-.flow-panel-title-input {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 2px 7px;
-  margin: -3px 0;
-  outline: none;
-}
-.flow-panel-title-input:focus { border-color: var(--accent) }
-
 .flow-panel-title {
   font-size: 15px;
   font-weight: 700;
@@ -5026,10 +4983,22 @@ button.mf-open:focus-visible,
    three named things rather than forty rows. Scoped to that adjacency on purpose: the same class
    also labels the first thing in a panel, and a rule above the top item would fence it off from the
    header. */
-.flow-recform + .flow-inspect-label,
-.flow-inspect-input + .flow-inspect-label {
+/* EVERY GROUP HEAD THAT IS NOT THE FIRST THING IN THE PANEL GETS A RULE, and it spans the panel: inset
+   it read as a divider belonging to the list above rather than as the panel dividing. The text keeps
+   its indent; only the line runs out.
+
+   By position rather than by what precedes it. This was a list of adjacencies — a label after a
+   record form, after an input, after a context list — which meant a group head earned its rule
+   according to what happened to sit above it, and "Channels" went without one because the thing above
+   was a list nobody had added to the selector. A head opening a group is a head opening a group.
+
+   `.rel` opts out for a head that continues the group above it rather than starting a new one, which
+   is the only case the position rule cannot see. */
+.flow-inspect-label:not(:first-child):not(.rel) {
   border-top: 1px solid var(--border);
-  padding-top: 15px;
+  margin-left: -14px;
+  margin-right: -14px;
+  padding: 15px 14px 0;
 }
 /* UNLESS IT CONTINUES THE GROUP ABOVE IT. The rule means "a new named thing starts here", and the
    campaign name is not a new thing: it is the field above, scoped. Following an input was enough to
@@ -5336,14 +5305,22 @@ button.mf-open:focus-visible,
    Same left-rule shape as .flow-told so a card still reads as one idea, but every row is a control —
    a record is edited where it is judged, not in Records. An unfilled row stays visible and quiet,
    because the gap is the prompt. Shared by every card kind that names a record. */
+/* THE SAME FIELD AS THE BRAND PANEL'S, so a panel is a panel. These rows were a compact borderless
+   list — 11px muted labels over transparent values — beside panels whose fields are a bold label over
+   a boxed input, and the two read as different kinds of software. The row layout stays, because these
+   are short answers and a column of them is right; what changes is that a label looks like a label and
+   a value looks like something you can type in. */
 .flow-recform { display: flex; flex-direction: column; margin-top: 4px; }
 /* SEPARATORS BETWEEN ROWS, not under every one. A border-bottom on each field drew a rule under the
    last one too, which fenced the group off from the note that explains it, and one directly beneath
    a section head, which cut the head away from the fields it introduces. Between-only leaves the
    group with a top and a bottom that belong to it. */
 .flow-recform-field {
-  display: flex; flex-direction: column; gap: 3px;
-  padding: 9px 0 10px;
+  display: flex; flex-direction: column; gap: 6px;
+  /* Out past the body's padding so the rule between two fields spans the panel, like every other rule
+     in these panels now. Inset, it read as a list item's divider rather than the panel dividing. */
+  margin: 0 -14px;
+  padding: 12px 14px;
 }
 .flow-recform-field + .flow-recform-field {
   border-top: 1px solid var(--border);
@@ -5359,16 +5336,22 @@ button.mf-open:focus-visible,
    answer, which is the correct order. The mono voice keeps the jobs it does well: the kind chip, the
    layer sub-rows, the outline heads. */
 .flow-recform-key {
-  font-size: 11px; font-weight: 600;
-  color: var(--text-muted);
+  font-size: 12.5px; font-weight: 650;
+  color: var(--text);
 }
 .flow-recform-select,
 .flow-recform-input {
   width: 100%;
-  border: none; background: none; outline: none;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 9px;
+  outline: none;
   font: inherit; font-size: 13px; color: var(--text);
-  padding: 0; overflow-wrap: anywhere;
+  padding: 9px 11px; overflow-wrap: anywhere;
 }
+.flow-recform-select:focus,
+.flow-recform-input:focus { border-color: var(--accent); }
 .flow-recform-select { cursor: pointer; text-transform: none; }
 .flow-recform-area {
   width: 100%; border: none; background: none; outline: none;
@@ -5869,12 +5852,21 @@ button.mf-open:focus-visible,
 /* THE PICKER. One dropdown for every field on a card: click to open, type to filter once the list
    earns it, and a value you type is offered in the same list rather than through a separate mode. */
 .pk { position: relative; display: block; }
+/* A PICKER IS A FIELD, so it wears what a field wears. Bare beside a boxed input and a boxed budget,
+   it read as a line of text with a chevron parked at the end rather than as somewhere to answer. */
 .pk-field {
   display: flex; align-items: center; gap: 6px; width: 100%;
-  border: none; background: none; padding: 0; margin: 0;
-  font: inherit; font-size: 12.5px; color: var(--text);
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 9px;
+  padding: 9px 11px; margin: 0;
+  font: inherit; font-size: 13px; color: var(--text);
   text-align: left; cursor: pointer;
+  transition: border-color 120ms ease;
 }
+.pk-field:hover { border-color: var(--border-strong, var(--border)); }
+.pk-field:focus-visible { outline: none; border-color: var(--accent); }
 .pk-field.empty .pk-value { color: var(--text-faint); }
 .pk-value { flex: 1; overflow-wrap: anywhere; }
 .pk-caret { flex: none; color: var(--text-faint); }
@@ -6589,14 +6581,19 @@ button.mf-open:focus-visible,
   line-height: 1.55;
   padding: 14px 4px 0;
 }
+/* Full width and filled, like every other field in a panel. Inline-flex on --surface, it sat as a
+   white pill against a column of grey boxes and read as the one control of a different kind. */
 .flow-step {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 9px;
   overflow: hidden;
-  background: var(--surface);
+  background: var(--surface-2);
 }
 .flow-step button {
   border: 0;
@@ -6612,10 +6609,13 @@ button.mf-open:focus-visible,
    control for the same number inside 90px. Belt and braces, since a stray type="number" elsewhere
    would otherwise reintroduce them. */
 .flow-step-input {
-  width: 54px;
+  /* SAME STEPPER, whether the number can be typed or not. This one carried a divider on each side and
+     a fixed 54px, so beside the length stepper — a plain span between the same two buttons — it read
+     as a segmented control next to a single field. The dividers were the only thing saying "you can
+     type here", and a focus tint already says it at the moment it matters. */
+  flex: 1;
+  min-width: 0;
   border: 0;
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
   background: none;
   font: inherit;
   font-size: 13px;
@@ -6652,6 +6652,9 @@ button.mf-open:focus-visible,
   color: var(--text);
 }
 .flow-step span {
+  /* Flexes for the same reason the input does, so the value is centred in whatever is left between
+     the two buttons rather than in a fixed box that happens to sit near the middle. */
+  flex: 1;
   min-width: 84px;
   text-align: center;
   font-size: 13px;
