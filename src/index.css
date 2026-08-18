@@ -4670,10 +4670,15 @@ button.mf-open:focus-visible,
 .flow-panel-action svg { width: 16px; height: 16px }
 .flow-panel-action:hover { background: var(--surface-2); color: var(--text) }
 .flow-panel-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
-.flow-panel-collapse svg { width: 15px; height: 15px; }
-/* Collapsed brief: a thin rail with a reopen button */
-.flow-panel-rail { width: 48px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
-.flow-panel-rail-btn { width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.flow-panel-collapse svg { width: 16px; height: 16px; }
+/* Collapsed brief: a thin rail with a reopen button.
+   THE BUTTON DOES NOT MOVE WHEN THE PANEL GOES. Both controls already started at the same pixel, but
+   the collapsed one was 34 square against the expanded one's 28, so the glyph inside it sat 3px down
+   and 3px right of where it had just been and the icon appeared to hop as the panel closed. Same
+   size, and placed against the rail's right edge rather than centred in it, because centring a
+   narrower button in a 48px rail would have moved it 2px the other way. */
+.flow-panel-rail { width: 48px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: flex-end; padding: 14px 12px 0 0; }
+.flow-panel-rail-btn { width: 28px; height: 28px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
 .flow-panel-rail-btn:hover { border-color: var(--accent); color: var(--accent); }
 .flow-panel-rail-btn svg { width: 16px; height: 16px; }
 .flow-panel-head {
