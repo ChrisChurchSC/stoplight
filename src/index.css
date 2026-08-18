@@ -4952,6 +4952,15 @@ button.mf-open:focus-visible,
   border-top: 1px solid var(--border);
   padding-top: 15px;
 }
+/* UNLESS IT CONTINUES THE GROUP ABOVE IT. The rule means "a new named thing starts here", and the
+   campaign name is not a new thing: it is the field above, scoped. Following an input was enough to
+   earn a rule for as long as every label after one did open something new, and the alias field is the
+   first that does not, so it was drawing a line between a field and its own qualifier. */
+.flow-inspect-label.cont {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 14px;
+}
 .flow-inspect-input {
   width: 100%;
   box-sizing: border-box;

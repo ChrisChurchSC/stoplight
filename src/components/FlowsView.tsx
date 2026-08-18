@@ -8537,7 +8537,7 @@ export function FlowsView() {
               to override it with. */}
           {canNameRecord && (nt.name || aliasOpen === nt.id ? (
             <>
-              <label className="flow-inspect-label">Name on this campaign</label>
+              <label className="flow-inspect-label cont">Name on this campaign</label>
               {/* THE WAY BACK OUT, which there was not one of.
                   Clearing the box was the documented way to close this, and BufferedInput only
                   commits when the buffer differs from the value — so on a card with no alias, the
