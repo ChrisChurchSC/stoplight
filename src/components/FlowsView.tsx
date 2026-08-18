@@ -8431,7 +8431,6 @@ export function FlowsView() {
    */
   const renderObjectInspector = (nt: CanvasObject) => {
     const meta = OBJECT_META[nt.kind]
-    const title = cardLabel(nt, meta.label)
     const kindLabel = meta.label.toLowerCase()
     /**
      * THE RECORD THIS CARD NAMES, resolved at the top of the panel rather than inside the context
@@ -8488,16 +8487,20 @@ export function FlowsView() {
             comes from the same expression that menu reads. Making a card reusable is a thing you do
             TO it, so it sits with the panel's controls rather than in the body.
 
-            `rename` writes the record, so renaming here renames it everywhere that record is used,
-            and the card itself only where there is no record to carry the name. */}
+            THE TITLE IS THE KIND, not the card's own name. Naming it in the header meant a Name field
+            under a heading already displaying that name, which is what sent the name into the header
+            in the first place — and the two only ever conflicted because the header carried the wrong
+            thing. A panel says what kind of thing you are in; the canvas already told you which one,
+            because you clicked it. The name is the first field in the body, one line down, which is
+            also the answer to "which of these four Audience cards is this". */}
         <PanelHead
           key={nt.id}
           tone={meta.tone}
           icon={
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
           }
-          title={title}
-          sub={title === meta.label ? meta.menuDesc : `${meta.label} · ${meta.menuDesc}`}
+          title={meta.label}
+          sub={meta.menuDesc}
           tag={nt.kind === 'data-source' ? <span className="flow-panel-wip">Work in progress</span> : undefined}
           actions={
             promoteCount > 0 ? (
@@ -8516,11 +8519,23 @@ export function FlowsView() {
               </button>
             ) : undefined
           }
-          rename={{
-            value: canNameRecord ? recordName : nt.name ?? '',
-            placeholder: canNameRecord ? `Name this ${kindLabel}…` : 'Name this card…',
-            what: `Rename this ${kindLabel}`,
-            onCommit: (next) => {
+        />
+        <div className="flow-inspect">
+          {/* NAME IT, FIRST. Not redundant with the header any more: the header names the KIND, so
+              this is the only place the card's own name appears or can be set. A field rather than a
+              pencil in the title, because a labelled box is always visible and a hover affordance is
+              not — and it puts naming in the same vocabulary as everything under it.
+
+              BUFFERED, because this one can mint. Committing per keystroke on a card that has no
+              record yet would put the first letter you typed into the library as a record and then
+              rename it eleven times; on blur it is one record with the name you meant. */}
+          <label className="flow-inspect-label">Name</label>
+          <BufferedInput
+            className="flow-inspect-input"
+            value={canNameRecord ? recordName : nt.name ?? ''}
+            placeholder={canNameRecord ? `Name this ${kindLabel}…` : 'Name this card…'}
+            onCommit={(v) => {
+              const next = v.trim()
               if (canNameRecord && nameRec) {
                 nameRec.apply({ [nameRec.nameKey]: next })
                 // A board-local name would mask what was just typed, and nothing makes one any more.
@@ -8528,10 +8543,9 @@ export function FlowsView() {
               } else {
                 renameObject(nt.id, next)
               }
-            },
-          }}
-        />
-        <div className="flow-inspect">
+            }}
+          />
+          {TAKES_CONTEXT.has(nt.kind) && <div className="flow-inspect-rule" />}
           {nt.kind === 'data-source' && (
             <p className="flow-inspect-note flow-wip-note">
               This card is still being built. Pasting, uploading and describing a table all work, and

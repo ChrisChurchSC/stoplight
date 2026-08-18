@@ -4819,49 +4819,6 @@ button.mf-open:focus-visible,
 .flow-panel .flow-panel-head {
   padding-right: 48px;
 }
-/* THE PENCIL, on hover of the header. Hidden at rest because the heading is a heading most of the
-   time, and revealed on focus as well, or the panel would carry a control a keyboard can reach and an
-   eye never finds. */
-.flow-panel-rename {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  background: none;
-  border-radius: 5px;
-  color: var(--text-faint);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
-}
-.flow-panel-rename svg { width: 14px; height: 14px }
-.flow-panel-head:hover .flow-panel-rename,
-.flow-panel-rename:focus-visible { opacity: 1 }
-.flow-panel-rename:hover { color: var(--text); background: var(--surface-2) }
-.flow-panel-rename:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
-
-/* Editing in place: the title's own type, in a box, on the line the title was on. Negative margin so
-   the header does not grow by the box's padding as it opens. */
-.flow-panel-title-input {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 2px 7px;
-  margin: -3px 0;
-  outline: none;
-}
-.flow-panel-title-input:focus { border-color: var(--accent) }
-
 .flow-panel-title {
   font-size: 15px;
   font-weight: 700;
