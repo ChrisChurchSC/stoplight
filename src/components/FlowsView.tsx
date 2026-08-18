@@ -979,7 +979,17 @@ export function FlowsView() {
    * an empty second name field on a card nobody asked it of is exactly the clutter it was moved out
    * of the way to avoid. A card that already HAS an override shows the field regardless.
    */
-  const [aliasOpen, setAliasOpen] = useState<string | null>(null)
+  /**
+   * The card whose name is being edited in the panel header, and the text being typed for it.
+   *
+   * Editing happens in the title because the title is the name — a Name field under a heading already
+   * displaying that name asked you to name a thing it was showing you. `renameCancelled` exists
+   * because Escape has to leave without writing, and leaving the field is also how you commit: the
+   * blur that ends the edit cannot tell by itself which of the two just happened.
+   */
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const renameCancelled = useRef(false)
   /**
    * ONE hidden picker for every card, same as the Data source card's: the card that asked is held in
    * a ref, since mounting an input per card puts dozens in the tree for a control used once.
@@ -8485,7 +8495,66 @@ export function FlowsView() {
               {/* The card's NAME heads its panel, falling back to the kind. With four Audience cards
                   on a board, four panels headed "Audience" gave you no way to tell from the panel
                   which one you had selected. */}
-              <span className="flow-panel-title" title={title}>{title}</span>
+              {/* THE TITLE IS THE NAME, so it is edited where it is shown. A Name field sat under a
+                  heading already displaying that name, asking you to name a thing it was showing you —
+                  and beneath it a second field for calling it something else on this board, which was
+                  a rare and deliberate act taking up a permanent row.
+
+                  The pencil appears on hovering the header, so the heading is a heading until you
+                  reach for it. Keyboard users get it on focus, or the panel would have a control they
+                  can tab to and never see.
+
+                  What it writes is unchanged from the field it replaces: the record, so renaming here
+                  renames it everywhere that record is used, and the card itself only where there is no
+                  record to carry the name. */}
+              {renaming === nt.id ? (
+                <input
+                  className="flow-panel-title-input"
+                  autoFocus
+                  value={renameDraft}
+                  placeholder={canNameRecord ? `Name this ${kindLabel}…` : 'Name this card…'}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={() => {
+                    if (!renameCancelled.current) {
+                      const next = renameDraft.trim()
+                      if (canNameRecord && nameRec) {
+                        nameRec.apply({ [nameRec.nameKey]: next })
+                        // A board-local name would mask what was just typed, and nothing makes one
+                        // any more, so an old one stops hiding the record it belongs to.
+                        if (nt.name) renameObject(nt.id, '')
+                      } else {
+                        renameObject(nt.id, next)
+                      }
+                    }
+                    renameCancelled.current = false
+                    setRenaming(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                    else if (e.key === 'Escape') { e.preventDefault(); renameCancelled.current = true; e.currentTarget.blur() }
+                  }}
+                />
+              ) : (
+                <>
+                  <span className="flow-panel-title" title={title}>{title}</span>
+                  <button
+                    className="flow-panel-rename"
+                    title={`Rename this ${kindLabel}`}
+                    aria-label={`Rename this ${kindLabel}`}
+                    onClick={() => {
+                      // The stored name, not the displayed one: with nothing named the title falls
+                      // back to the kind, and opening the box on "Brand" would offer that as a name.
+                      setRenameDraft(canNameRecord ? recordName : nt.name ?? '')
+                      setRenaming(nt.id)
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 20h8" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                    </svg>
+                  </button>
+                </>
+              )}
               {/* SAY THAT THIS ONE IS NOT FINISHED.
                   The card acquires, reads and cites a table, and the parts that are missing
                   (connecting LinkedIn or Instagram, reading an .xlsx, comparing two periods) are
@@ -8544,80 +8613,6 @@ export function FlowsView() {
           </span>
         </div>
         <div className="flow-inspect">
-          {/* NAME IT. Above the fill box on purpose: it is one line, it is not authoring, and it is
-              the answer to "which card am I looking at" — which you need before anything below is
-              worth reading. The fill box is still the first thing here that DOES anything.
-              Blank is fine; the card then answers to the record it names, as it always did. */}
-          <label className="flow-inspect-label">Name</label>
-          {/* BUFFERED, because this one can mint. Committing per keystroke on a card that has no
-              record yet would put the first letter you typed into the library as a record and then
-              rename it eleven times; on blur it is one record with the name you meant. It is also
-              why ensurePersonFor and the rest keep mintedRecordRef — see the note there. */}
-          <BufferedInput
-            className="flow-inspect-input"
-            value={canNameRecord ? recordName : nt.name ?? ''}
-            placeholder={canNameRecord ? `Name this ${kindLabel}…` : `Name this card…`}
-            onCommit={(v) => {
-              if (canNameRecord && nameRec) nameRec.apply({ [nameRec.nameKey]: v.trim() })
-              else renameObject(nt.id, v)
-            }}
-          />
-          {/* AND THE RARE CASE, ONE LINE DOWN: calling it something else on this board only.
-
-              NO NOTE UNDER IT ANY MORE. Three sentences explained where the alias shows, that the
-              record keeps its own name, and how to undo — and the field had come to say all three
-              itself. The label scopes it ("Name on this campaign"), the empty box shows the record's
-              name as its placeholder, and the ✕ beside it reads "Go back to Arbitrum". A paragraph
-              restating the controls under the controls is the thing this panel keeps being trimmed
-              of. If the safeguard ever needs saying again, the clause worth keeping is that Records
-              still calls it by its own name, and it belongs in a glossary entry rather than here.
-
-              Worth keeping — a card can honestly need a name the library should not be called — but
-              it is not what somebody opening a blank card came here to do, and for as long as it
-              WAS the Name field the common act had nowhere to go. Offered only where the field
-              above is writing to a record, since with no record there is one name and no second one
-              to override it with. */}
-          {canNameRecord && (nt.name || aliasOpen === nt.id ? (
-            <>
-              <label className="flow-inspect-label cont">Name on this campaign</label>
-              {/* THE WAY BACK OUT, which there was not one of.
-                  Clearing the box was the documented way to close this, and BufferedInput only
-                  commits when the buffer differs from the value — so on a card with no alias, the
-                  box opens empty, blurs equal to what it started as, commits nothing, and the field
-                  never closes. "Clear the box to go back to it" cannot be performed on a box that is
-                  already clear. Someone who clicked the line to see what it did was stuck with a
-                  field they did not want until they selected another card.
-
-                  One button for both states, because they are the same act: stop calling it something
-                  else here. It only writes when there is something to unset. */}
-              <span className="flow-alias-field">
-                <BufferedInput
-                  className="flow-inspect-input"
-                  value={nt.name ?? ''}
-                  placeholder={recordName || `Name this ${kindLabel}…`}
-                  onCommit={(v) => { renameObject(nt.id, v); if (!v.trim()) setAliasOpen(null) }}
-                />
-                <button
-                  className="flow-alias-clear"
-                  title={nt.name ? `Go back to ${recordName || `the ${kindLabel}'s own name`}` : 'Never mind'}
-                  aria-label={nt.name ? 'Remove this campaign name' : 'Close without setting a campaign name'}
-                  onClick={() => { if (nt.name) renameObject(nt.id, ''); setAliasOpen(null) }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
-              </span>
-            </>
-          ) : (
-            <button className="flow-doc-override-go" style={{ marginTop: 8 }} onClick={() => setAliasOpen(nt.id)}>
-              {/* NAMES THE THING AND SCOPES IT. "Call it something else on this campaign" never said
-                  WHAT was being called something else, so it read as an offer you had to already
-                  understand. Not "rename", either: rename is what this deliberately does not do, and
-                  the whole risk of the control is somebody thinking the record changed. */}
-              Use a different name on this campaign
-            </button>
-          ))}
           {nt.kind === 'data-source' && (
             <p className="flow-inspect-note flow-wip-note">
               This card is still being built. Pasting, uploading and describing a table all work, and
@@ -8648,7 +8643,6 @@ export function FlowsView() {
               were tried here and were too much furniture for three groups — they made the two boxes
               you type into look like different kinds of thing, when Name and the description are the
               same kind of thing. */}
-          {TAKES_CONTEXT.has(nt.kind) && <div className="flow-inspect-rule" />}
           {TAKES_CONTEXT.has(nt.kind) && (
             <>
               {/* THE DEFINITION GOES IN THE ONE PLACE DEFINITIONS GO. This was two lines of grey
