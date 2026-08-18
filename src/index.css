@@ -19960,10 +19960,40 @@ button.task-due-text:hover {
 }
  /* Shows with the chip's box, not before it: the arrow and the border are the same message, so
     they arrive together. Width is held at rest so the name does not shuffle when it appears. */
+/* Slide, rather than appear. The duration is mirrored by DRAWER_MS in TasksView.tsx — the panel is
+   held mounted for exactly this long on the way out, so the two have to agree. The easing is
+   weighted to the front so it leaves quickly and settles, which reads as lighter than a symmetric
+   ease over the same 190ms. */
+@keyframes task-drawer-in { from { transform: translateX(100%) } to { transform: none } }
+@keyframes task-drawer-out { from { transform: none } to { transform: translateX(100%) } }
+@keyframes task-scrim-in { from { opacity: 0 } to { opacity: 1 } }
+
+.task-drawer { animation: task-drawer-in 190ms cubic-bezier(.32, .72, 0, 1) }
+.task-drawer.closing { animation: task-drawer-out 190ms cubic-bezier(.32, .72, 0, 1) forwards }
+
+.task-drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(16, 24, 40, .28);
+  animation: task-scrim-in 190ms ease;
+}
+.task-drawer-scrim.closing { animation: task-scrim-in 190ms ease reverse forwards }
+
+@media (prefers-reduced-motion: reduce) {
+  .task-drawer,
+  .task-drawer.closing,
+  .task-drawer-scrim,
+  .task-drawer-scrim.closing { animation: none }
+}
+
+/* The row opens the task, so it should say so. Controls inside it set their own cursor. */
+.task-row { cursor: pointer }
+
 .task-chip-go {
-  width: 11px;
-  height: 11px;
   flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1;
   opacity: 0;
   color: var(--text-faint);
   transition: opacity 90ms ease;
