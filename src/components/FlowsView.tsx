@@ -673,6 +673,59 @@ const isBuildChip = (s: string): boolean => BUILD_ONLY_CHIP.test(s.trim())
  */
 const CONNECT_SIDES = ['left', 'right', 'top', 'bottom'] as const
 
+/**
+ * HOW LONG AGO IT SAVED, spelled out. A status line is read as a sentence, so "1 min ago" rather
+ * than the "1m ago" a compact timestamp beside a comment wants.
+ *
+ * There are three near-copies of a timeAgo in this codebase (VersionHistory, CommentDrawer,
+ * CommentInbox) and they do not agree — two of them go straight from "just now" to hours, so a
+ * comment from fifty minutes back reads "just now" there. This is deliberately not a fourth of the
+ * same thing: it is minutes-first because the interesting window for a save is the last few of them.
+ */
+const savedAgo = (ms: number): string => {
+  const s = Math.round(ms / 1000)
+  if (s < 45) return 'just now'
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m} min ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h} hr ago`
+  return `${Math.round(h / 24)} d ago`
+}
+
+/**
+ * The panel's save status. Its own component for one reason: it re-renders on a clock, and FlowsView
+ * is thirteen thousand lines with a canvas under it — ticking the whole thing every half minute to
+ * age one word would be a poor trade. The interval only runs while there is an age to show.
+ */
+function SavedStatus({ state, at, onSave }: { state: 'idle' | 'saving' | 'saved'; at: number | null; onSave: () => void }) {
+  const [, tick] = useState(0)
+  const showAge = state === 'idle' && at !== null
+  useEffect(() => {
+    if (!showAge) return
+    // Half a minute: fine for a label whose smallest unit is a minute, and it never has to be
+    // exactly right — only never wrong enough to notice.
+    const id = window.setInterval(() => tick((n) => n + 1), 30_000)
+    return () => window.clearInterval(id)
+  }, [showAge])
+
+  const label =
+    state === 'saving' ? 'Saving…'
+    : state === 'saved' ? 'Saved ✓'
+    : at !== null ? `Saved ${savedAgo(Date.now() - at)}`
+    : 'Saved'
+
+  return (
+    <button
+      className={`flow-panel-save${state === 'saved' ? ' on' : ''}`}
+      disabled={state === 'saving'}
+      title="Saves on its own, within a second of an edit. Press to write it now."
+      onClick={onSave}
+    >
+      {label}
+    </button>
+  )
+}
+
 export function FlowsView() {
   const { brands, canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -714,6 +767,8 @@ export function FlowsView() {
    * work the debounce was going to do later, and it says when it is done.
    */
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  /** When the last write landed, so the status can say how long ago rather than only that it did. */
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
   const savedTimer = useRef<number | null>(null)
   useEffect(() => () => { if (savedTimer.current) window.clearTimeout(savedTimer.current) }, [])
   const markCardDirty = (id: string) => setDirtyCards((d) => (d[id] ? d : { ...d, [id]: Date.now() }))
@@ -6944,6 +6999,7 @@ export function FlowsView() {
       // lets the panel answer "did that take?" without a button asking to be pressed.
       if (savedTimer.current) window.clearTimeout(savedTimer.current)
       setSaveState('saved')
+      setLastSavedAt(Date.now())
       savedTimer.current = window.setTimeout(() => setSaveState('idle'), 1600)
     }, 600)
     return () => {
@@ -6979,6 +7035,7 @@ export function FlowsView() {
       /* best effort by contract: it never rejects, and the save banner owns real failures */
     }
     setSaveState('saved')
+    setLastSavedAt(Date.now())
     savedTimer.current = window.setTimeout(() => setSaveState('idle'), 2000)
   }
 
@@ -8413,7 +8470,7 @@ export function FlowsView() {
               {/* The card's NAME heads its panel, falling back to the kind. With four Audience cards
                   on a board, four panels headed "Audience" gave you no way to tell from the panel
                   which one you had selected. */}
-              <span className="flow-panel-title">{title}</span>
+              <span className="flow-panel-title" title={title}>{title}</span>
               {/* SAY THAT THIS ONE IS NOT FINISHED.
                   The card acquires, reads and cites a table, and the parts that are missing
                   (connecting LinkedIn or Instagram, reading an .xlsx, comparing two periods) are
@@ -8425,6 +8482,12 @@ export function FlowsView() {
                   took a third of the width off the definition underneath and wrapped it to three
                   lines. It qualifies the card's name, so it belongs beside the name. */}
               {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
+              {/* ON THE TITLE'S LINE, not the header's. As a sibling of the whole heading it took its
+                  width from the definition underneath — "Brand · Who this campaign writes as" wrapped
+                  to two lines the moment the label grew from "Saved" to "Saved 1 min ago". Beside the
+                  title it competes with a short string instead, and the definition gets the full
+                  width back. Same reasoning as the Work in progress tag above it. */}
+              {boardsHydrated && <SavedStatus state={saveState} at={lastSavedAt} onSave={() => void saveNow()} />}
             </span>
             {/* Once the title is the card's NAME, the header stops saying what kind of card it is —
                 the glyph is the only thing left carrying that, and a colour is not a word. So the
@@ -8443,16 +8506,6 @@ export function FlowsView() {
 
               Still pressable, and still does what it did: flushing now is worth having when the
               workspace mirror is behind. It just no longer asks. */}
-          {boardsHydrated && (
-            <button
-              className={`flow-panel-save${saveState === 'saved' ? ' on' : ''}`}
-              disabled={saveState === 'saving'}
-              title="Saves on its own, within a second of an edit. Press to write it now."
-              onClick={() => void saveNow()}
-            >
-              {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved ✓' : 'Saved'}
-            </button>
-          )}
         </div>
         <div className="flow-inspect">
           {/* NAME IT. Above the fill box on purpose: it is one line, it is not authoring, and it is
@@ -8526,7 +8579,16 @@ export function FlowsView() {
               flat column, so the order was real and invisible. A label and a hairline per group is
               the cheapest thing that makes it legible, and it is the shape every other card's panel
               can take: identity, then content, then reach, then keeping. */}
-          {TAKES_CONTEXT.has(nt.kind) && <span className="flow-insp-sec">What this {kindLabel} is</span>}
+          {/* A FIELD, LABELLED LIKE THE ONE ABOVE IT. It was a section heading — small, uppercase,
+              muted, with a rule over it — which set it apart from Name when the two are the same
+              kind of thing: the two boxes you fill in about this card. Name and this one now read as
+              one group of fields, and the hairline sections are kept for what follows, which is a
+              readout and an action rather than anything you type. */}
+          {TAKES_CONTEXT.has(nt.kind) && (
+            <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+              {kindLabel.charAt(0).toUpperCase() + kindLabel.slice(1)} description
+            </label>
+          )}
           {TAKES_CONTEXT.has(nt.kind) && (() => {
             // The same record the Name field above writes to, resolved once at the top of the panel.
             const target = nameRec

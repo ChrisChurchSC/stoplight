@@ -4789,6 +4789,13 @@ button.mf-open:focus-visible,
   color: var(--text);
   flex: 1;
   min-width: 0;
+  /* ONE LINE. A card named after a real organisation ("Northwind Pharmacy Group Holdings
+     International") wrapped a 15px bold title to three lines and took the header from 68px to 113px,
+     pushing the panel's first field down with it. The full name is on the element's own tooltip, and
+     the definition underneath still says what kind of card it is. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* The title stacked over the kind's one-line definition. The column takes the flex the title used
    to, and the title stops stretching inside it. */
@@ -4998,7 +5005,8 @@ button.mf-open:focus-visible,
    pressable — it just stops looking like the first thing to do. */
 .flow-panel-save {
   flex: 0 0 auto;
-  align-self: flex-start;
+  /* Pushed to the end of the title's line; the title itself shrinks first. */
+  margin-left: auto;
   border: 1px solid transparent;
   background: none;
   border-radius: 7px;
