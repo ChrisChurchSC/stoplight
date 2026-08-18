@@ -4983,14 +4983,18 @@ button.mf-open:focus-visible,
    three named things rather than forty rows. Scoped to that adjacency on purpose: the same class
    also labels the first thing in a panel, and a rule above the top item would fence it off from the
    header. */
-/* A head that OPENS A NEW GROUP after one has closed gets a rule, and it spans the panel like every
-   other rule in here: inset it read as a divider belonging to the list above rather than as the panel
-   dividing. The text keeps its indent — only the line runs out to the edges.
-   .flow-ctxlist joined the list because "Channels" follows one, and was the one group head in the
-   brief with nothing above it to earn a rule from. */
-.flow-recform + .flow-inspect-label,
-.flow-ctxlist + .flow-inspect-label,
-.flow-inspect-input + .flow-inspect-label {
+/* EVERY GROUP HEAD THAT IS NOT THE FIRST THING IN THE PANEL GETS A RULE, and it spans the panel: inset
+   it read as a divider belonging to the list above rather than as the panel dividing. The text keeps
+   its indent; only the line runs out.
+
+   By position rather than by what precedes it. This was a list of adjacencies — a label after a
+   record form, after an input, after a context list — which meant a group head earned its rule
+   according to what happened to sit above it, and "Channels" went without one because the thing above
+   was a list nobody had added to the selector. A head opening a group is a head opening a group.
+
+   `.rel` opts out for a head that continues the group above it rather than starting a new one, which
+   is the only case the position rule cannot see. */
+.flow-inspect-label:not(:first-child):not(.rel) {
   border-top: 1px solid var(--border);
   margin-left: -14px;
   margin-right: -14px;
