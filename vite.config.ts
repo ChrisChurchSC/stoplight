@@ -240,6 +240,25 @@ export default defineConfig(({ mode }) => {
      */
     test: {
       exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
+      /**
+       * The suite runs against the mock adapters, always — never against whatever backend the
+       * machine happens to have configured.
+       *
+       * Vite loads `.env` for tests too, so on a developer's machine `isSupabaseConfigured` was
+       * true and the store swapped in the Supabase adapters. Four seedAssetNames tests then failed
+       * on that machine and nowhere else: seedCampaignAssets ends in refresh(), which reloads rows
+       * from the adapter, and the Supabase one answers a jsdom process with nothing. CI has no
+       * `.env`, so CI could never reproduce it — the suite passed for everyone who had not set the
+       * backend up yet and broke for everyone who had.
+       *
+       * Blanking them here is also the safer default in the other direction: without it, a test
+       * that writes is pointed at a real project, holding real data, using the credentials sitting
+       * in `.env`.
+       */
+      env: {
+        VITE_SUPABASE_URL: '',
+        VITE_SUPABASE_ANON_KEY: '',
+      },
     },
     // Don't let test/automation artifacts written into the repo (Playwright MCP
     // logs, screenshots, exported data snapshots) trigger a dev-server reload —
