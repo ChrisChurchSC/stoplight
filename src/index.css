@@ -4992,6 +4992,51 @@ button.mf-open:focus-visible,
    thing here that is not about what the card says, and a button spanning the panel would read as
    the primary act of filling the card in, which it is not. The line beside it says the autosave is
    still doing its job, so the button reads as "now" rather than as "or else". */
+/* SAVED, in the header, as a state rather than an errand. Quiet at rest and quiet while it works:
+   the whole point is that it is not asking for anything, so it must not pull the eye off the card's
+   name beside it. It keeps a button's affordances (focus ring, hover, press) because it is still
+   pressable — it just stops looking like the first thing to do. */
+.flow-panel-save {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 7px;
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-faint);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.flow-panel-save:hover:not(:disabled) {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+/* The one moment it is worth noticing: an edit has just been written. */
+.flow-panel-save.on { color: var(--green, #15803d) }
+.flow-panel-save:disabled { cursor: default }
+.flow-panel-save:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+
+/* A GROUP'S NAME, so the order the panel asks in can be seen. Hairline above rather than a boxed
+   heading: the groups are steps in one question, not separate panels. */
+.flow-insp-sec {
+  display: block;
+  margin: 18px 0 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* Nothing above the first one to divide it from. */
+.flow-insp-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0 }
+
 .flow-insp-saverow {
   display: flex; align-items: center; gap: 8px;
   margin-bottom: 12px;

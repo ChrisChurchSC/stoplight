@@ -6938,6 +6938,13 @@ export function FlowsView() {
     if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
     boardSaveTimer.current = window.setTimeout(() => {
       saveFlowBoard(boardSnapshot(boardKey))
+      // AND SAY SO. saveState was written only by the Save button, so it reported which button had
+      // been pressed rather than whether the board was written — a status driven by it would have
+      // sat silent through every autosave, which is all of them. Reporting the debounce is what
+      // lets the panel answer "did that take?" without a button asking to be pressed.
+      if (savedTimer.current) window.clearTimeout(savedTimer.current)
+      setSaveState('saved')
+      savedTimer.current = window.setTimeout(() => setSaveState('idle'), 1600)
     }, 600)
     return () => {
       if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
@@ -8427,28 +8434,31 @@ export function FlowsView() {
               {title === meta.label ? meta.menuDesc : `${meta.label} · ${meta.menuDesc}`}
             </span>
           </span>
+          {/* WHETHER IT IS SAVED, AS A STATE OF THE BOARD — not a button at the top of every panel.
+              It was the first row of the body, above the card's own name, reading "Save" with
+              "Edits save on their own; this does it now." beside it: the most prominent thing in the
+              panel was a control admitting it was optional, and a button in that position reads as a
+              duty. The panel below already learned this the hard way — see the applybar's note on
+              opening with the word the button uses, which had people pressing it twice to be sure.
+
+              Still pressable, and still does what it did: flushing now is worth having when the
+              workspace mirror is behind. It just no longer asks. */}
+          {boardsHydrated && (
+            <button
+              className={`flow-panel-save${saveState === 'saved' ? ' on' : ''}`}
+              disabled={saveState === 'saving'}
+              title="Saves on its own, within a second of an edit. Press to write it now."
+              onClick={() => void saveNow()}
+            >
+              {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved ✓' : 'Saved'}
+            </button>
+          )}
         </div>
         <div className="flow-inspect">
           {/* NAME IT. Above the fill box on purpose: it is one line, it is not authoring, and it is
               the answer to "which card am I looking at" — which you need before anything below is
               worth reading. The fill box is still the first thing here that DOES anything.
               Blank is fine; the card then answers to the record it names, as it always did. */}
-          {/* SAVE, at the top of the panel and on every card.
-              The board has always autosaved, and the panel said so by having no Save at all, which
-              answers the question by never mentioning it. This one does the work the debounce was
-              going to do later (see saveNow) and reports when it is done, so "did that take?" has an
-              answer you can point at rather than a convention you have to know. */}
-          <div className="flow-insp-saverow">
-            <button
-              className="flow-insp-save"
-              disabled={saveState === 'saving'}
-              title="Write this board and your records now, instead of waiting for the autosave"
-              onClick={() => void saveNow()}
-            >
-              {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
-            </button>
-            <span className="flow-insp-saverow-note">Edits save on their own; this does it now.</span>
-          </div>
           <label className="flow-inspect-label">Name</label>
           {/* BUFFERED, because this one can mint. Committing per keystroke on a card that has no
               record yet would put the first letter you typed into the library as a record and then
@@ -8511,6 +8521,12 @@ export function FlowsView() {
               So the fields are gone from here. They still exist and are still filled: Generate writes
               them, and they are edited where records are edited. What a card asks you for now is the
               thing only you can give it, in the form you already have it in. */}
+          {/* WHAT IT SAYS. The panel asks for three things in the order you would do them — name it,
+              say what it is, and see where that reaches — and rendered them as eleven controls in one
+              flat column, so the order was real and invisible. A label and a hairline per group is
+              the cheapest thing that makes it legible, and it is the shape every other card's panel
+              can take: identity, then content, then reach, then keeping. */}
+          {TAKES_CONTEXT.has(nt.kind) && <span className="flow-insp-sec">What this {kindLabel} is</span>}
           {TAKES_CONTEXT.has(nt.kind) && (() => {
             // The same record the Name field above writes to, resolved once at the top of the panel.
             const target = nameRec
@@ -8648,9 +8664,13 @@ export function FlowsView() {
                       }}
                     />
                     <div className="flow-fill-foot">
+                      {/* A DISABLED BUTTON SHOULD SAY WHY. Empty box, greyed Generate, nothing
+                          explaining which of the two it is waiting on — and the box above takes a
+                          dropped file as well, so "nothing to work from" is not self-evident. */}
                       <button
                         className="flow-fill-go"
                         disabled={busy || !(prompting[nt.id] ?? '').trim()}
+                        title={busy ? 'Working…' : !(prompting[nt.id] ?? '').trim() ? `Say something about this ${kindLabel} first — a sentence is enough` : `Write this ${kindLabel} from what you have said`}
                         onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
                       >
                         {busy ? 'Generating…' : 'Generate'}
@@ -8880,45 +8900,6 @@ export function FlowsView() {
             )
           })()}
 
-          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT.
-              It sat under the Name field, on the argument that a control nobody scrolls to is a
-              control nobody has — which is true, and it had been buried under Applied to before
-              that. What it cost up there was the top of the panel: three rows in, between naming
-              the card and saying what it is, a button offering to file the card somewhere, wearing
-              .flow-insp-open — a full-width bordered box the same height as the input directly
-              above it, so it read as a second empty text field. Two of the first four rows were
-              about where the card is kept rather than what it says.
-
-              So it comes down to here, under the box that answers the card, and stops looking like
-              a field. It is still above Applied to, the fold it was rescued from, and the panel it
-              now follows is short: a name, a prompt and an upload.
-
-              Only for a loose card. One already inside a smart object is saved by definition, and
-              the object's own panel is where its library rung is decided (see "Add to the brand
-              library" there). */}
-          {!placementOf(nt.id) && (() => {
-            // The same pool convertSelection will actually act on, so the label cannot promise one
-            // card and bundle three. Called with no state changes first, because it reads the
-            // selection from this render and a setSel here would not have landed by then.
-            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
-              (id) => objects.some((o) => o.id === id) && !placementOf(id),
-            ).length
-            if (!n) return null
-            return (
-              <div className="flow-insp-promote">
-                <button
-                  className="flow-insp-promote-go"
-                  title="Keep this on the shelf: place it on another campaign instead of rebuilding it"
-                  onClick={() => convertSelection()}
-                >
-                  {n > 1 ? `Save these ${n} cards as a smart object` : 'Save as a smart object'}
-                </button>
-                {/* One line, not two. The second sentence explained a rung of the library you reach
-                    from a panel you have not opened yet, which is a thing to say there. */}
-                <span className="flow-insp-promote-note">Kept on this campaign until you add it to the brand library.</span>
-              </div>
-            )
-          })()}
 
           {/* NO RECORD FORMS. Eleven of them stood here — person, audience, company, trigger, brand,
               season, proof point, voice, concept, message, product — and between them twenty-five
@@ -9001,9 +8982,9 @@ export function FlowsView() {
             })
             return (
               <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  Applied to · {named.length}
-                </label>
+                {/* The count went. On one target it read "Applied to · 1" above a single row that
+                    already named it, which is a number you can see. */}
+                <span className="flow-insp-sec">Where it applies{named.length > 1 ? ` · ${named.length}` : ''}</span>
                 {/* Same shape as the brief's Deliverables list, and clickable for the same reason:
                     these name things that exist on the board, so reading one and wanting to open it
                     is the obvious next move. It used to be an inert label/value pair that looked
@@ -9021,6 +9002,58 @@ export function FlowsView() {
                     </button>
                   ))}
                 </div>
+              </>
+            )
+          })()}
+
+          {/* KEEPING IT, AFTER WHAT IT REACHES. It sat above this readout on purpose once — it had
+              been rescued from below the fold — and with the groups named that ordering read as the
+              panel asking about filing before it had told you what the card does. It is still high
+              enough to see without scrolling, because "Where it applies" is two rows on most cards. */}
+          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT.
+              It sat under the Name field, on the argument that a control nobody scrolls to is a
+              control nobody has — which is true, and it had been buried under Applied to before
+              that. What it cost up there was the top of the panel: three rows in, between naming
+              the card and saying what it is, a button offering to file the card somewhere, wearing
+              .flow-insp-open — a full-width bordered box the same height as the input directly
+              above it, so it read as a second empty text field. Two of the first four rows were
+              about where the card is kept rather than what it says.
+
+              So it comes down to here, under the box that answers the card, and stops looking like
+              a field. It is still above Applied to, the fold it was rescued from, and the panel it
+              now follows is short: a name, a prompt and an upload.
+
+              Only for a loose card. One already inside a smart object is saved by definition, and
+              the object's own panel is where its library rung is decided (see "Add to the brand
+              library" there). */}
+          {!placementOf(nt.id) && (() => {
+            // The same pool convertSelection will actually act on, so the label cannot promise one
+            // card and bundle three. Called with no state changes first, because it reads the
+            // selection from this render and a setSel here would not have landed by then.
+            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
+              (id) => objects.some((o) => o.id === id) && !placementOf(id),
+            ).length
+            if (!n) return null
+            return (
+              <>
+              <span className="flow-insp-sec">Keeping it</span>
+              <div className="flow-insp-promote">
+                <button
+                  className="flow-insp-promote-go"
+                  title="Keep this on the shelf: place it on another campaign instead of rebuilding it"
+                  onClick={() => convertSelection()}
+                >
+                  {/* NOT "Save". That word meant two unrelated things six rows apart — write my
+                      edits, and promote this card into something reusable — and the panel already
+                      has a documented history of the word being pressed twice for reassurance. It
+                      cannot borrow "Add to the brand library" either: that is the NEXT rung, and it
+                      lives on the smart object's own panel. So it says what it makes. */}
+                  {n > 1 ? `Make these ${n} cards a smart object` : 'Make this a smart object'}
+                </button>
+                {/* One line, not two. The second sentence explained a rung of the library you reach
+                    from a panel you have not opened yet, which is a thing to say there. */}
+                <span className="flow-insp-promote-note">Kept on this campaign until you add it to the brand library.</span>
+              </div>
               </>
             )
           })()}
