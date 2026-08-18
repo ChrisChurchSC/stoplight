@@ -24792,6 +24792,11 @@ table.aud-sheet td.stick .aud-cell {
    tag does not need to reserve that space a second time. */
 .flow-panel-titlerow .flow-panel-wip { margin-right: 0; }
 .flow-wip-note { color: var(--text-faint); }
+/* THE ONE STATE WORTH NOTICING. Every other note in this panel is muted because it is background;
+   this one is the difference between a card that works and a card that does nothing, and it reads at
+   the same weight as "every asset in the campaign" if it is left grey. Not a banner either: it is
+   also the ordinary state of a card you have not finished wiring, so it is a colour and not a box. */
+.flow-reach-none { color: var(--due-late, #b91c1c); }
 
 /* A lazily loaded view that failed to arrive, almost always a chunk retired by a redeploy while
    this tab stayed open. Sized and centred like an empty state rather than an error banner: the app

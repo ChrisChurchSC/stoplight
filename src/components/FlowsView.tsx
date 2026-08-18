@@ -9147,7 +9147,6 @@ export function FlowsView() {
               </div>
             )
           })()}
-          <div className="flow-inspect-rule" />
           {/* APPLIED TO: what this card feeds. A readout, not a control: wires are drawn and cut on
               the canvas, and a second place to edit them would be a second thing to keep in step
               with the first. Naming the targets is what it is for, since a card three hops upstream
@@ -9159,22 +9158,38 @@ export function FlowsView() {
             const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
             const targets = downstreamTargets(board, nt.id)
             /**
-             * AND IT SAYS SO WHEN IT REACHES NOTHING, which it used to answer by not being there.
+             * SIZED TO WHAT IT HAS TO SAY. As one shape for all three answers this readout charged a
+             * label, a rule and a 44px row with an icon to tell you, on the commonest card in the
+             * app, that a wire you can see six inches to the left is connected. That is what made it
+             * read as furniture.
              *
-             * The paragraph that explained this was cut for being the loudest thing on the panel,
-             * and taking the whole readout with it went one step too far: a card wired to nothing
-             * then looked exactly like a card whose readout does not exist, and the silent failure
-             * this panel can produce is a card filled in perfectly that no asset reads. One short
-             * line under the label is not the paragraph that was cut.
+             * It says three different things and only one of them is worth a list:
+             *  - NOTHING. The silent failure this panel can produce: a card filled in perfectly that
+             *    no asset ever reads. Worth interrupting for, and the only per-card place it is said.
+             *    (hasWiredContext gates generating on a board with no wires at all; nothing else
+             *    tells you THIS card is stranded.)
+             *  - THE WHOLE CAMPAIGN, and nothing else. One hop, one obvious answer, one line.
+             *  - ANYTHING ELSE. Now it is telling you something you cannot see: downstreamTargets
+             *    walks THROUGH intervening cards, so a card three hops upstream reports the posts at
+             *    the end of the chain rather than the card next door. That earns the list, and the
+             *    rows are worth clicking because they go there.
              */
             if (!targets.length) {
               return (
                 <>
-                  <label className="flow-inspect-label">Where it applies</label>
-                  <div className="flow-inspect-note">
-                    Nothing yet. Wire this card to the campaign, or to a channel, and what it says
-                    reaches the assets underneath.
+                  <div className="flow-inspect-rule" />
+                  <div className="flow-inspect-note flow-reach-none">
+                    Not wired to anything, so nothing reads this card yet. Draw a wire to the campaign
+                    or to a channel.
                   </div>
+                </>
+              )
+            }
+            if (targets.length === 1 && targets[0] === 'campaign') {
+              return (
+                <>
+                  <div className="flow-inspect-rule" />
+                  <div className="flow-inspect-note">Applies to every asset in the campaign.</div>
                 </>
               )
             }
@@ -9188,6 +9203,7 @@ export function FlowsView() {
             })
             return (
               <>
+                <div className="flow-inspect-rule" />
                 {/* A LABEL, LIKE THE FIELDS ABOVE IT. It was an uppercase section head with a rule,
                     which was the right device while there were two of these down here and a wrong one
                     now that it is alone: a rule separates groups, and there is nothing left to
