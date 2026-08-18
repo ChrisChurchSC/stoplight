@@ -8555,7 +8555,6 @@ export function FlowsView() {
               }
             }}
           />
-          {TAKES_CONTEXT.has(nt.kind) && <div className="flow-inspect-rule" />}
           {nt.kind === 'data-source' && (
             <p className="flow-inspect-note flow-wip-note">
               This card is still being built. Pasting, uploading and describing a table all work, and
@@ -9140,7 +9139,6 @@ export function FlowsView() {
             })
             return (
               <>
-                <div className="flow-inspect-rule" />
                 {/* A LABEL, LIKE THE FIELDS ABOVE IT. It was an uppercase section head with a rule,
                     which was the right device while there were two of these down here and a wrong one
                     now that it is alone: a rule separates groups, and there is nothing left to
