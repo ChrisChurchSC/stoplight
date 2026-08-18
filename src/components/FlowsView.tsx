@@ -8528,7 +8528,7 @@ export function FlowsView() {
               to override it with. */}
           {canNameRecord && (nt.name || aliasOpen === nt.id ? (
             <>
-              <label className="flow-inspect-label">Called this on this campaign</label>
+              <label className="flow-inspect-label">Name on this campaign</label>
               <BufferedInput
                 className="flow-inspect-input"
                 value={nt.name ?? ''}
@@ -8543,7 +8543,11 @@ export function FlowsView() {
             </>
           ) : (
             <button className="flow-doc-override-go" style={{ marginTop: 8 }} onClick={() => setAliasOpen(nt.id)}>
-              Call it something else on this campaign
+              {/* NAMES THE THING AND SCOPES IT. "Call it something else on this campaign" never said
+                  WHAT was being called something else, so it read as an offer you had to already
+                  understand. Not "rename", either: rename is what this deliberately does not do, and
+                  the whole risk of the control is somebody thinking the record changed. */}
+              Use a different name on this campaign
             </button>
           ))}
           {nt.kind === 'data-source' && (
@@ -8580,21 +8584,17 @@ export function FlowsView() {
               readout and an action rather than anything you type. */}
           {TAKES_CONTEXT.has(nt.kind) && (
             <>
+              {/* THE DEFINITION GOES IN THE ONE PLACE DEFINITIONS GO. This was two lines of grey
+                  under the label saying where an answer lands, which is true but is one of four
+                  things worth knowing about this field and was the only one with room to be said.
+                  As a glossary entry it can carry the rest: that the box is a prompt and loses what
+                  you type unless you press Generate, that Generate fills only the gaps, and that a
+                  long paste quietly becomes a document. InfoTip is the app's single definition
+                  primitive by rule, so none of this needs a second mechanism. */}
               <label className="flow-inspect-label" style={{ marginTop: 16 }}>
                 {kindLabel.charAt(0).toUpperCase() + kindLabel.slice(1)} description
+                <InfoTip term="cardDescription" />
               </label>
-              {/* WHERE IT LANDS, said once and always. It lived on the drop target, so it was only
-                  readable while a file was already in the air — after the decision it describes.
-
-                  NOT "it becomes this {kindLabel}'s own document", which was the drop target's
-                  wording and is only true of the drop target. Typing here and generating fills the
-                  record's FIELDS; it does not make a document. What is true of both, and is the
-                  non-obvious part either way, is whose it becomes — so that is what this says, in
-                  the same terms the attached document uses a few rows down ("Every campaign that
-                  uses it reads this") rather than in a second vocabulary for one fact. */}
-              <span className="flow-inspect-sub">
-                Either way it becomes the {kindLabel}&rsquo;s own — every campaign using it reads this.
-              </span>
             </>
           )}
           {TAKES_CONTEXT.has(nt.kind) && (() => {

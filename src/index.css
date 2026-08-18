@@ -5377,15 +5377,6 @@ button.mf-open:focus-visible,
      a search box, and people write search-box-length things into search boxes. */
   min-height: 76px;
 }
-/* A FIELD'S OWN NOTE, under its label and above the control it describes. Sits tight to the label so
-   the two read as one heading rather than as a label and a stray sentence. */
-.flow-inspect-sub {
-  display: block;
-  margin: -2px 0 7px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-faint);
-}
 .flow-fill-input::placeholder { color: var(--text-faint); }
 /* UPLOAD, THE SAME SIZE AS GENERATE AND BESIDE IT. Quieter than Generate on purpose — describing the
    card is the ordinary route, and Generate is the button that acts on what you wrote — but the same

@@ -164,6 +164,24 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     short:
       "The chat for the record type you are viewing. In Build it adds, edits, and cleans up your records (you approve each change); in Analyze it answers questions without changing anything.",
   },
+  cardDescription: {
+    term: 'Card description',
+    /**
+     * WRITTEN FROM THE BEHAVIOUR, as this file's header asks. Three things here are not visible from
+     * the panel and each one costs somebody something:
+     *  - the box is a prompt held in component state, so typing in it and clicking away loses the
+     *    typing. Generate is the only thing that writes.
+     *  - Generate fills the fields that are still empty, so it adds to a card rather than replacing
+     *    what is already there.
+     *  - a paste over PASTE_AS_DOC_CHARS becomes the card's document instead of a prompt, silently.
+     * No em dashes, per this file's own rule.
+     */
+    short:
+      'What a card knows about the thing it stands for. Every asset in the campaign is written from the cards wired into it, so this is where the writing gets its facts.',
+    more:
+      'The box is a prompt, not the description itself: what you type is only saved when you press Generate, which writes the fields that are still empty and leaves anything the card already says alone. Upload a .md instead and the document is kept whole and read as it is, and pasting anything long does the same thing rather than treating it as a prompt. Whichever route you take, it belongs to the thing the card names and not to this campaign alone, so every campaign using it reads the same thing.',
+    seeAlso: ['object', 'wiredContext'],
+  },
   wiredContext: {
     term: 'Informing the messaging',
     short: 'The cards wired to the campaign on the board. What they hold is read every time copy is written.',
