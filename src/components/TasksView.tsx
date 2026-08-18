@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -6,9 +6,12 @@ import { DRAFTS, folderSegments } from '../domain/campaignFolders'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
-import { useAssetTasks } from '../lib/assetTasks'
+import { reschedulePatch, useAssetTasks } from '../lib/assetTasks'
 import { assignTints, loadTintStore, renameTint, ASSIGNEE_TINT_KEY } from '../lib/assigneeTint'
 import { CHANNELS } from '../domain/channels'
+import { STATUS_LABEL, STATUS_ORDER } from '../domain/assetBadge'
+import { typeLabel } from '../domain/channelAssetTypes'
+import type { RowStatus, TrafficRow } from '../domain/types'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -130,6 +133,9 @@ const CUSTOM_TASKS = '\u0000custom'
 /** A campaign-filter value that means "everything filed here", not one campaign. Prefixed because a
  *  folder path and a campaign name are different namespaces that would otherwise be indistinguishable. */
 const FOLDER_PREFIX = '\u0000folder:'
+
+/** Kept in step with the .task-drawer animation in index.css — see closeDrawer. */
+const DRAWER_MS = 190
 const CUSTOM_TASKS_LABEL = 'Custom tasks'
 
 /** The one mark on the row, and only on an overdue date. Colour alone cannot carry "late" — it
@@ -141,14 +147,64 @@ function LateMark() {
   return <span className="task-due-mark" aria-hidden="true" />
 }
 
+/**
+ * Keyboard behaviour for a pop-up menu: arrows to move, Home/End to jump, Escape to leave.
+ *
+ * These menus were mouse-only. Every one of them is a <button> already, so Tab reached them — but
+ * Tab walks the whole page, and a menu that has taken over the screen should own the arrow keys
+ * while it is open. Escape returns focus to whatever opened it, because a menu that closes into
+ * nowhere loses a keyboard user their place entirely.
+ *
+ * Every focusable child counts, not only [role=menuitem]: the person rows carry a rename and a
+ * remove button beside the name, and skipping them would make them unreachable without Tab.
+ */
+function useMenuNav(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null)
+  const opener = useRef<HTMLElement | null>(null)
+  const items = () => [...(ref.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input') ?? [])]
+
+  useEffect(() => {
+    if (!open) return
+    opener.current = document.activeElement as HTMLElement | null
+    // Open on the current choice where there is one, so arrowing starts from where you are.
+    const all = items()
+    ;(all.find((i) => i.classList.contains('on')) ?? all[0])?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const all = items()
+    if (!all.length) return
+    const i = all.indexOf(document.activeElement as HTMLElement)
+    const go = (n: number) => {
+      e.preventDefault()
+      all[(n + all.length) % all.length].focus()
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      close()
+      opener.current?.focus()
+    } else if (e.key === 'ArrowDown') go(i + 1)
+    else if (e.key === 'ArrowUp') go(i - 1)
+    else if (e.key === 'Home') go(0)
+    else if (e.key === 'End') go(all.length - 1)
+  }
+
+  return { ref, onKeyDown }
+}
+
 /** The arrow that says this chip is a door. It rides with the chip's box, on hover: at rest the
- *  campaign is just a label, and a mark on every row saying "clickable" is a mark nobody reads. The
- *  same ↗ the detail drawer uses for "Open in flow", so the two mean one thing. */
+ *  campaign is just a label, and a mark on every row saying "clickable" is a mark nobody reads.
+ *
+ *  Literally the ↗ the detail drawer sets in "Open in flow", at the same 12px — it was a drawn
+ *  approximation of that glyph before, which meant its weight drifted from the thing it was
+ *  supposed to match every time either one was resized. It takes its colour from the chip, so it is
+ *  faint at rest and picks up the accent when the chip is hovered. */
 function OpenMark() {
   return (
-    <svg className="task-chip-go" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-      <path d="M4 8L8 4M8 4H4.8M8 4v3.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <span className="task-chip-go" aria-hidden="true">
+      ↗
+    </span>
   )
 }
 
@@ -169,9 +225,20 @@ function Avatar({ name, tint }: { name: string; tint?: string }) {
  * therefore a rename across every task holding it, which the Assignee menu in the toolbar does.
  */
 function AssigneeField({ value, names, tints, onCommit }: { value: string; names: string[]; tints: Map<string, string>; onCommit: (name: string) => void }) {
+  const listId = useId()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
+  /**
+   * Which suggestion the arrows are on. -1 means none — what you typed stands, which matters
+   * because a NEW name is the common case and must not be overwritten by whatever happens to be
+   * first in the list.
+   *
+   * The suggestions cannot take focus the way a menu's items do: this is a field you are still
+   * typing into, and moving focus out of it would end the typing. So the highlight moves and the
+   * input keeps focus, and aria-activedescendant is what tells a screen reader which one is live.
+   */
+  const [hi, setHi] = useState(-1)
   // Follow the stored value when it changes underneath (a rename from the toolbar, another tab).
   useEffect(() => setDraft(value), [value])
   const q = draft.trim().toLowerCase()
@@ -179,6 +246,7 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
   const commit = (name: string) => {
     setDraft(name)
     setOpen(false)
+    setHi(-1)
     if (name !== value) onCommit(name)
   }
   return (
@@ -189,20 +257,36 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
         className="task-input task-chip-input"
         value={draft}
         placeholder="Unassigned"
+        role="combobox"
+        aria-expanded={open && matches.length > 0}
+        aria-controls={listId}
+        aria-activedescendant={hi >= 0 ? `${listId}-${hi}` : undefined}
+        aria-autocomplete="list"
         onChange={(e) => {
           setDraft(e.target.value)
+          setHi(-1)
           setOpen(true)
         }}
         onFocus={() => setOpen(true)}
         // Committing on blur is what makes typing a NEW name work: there is nothing to pick.
         onBlur={() => draft !== value && onCommit(draft)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            commit(draft)
+          if (e.key === 'ArrowDown' && matches.length) {
+            e.preventDefault()
+            setOpen(true)
+            setHi((n) => (n + 1) % matches.length)
+          } else if (e.key === 'ArrowUp' && matches.length) {
+            e.preventDefault()
+            setOpen(true)
+            setHi((n) => (n <= 0 ? matches.length : n) - 1)
+          } else if (e.key === 'Enter') {
+            // The highlighted name if the arrows picked one, otherwise exactly what was typed.
+            commit(hi >= 0 && matches[hi] ? matches[hi] : draft)
             e.currentTarget.blur()
           } else if (e.key === 'Escape') {
             setDraft(value)
             setOpen(false)
+            setHi(-1)
           }
         }}
       />
@@ -231,13 +315,15 @@ function AssigneeField({ value, names, tints, onCommit }: { value: string; names
       {open && matches.length > 0 && (
         <>
           <div className="task-pick-scrim" onClick={() => setOpen(false)} />
-          <div className="task-pick-menu" role="menu">
+          <div className="task-pick-menu" role="listbox" id={listId}>
             <div className="task-pick-head">Already on this workspace</div>
-            {matches.map((n) => (
+            {matches.map((n, i) => (
               <button
                 key={n}
-                className="task-pick-item"
-                role="menuitem"
+                id={`${listId}-${i}`}
+                className={`task-pick-item${i === hi ? ' on' : ''}`}
+                role="option"
+                aria-selected={i === hi}
                 // mousedown, not click: blur would fire first and commit the half-typed draft.
                 onMouseDown={(e) => {
                   e.preventDefault()
@@ -260,6 +346,8 @@ export function TasksView() {
   const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const openFlow = useTrafficStore((s) => s.openFlow)
+  const allRows = useTrafficStore((s) => s.rows)
+  const updateRow = useTrafficStore((s) => s.updateRow)
   // '' means unscoped — every brand — and it is a routine state, not a transient one: the rail only
   // auto-picks a brand when Brand records exist, so a workspace of campaigns with no Brand card
   // sits on 'all' indefinitely.
@@ -270,6 +358,38 @@ export function TasksView() {
   const [editDue, setEditDue] = useState<string | null>(null)
   const [pickCamp, setPickCamp] = useState<string | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  /**
+   * The drawer stays mounted while it slides out. Unmounting on click is why it used to vanish
+   * rather than leave — an exit animation needs the thing to still be there to animate.
+   *
+   * DRAWER_MS must match the CSS duration; shorter and it disappears mid-slide, longer and it hangs
+   * on screen after the motion has finished. Under prefers-reduced-motion the animation is off and
+   * this is simply how long the unmount waits, which is not long enough to notice.
+   */
+  const [drawerClosing, setDrawerClosing] = useState(false)
+  const closeDrawer = () => {
+    setDrawerClosing(true)
+    setTimeout(() => {
+      setOpenTaskId(null)
+      setDrawerClosing(false)
+    }, DRAWER_MS)
+  }
+
+  /**
+   * The whole row opens the task, not just its name — a row of mostly-inert text where one word was
+   * the target. Anything that is itself a control keeps its own click: the checkbox, the campaign
+   * chip that opens a flow, the assignee field, the date, and the actions beside them. Without that
+   * test, ticking something off would also open the panel for it.
+   *
+   * `.task-chip` is in the list because a linked campaign draws the chip as a SPAN around two
+   * buttons, so the gap between them is not itself a control — aim at the campaign, miss by two
+   * pixels, and get the task panel instead of the flow. Guarding the container covers the padding
+   * as well as the buttons.
+   */
+  const openFromRow = (id: string) => (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a, .task-chip, [role="menu"], [role="listbox"]')) return
+    setOpenTaskId(id)
+  }
   const [groupBy, setGroupBy] = useState<GroupBy>('due')
   const [filterWho, setFilterWho] = useState('')
   const [filterCampaign, setFilterCampaign] = useState('')
@@ -281,6 +401,15 @@ export function TasksView() {
   // The person whose ✕ has been pressed but not yet confirmed. This one reaches every task they
   // hold, which is not something to do on a single click of a small glyph.
   const [confirmWho, setConfirmWho] = useState<string | null>(null)
+  // Keyboard for each pop-up. Separate instances because they open independently and each needs to
+  // remember which control opened it, to hand focus back on Escape.
+  const whoNav = useMenuNav(openFilter === 'who', () => { setOpenFilter(null); setEditWho(null); setConfirmWho(null) })
+  const campNav = useMenuNav(openFilter === 'campaign', () => setOpenFilter(null))
+  const chanNav = useMenuNav(openFilter === 'channel', () => setOpenFilter(null))
+  // One instance for the row-level campaign picker: pickCamp holds a single row id, so only ever
+  // one of them is rendered, and a hook cannot be called per row anyway.
+  const pickCampNav = useMenuNav(pickCamp !== null, () => setPickCamp(null))
+
   // The brand's campaigns, for the Campaign picker. The ingested content-library backfill is not a
   // campaign you'd assign work to, so it stays out of the list.
   const campaigns = useMemo(
@@ -571,6 +700,19 @@ export function TasksView() {
   // The task whose detail drawer is open — from allTasks so derived asset-tasks open their own detail
   // too (read live so edits to a manual task reflect immediately).
   const openTask = allTasks.find((t) => t.id === openTaskId) ?? null
+  /** The asset behind an open asset-task. Manual tasks have none, which is what splits the drawer. */
+  const openRow = openTask?.rowId ? allRows.find((r) => r.id === openTask.rowId) : undefined
+
+  /**
+   * Move an asset's due date. An asset-task's date IS its row's `scheduledAt` — the moment the thing
+   * goes out — so changing it here is a reschedule, the same one dragging the asset on the calendar
+   * performs. What the new moment should be lives next to the code that derived the old day from it,
+   * in assetTasks; see reschedulePatch for why the time of day and the flight length are carried.
+   */
+  const setAssetDue = (row: TrafficRow, day: string) => {
+    const patch = reschedulePatch(row, day)
+    if (patch) void updateRow(row.id, patch)
+  }
 
   // Jump to Companies and pop the linked company's record drawer.
   const openCompany = (id: string) => {
@@ -588,7 +730,7 @@ export function TasksView() {
   // A derived asset-task: read-mostly. Check toggles per-asset done; the name and the flow chip
   // both open the asset's flow. No company / assignee / delete (those belong to manual tasks).
   const assetRow = (t: Task, band = '') => (
-    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band}>
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band} onClick={openFromRow(t.id)}>
       <div className="task-cell task-cell-name">
         <button
           className={`task-check${t.done ? ' on' : ''}`}
@@ -644,7 +786,7 @@ export function TasksView() {
   )
 
   const row = (t: Task, band = '') => (
-    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band}>
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`} data-band={band} onClick={openFromRow(t.id)}>
       <div className="task-cell task-cell-name">
         <button
           className={`task-check${t.done ? ' on' : ''}`}
@@ -699,21 +841,34 @@ export function TasksView() {
               <span className="task-chip-name">{shortCampaign(t.campaign)}</span>
               <OpenMark />
             </button>
-            <button className="task-chip-edit" onClick={() => setPickCamp(t.id)} title="Change campaign" aria-label="Change campaign">
+            <button
+              className="task-chip-edit"
+              onClick={() => setPickCamp(t.id)}
+              title="Change campaign"
+              aria-label="Change campaign"
+              aria-haspopup="menu"
+              aria-expanded={pickCamp === t.id}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m6 9 6 6 6-6" />
               </svg>
             </button>
           </span>
         ) : (
-          <button className="task-chip task-chip-btn empty" onClick={() => setPickCamp(t.id)} title="Link a campaign">
+          <button
+            className="task-chip task-chip-btn empty"
+            onClick={() => setPickCamp(t.id)}
+            title="Link a campaign"
+            aria-haspopup="menu"
+            aria-expanded={pickCamp === t.id}
+          >
             <span className="task-chip-name muted">—</span>
           </button>
         )}
         {pickCamp === t.id && (
           <>
             <div className="task-pick-scrim" onClick={() => setPickCamp(null)} />
-            <div className="task-pick-menu" role="menu">
+            <div className="task-pick-menu" role="menu" ref={pickCampNav.ref} onKeyDown={pickCampNav.onKeyDown}>
               <div className="task-pick-head">Campaigns</div>
               {campaigns.length === 0 && <div className="task-pick-empty">No campaigns yet</div>}
               {campaigns.map((name) => (
@@ -785,6 +940,28 @@ export function TasksView() {
   const fieldRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12 }
   const fieldLabel: CSSProperties = { width: 92, flex: '0 0 auto', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }
   const fieldControl: CSSProperties = { flex: 1, minWidth: 0, padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13 }
+  /** A value you can read but not set. Same metrics as fieldControl so the column still lines up,
+   *  minus the border that promises an input. It only started to matter once real inputs moved in
+   *  beside them: three unfillable boxes among fillable ones read as fields that were not working. */
+  const fieldStatic: CSSProperties = { ...fieldControl, border: '1px solid transparent', background: 'none' }
+
+  /**
+   * The handoff, at the foot of both panels. It was a 12px text link tucked between two fields, in a
+   * panel whose whole job is to hand you to the flow when there is content to change — small, and
+   * easy to miss under everything else. Sticky so it is there whether the panel is half full or
+   * scrolling, and built on the .drawer-foot the app's other drawers already use.
+   *
+   * Nothing to hand off to without a campaign, which a hand-made task may not have, so it stays
+   * away rather than offering a door to nowhere.
+   */
+  const drawerCta = (campaign: string | undefined, view: 'flow' | 'grid') =>
+    campaign ? (
+      <div className="drawer-foot" style={{ marginTop: 'auto', position: 'sticky', bottom: 0, background: 'var(--surface)' }}>
+        <button className="btn" style={{ flex: 1, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }} onClick={() => { openFlow(campaign, view); closeDrawer() }}>
+          Open {shortCampaign(campaign)} ↗
+        </button>
+      </div>
+    ) : null
 
   return (
     <>
@@ -829,6 +1006,8 @@ export function TasksView() {
             <button
               className={`tasks-filter-btn${filterChannel ? ' on' : ''}`}
               data-filter="channel"
+              aria-haspopup="menu"
+              aria-expanded={openFilter === 'channel'}
               onClick={() => setOpenFilter(openFilter === 'channel' ? null : 'channel')}
             >
               {filterChannel === CUSTOM_TASKS ? CUSTOM_TASKS_LABEL : filterChannel ? (CHANNELS[filterChannel as keyof typeof CHANNELS]?.label ?? filterChannel) : 'All work'}
@@ -837,7 +1016,7 @@ export function TasksView() {
             {openFilter === 'channel' && (
               <>
                 <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
-                <div className="task-pick-menu tasks-filter-menu" role="menu">
+                <div className="task-pick-menu tasks-filter-menu" role="menu" ref={chanNav.ref} onKeyDown={chanNav.onKeyDown}>
                   <button className={`task-pick-item${filterChannel ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterChannel(''); setOpenFilter(null) }}>
                     <span className="task-pick-name">All work</span>
                   </button>
@@ -861,6 +1040,8 @@ export function TasksView() {
           <button
             className={`tasks-filter-btn${filterCampaign ? ' on' : ''}`}
             data-filter="campaign"
+            aria-haspopup="menu"
+            aria-expanded={openFilter === 'campaign'}
             onClick={() => setOpenFilter(openFilter === 'campaign' ? null : 'campaign')}
           >
             {campaignFilterLabel()}
@@ -869,7 +1050,7 @@ export function TasksView() {
           {openFilter === 'campaign' && (
             <>
               <div className="task-pick-scrim" onClick={() => setOpenFilter(null)} />
-              <div className="task-pick-menu tasks-filter-menu" role="menu">
+              <div className="task-pick-menu tasks-filter-menu" role="menu" ref={campNav.ref} onKeyDown={campNav.onKeyDown}>
                 <button className={`task-pick-item${filterCampaign ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterCampaign(''); setOpenFilter(null) }}>
                   <span className="task-pick-name">All campaigns</span>
                 </button>
@@ -908,6 +1089,8 @@ export function TasksView() {
           <button
             className={`tasks-filter-btn${filterWho ? ' on' : ''}`}
             data-filter="who"
+            aria-haspopup="menu"
+            aria-expanded={openFilter === 'who'}
             onClick={() => setOpenFilter(openFilter === 'who' ? null : 'who')}
           >
             {filterWho === UNASSIGNED ? NO_ASSIGNEE : filterWho || 'Everyone'}
@@ -916,7 +1099,7 @@ export function TasksView() {
           {openFilter === 'who' && (
             <>
               <div className="task-pick-scrim" onClick={() => { setOpenFilter(null); setEditWho(null); setConfirmWho(null) }} />
-              <div className="task-pick-menu tasks-filter-menu" role="menu">
+              <div className="task-pick-menu tasks-filter-menu" role="menu" ref={whoNav.ref} onKeyDown={whoNav.onKeyDown}>
                 <button className={`task-pick-item${filterWho ? '' : ' on'}`} role="menuitem" onClick={() => { setFilterWho(''); setOpenFilter(null) }}>
                   <span className="task-pick-name">Everyone</span>
                 </button>
@@ -1056,39 +1239,100 @@ export function TasksView() {
 
     {openTask && (
       <>
-        <div onClick={() => setOpenTaskId(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,24,40,.28)' }} />
+        <div className={`task-drawer-scrim${drawerClosing ? ' closing' : ''}`} onClick={closeDrawer} />
         {openTask.derived ? (
-          <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+          <aside className={`task-drawer${drawerClosing ? ' closing' : ''}`} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
             <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
               <button className={`task-check${openTask.done ? ' on' : ''}`} onClick={() => toggleAssetDone(openTask.rowId!)} aria-label={openTask.done ? 'Mark not done' : 'Mark done'} style={{ flex: '0 0 auto' }}>
                 {openTask.done && (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 6" /></svg>)}
               </button>
               <span style={{ flex: 1, fontSize: 12, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{openTask.done ? 'Completed asset' : 'Asset task'}</span>
-              <button onClick={() => setOpenTaskId(null)} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
+              <button onClick={closeDrawer} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
             </header>
+            {/* The fields run in the table's column order — done, due, folder, campaign, owner —
+                so opening a row does not reshuffle the same facts into a different sequence. */}
             <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{openTask.text || 'Untitled asset'}</div>
-              <div style={fieldRow}>
-                <span style={fieldLabel}>Status</span>
-                <button onClick={() => toggleAssetDone(openTask.rowId!)} style={{ ...fieldControl, cursor: 'pointer', textAlign: 'left', color: openTask.done ? 'var(--accent-2, #0e6d84)' : 'var(--text)' }}>{openTask.done ? '✓ Done' : 'Open'}</button>
+              <div>
+                {/* The asset's own name, not `text`. `text` spells the channel in front of it for
+                    views with no icon, and the line under this one already says the channel — so
+                    the heading used to read "LinkedIn post · LinkedIn image post #1". */}
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{openTask.assetName || openTask.text || 'Untitled asset'}</div>
+                {openRow && (
+                  <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+                    <ChannelIcon channel={openRow.channel} size={13} />
+                    {CHANNELS[openRow.channel]?.label ?? openRow.channel}
+                    {typeLabel(openRow.channel, openRow.assetType) && ` · ${typeLabel(openRow.channel, openRow.assetType)}`}
+                  </div>
+                )}
               </div>
               <div style={fieldRow}>
+                <span style={fieldLabel}>Task status</span>
+                <button onClick={() => toggleAssetDone(openTask.rowId!)} style={{ ...fieldControl, cursor: 'pointer', textAlign: 'left', color: openTask.done ? 'var(--accent-2, #0e6d84)' : 'var(--text)' }}>{openTask.done ? '✓ Done' : 'Open'}</button>
+              </div>
+              {/* TWO DIFFERENT STATES, BOTH CALLED STATUS UNTIL NOW. The one above is ours: has
+                  someone finished the work. This one belongs to the asset and runs a seven-state
+                  lifecycle the flow drives. The panel showed only the first and labelled it
+                  "Status", so an approved, scheduled asset read "Open" with nothing to say
+                  otherwise. Written the way the flow's own drawer writes it, stamps included. */}
+              {openRow && (
+                <div style={fieldRow}>
+                  <span style={fieldLabel}>Asset status</span>
+                  <select
+                    value={openRow.status}
+                    onChange={(e) => {
+                      const status = e.target.value as RowStatus
+                      void updateRow(openRow.id, {
+                        status,
+                        approvedAt: status === 'approved' ? openRow.approvedAt ?? Date.now() : openRow.approvedAt,
+                        postedAt: status === 'posted' ? openRow.postedAt ?? Date.now() : openRow.postedAt,
+                      })
+                    }}
+                    style={{ ...fieldControl, textTransform: 'capitalize' }}
+                  >
+                    {STATUS_ORDER.map((s) => (<option key={s} value={s}>{STATUS_LABEL[s]}</option>))}
+                  </select>
+                </div>
+              )}
+              <div style={fieldRow}>
                 <span style={fieldLabel}>Due date</span>
-                <span style={{ ...fieldControl, color: openTask.due ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{openTask.due ? fmtDue(openTask.due) : 'No date'}</span>
+                {openRow ? (
+                  <input type="date" value={openTask.due} onChange={(e) => setAssetDue(openRow, e.target.value)} style={fieldControl} />
+                ) : (
+                  <span style={{ ...fieldStatic, color: openTask.due ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{openTask.due ? fmtDue(openTask.due) : 'No date'}</span>
+                )}
+              </div>
+              {/* The time of day is the asset's, and only worth a line when it carries one — a
+                  reader deciding what to chase today wants to know a post goes out at 09:00. */}
+              {openRow?.scheduledAt && (
+                <div style={fieldRow}>
+                  <span style={fieldLabel}>Goes out</span>
+                  <span style={fieldStatic}>{new Date(openRow.scheduledAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                </div>
+              )}
+              <div style={fieldRow}>
+                <span style={fieldLabel}>Folder</span>
+                <span style={{ ...fieldStatic, color: folderOf.get(openTask.campaign ?? '') ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{folderLabel(openTask.campaign ?? '')}</span>
               </div>
               <div style={fieldRow}>
                 <span style={fieldLabel}>Campaign</span>
-                <span style={fieldControl}>{openTask.campaign ? shortCampaign(openTask.campaign) : '—'}</span>
+                <span style={fieldStatic}>{openTask.campaign ? shortCampaign(openTask.campaign) : '—'}</span>
               </div>
+              {/* Assignable from here, because this is the panel you open to act on a task. The
+                  table could hand work to someone and the drawer could not, which made opening a
+                  row a step backwards. */}
               <div style={fieldRow}>
-                <span style={fieldLabel} />
-                <button onClick={() => { openFlow(openTask.campaign ?? '', 'grid'); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open in flow ↗</button>
+                <span style={fieldLabel}>Assigned to</span>
+                <span style={{ ...fieldStatic, padding: '0 4px' }}>
+                  <AssigneeField value={openTask.assignee} names={knownAssignees} tints={tints} onCommit={(v) => setAssetAssignee(openTask.rowId!, v)} />
+                </span>
               </div>
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>This task is a built asset from a flow. Edit its content in the flow.</div>
             </div>
+            {/* Grid, not flow: the asset is a ROW, and the grid is where it exists as one. */}
+            {drawerCta(openTask.campaign, 'grid')}
           </aside>
         ) : (
-        <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        <aside className={`task-drawer${drawerClosing ? ' closing' : ''}`} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
           <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
             <button className={`task-check${openTask.done ? ' on' : ''}`} onClick={() => patch(openTask.id, { done: !openTask.done })} aria-label={openTask.done ? 'Mark not done' : 'Mark done'} style={{ flex: '0 0 auto' }}>
               {openTask.done && (
@@ -1096,8 +1340,8 @@ export function TasksView() {
               )}
             </button>
             <span style={{ flex: 1, fontSize: 12, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{openTask.done ? 'Completed task' : 'Task'}</span>
-            <button onClick={() => { remove(openTask.id); setOpenTaskId(null) }} title="Delete task" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: 13 }}>Delete</button>
-            <button onClick={() => setOpenTaskId(null)} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
+            <button onClick={() => { remove(openTask.id); closeDrawer() }} title="Delete task" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: 13 }}>Delete</button>
+            <button onClick={closeDrawer} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
           </header>
 
           <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1125,12 +1369,6 @@ export function TasksView() {
                 {campaigns.map((name) => (<option key={name} value={name}>{shortCampaign(name)}</option>))}
               </select>
             </div>
-            {openTask.campaign && (
-              <div style={fieldRow}>
-                <span style={fieldLabel} />
-                <button onClick={() => { openFlow(openTask.campaign!, 'flow'); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {shortCampaign(openTask.campaign)} ↗</button>
-              </div>
-            )}
 
             <div style={fieldRow}>
               <span style={fieldLabel}>Company</span>
@@ -1143,13 +1381,18 @@ export function TasksView() {
             {openTask.record?.id && (
               <div style={fieldRow}>
                 <span style={fieldLabel} />
-                <button onClick={() => { openCompany(openTask.record!.id); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {openTask.record.name} ↗</button>
+                <button onClick={() => { openCompany(openTask.record!.id); closeDrawer() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {openTask.record.name} ↗</button>
               </div>
             )}
 
             <div style={fieldRow}>
-              <span style={fieldLabel}>Assignee</span>
-              <input value={openTask.assignee} placeholder="Unassigned" onChange={(e) => patch(openTask.id, { assignee: e.target.value })} style={fieldControl} />
+              {/* "Assigned to", as the column is called, and the same field the rows use: a plain
+                  text box suggested nobody, so a second Laura arrived as "laura" and split her
+                  work across two people who looked identical in the table. */}
+              <span style={fieldLabel}>Assigned to</span>
+              <span style={{ ...fieldStatic, padding: '0 4px' }}>
+                <AssigneeField value={openTask.assignee} names={knownAssignees} tints={tints} onCommit={(v) => patch(openTask.id, { assignee: v })} />
+              </span>
             </div>
 
             <div>
@@ -1162,6 +1405,9 @@ export function TasksView() {
               <div>Created · {new Date(openTask.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
             </div>
           </div>
+          {/* Flow, not grid: a hand-made task is not a row in the sheet, so the board is where its
+              campaign actually is. */}
+          {drawerCta(openTask.campaign, 'flow')}
         </aside>
         )}
       </>

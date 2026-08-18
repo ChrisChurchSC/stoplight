@@ -84,6 +84,31 @@ With `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env`, the sign-in scr
 appears. Click **Continue with Google**. A first-time account is asked one question —
 what the company or team is called — and then lands in the app.
 
+## Checking it really worked
+
+Do this rather than trusting the dashboard, because the dashboard will lie to you by
+omission. Supabase saves the provider row as soon as the toggle is on, so a config with
+a client ID and **no secret** reports itself as enabled everywhere you would think to
+look — the provider list shows a green Enabled badge, and `/auth/v1/settings` answers
+`"google": true`. Both are telling you a config exists, not that it works.
+
+The endpoint that knows is the one the button actually hits:
+
+```bash
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
+  'https://YOUR-REF.supabase.co/auth/v1/authorize?provider=google&redirect_to=http://localhost:5173/'
+```
+
+- **302** to `accounts.google.com` — working.
+- **400** `{"msg":"Unsupported provider: missing OAuth secret"}` — the secret did not save.
+  Paste it again and save. Note that Google only shows a client secret once, at
+  creation; if it is gone, Google Cloud → Clients → your client → **Add secret** makes
+  a new one, and the old one keeps working until you delete it.
+
+A useful habit while pasting: the client ID and the secret both live on the clipboard at
+different moments, and copying one overwrites the other. Paste the secret first — it is
+the one you cannot go back for.
+
 ## What happens on a first Google sign-in
 
 Google returns a name, an email and an avatar. It never returns an employer, and the
@@ -102,14 +127,31 @@ Only accounts with no company and no workspace see it, so existing users and inv
 teammates go straight in — and the check costs no request for anyone who signed up
 through the form, since their company is already on the account.
 
-## Worth testing yourself once it is live
+## An address that already has a password account
 
-**Signing in with Google using an address that already has a password account.**
-Supabase's behaviour here depends on your project's identity-linking settings and on
-whether the existing address was confirmed. It is worth deliberately trying, because
-the two outcomes are very different: either the identities link and it is one account,
-or the second one is refused. Try it with a throwaway address before a real user finds
-out for you.
+**The identities link. It stays one account** — verified on this project on
+18 August 2026, against an address that had signed up with a password five weeks
+earlier:
+
+```
+user_id:    1352127c…   created 2026-07-13
+providers:  ["email", "google"]
+identities: email   created 2026-07-13
+            google  created 2026-08-18   ← added by the Google sign-in
+```
+
+So somebody who signed up with a password and later clicks Continue with Google keeps
+their workspace, their data and their user id, and gains a second way in. No duplicate
+account is created and nothing is refused.
+
+Two things follow from that. The account keeps its password — linking adds an identity,
+it does not replace one — so both routes work afterwards. And because the account
+already existed, it already had a workspace, which means the naming step below is
+correctly skipped for it.
+
+Worth knowing that this rests on Google returning a **verified** email that matches an
+existing confirmed address. It is not a promise about every provider or every project
+setting; it is what this project does today.
 
 ## When it goes wrong
 
@@ -117,6 +159,7 @@ out for you.
 |---|---|
 | `redirect_uri_mismatch` from Google | Step 1.5. The URI registered with Google is not `https://YOUR-REF.supabase.co/auth/v1/callback` — usually the app's own URL was entered instead, or the project ref is wrong, or there is a trailing slash. |
 | Sign-in completes but lands on production while you are on localhost | Step 3. `http://localhost:5173/**` is not in the Redirect URLs list, so Supabase used the Site URL. |
-| `Unsupported provider: provider is not enabled` | Step 2. The provider is off, or was saved without both the ID and the secret. |
+| `Unsupported provider: provider is not enabled` | Step 2. The provider is off. |
+| `Unsupported provider: missing OAuth secret` | Step 2, and the one to expect. The provider was saved with the client ID but no secret, so it reads as enabled while being unusable — see "Checking it really worked" below. |
 | Google says the app is blocked / unverified | The consent screen is in Testing and the address is not a test user. Add it, or publish. |
 | The button does nothing and no error appears | Supabase is not configured at all — check `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are in `.env` and the dev server was restarted. |
