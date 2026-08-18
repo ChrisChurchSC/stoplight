@@ -5342,6 +5342,14 @@ button.mf-open:focus-visible,
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-2);
+  transition: border-color 120ms ease;
+}
+/* WHERE THE CURSOR IS. The textarea sets outline: none and nothing replaced it, so typing into this
+   field looked identical to not being in it — and for a keyboard user tabbing through the panel there
+   was no way to tell they had arrived. On the box rather than the textarea, because the box is what
+   reads as the field; same accent border every other input here uses on focus. */
+.flow-fillbox:focus-within {
+  border-color: var(--accent);
 }
 /* WHAT THE RECORD ALREADY SAYS, above the box that offers to write it. Same frame as that box, so
    the two read as one question answered twice: here is what it says, and here is where to add. */
@@ -23772,6 +23780,21 @@ table.aud-sheet td.stick .aud-cell {
   color: var(--text-muted);
   margin-top: 6px;
 }
+/* Marker outside the text so the lines align on their first word rather than on the bullet, which
+   is what makes a short list scannable at a glance. */
+.infotip-points {
+  margin: 7px 0 0;
+  padding: 0 0 0 15px;
+  list-style: disc;
+  color: var(--text-muted);
+}
+.infotip-points li {
+  margin-top: 4px;
+  padding-left: 2px;
+  line-height: 1.45;
+}
+.infotip-points li::marker { color: var(--text-faint) }
+
 .infotip-see {
   margin-top: 7px;
   font-size: 11px;

@@ -11,6 +11,12 @@ export interface GlossaryEntry {
   short: string
   /** Optional second paragraph for a distinction worth stating. */
   more?: string
+  /**
+   * Optional short lines, rendered as a list under the definition. For a term whose whole content is
+   * "here are the N things you can do", which as prose is a paragraph you have to read twice to find
+   * the one line you came for. Keep each to a sentence; anything that needs a paragraph is `more`.
+   */
+  points?: string[]
   /** Related glossary keys, rendered as a "See also" line. */
   seeAlso?: string[]
 }
@@ -176,10 +182,14 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
      *  - a paste over PASTE_AS_DOC_CHARS becomes the card's document instead of a prompt, silently.
      * No em dashes, per this file's own rule.
      */
-    short:
-      'What a card knows about the thing it stands for. Every asset in the campaign is written from the cards wired into it, so this is where the writing gets its facts.',
-    more:
-      'The box is a prompt, not the description itself: what you type is only saved when you press Generate, which writes the fields that are still empty and leaves anything the card already says alone. Upload a .md instead and the document is kept whole and read as it is, and pasting anything long does the same thing rather than treating it as a prompt. Whichever route you take, it belongs to the thing the card names and not to this campaign alone, so every campaign using it reads the same thing.',
+    short: 'What a card knows about the thing it stands for. Every asset in the campaign is written from it.',
+    points: [
+      'Nothing is saved until you press Generate.',
+      'Generate fills only what is still empty.',
+      'Upload a .md to use a document instead, kept whole.',
+      'A long paste becomes a document too.',
+      'It is saved on the thing itself, so every campaign using it reads this.',
+    ],
     seeAlso: ['object', 'wiredContext'],
   },
   wiredContext: {

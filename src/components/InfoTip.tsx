@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { GLOSSARY } from '../domain/glossary'
 
@@ -10,7 +10,16 @@ import { GLOSSARY } from '../domain/glossary'
  * nothing if the term is unknown, so a stray key is a no-op rather than a blank popover.
  */
 const PANEL_W = 300
-const EST_H = 168 // conservative estimate for the flip decision (short + more + See also)
+/**
+ * The first guess at the panel's height, used only for the frame before it has been measured.
+ *
+ * It used to be the WHOLE flip decision, which held for as long as every entry was two paragraphs.
+ * A term whose definition is a list runs to twice this, so a guess put the panel below a button near
+ * the foot of a tall panel and let it run off the bottom of the window, with the lines that were the
+ * reason for opening it the ones underneath the fold. It is measured after paint now; this is what
+ * gets used for the one frame before that.
+ */
+const EST_H = 168
 
 export function InfoTip({ term }: { term: string }) {
   const entry = GLOSSARY[term]
@@ -20,12 +29,19 @@ export function InfoTip({ term }: { term: string }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
 
-  const place = () => {
+  const popRef = useRef<HTMLDivElement>(null)
+  /**
+   * Below the button when it fits, above when it does not, and never off either edge of the window.
+   * `h` is the panel's real height once there is a panel to measure, and the estimate before that.
+   */
+  const place = (h = popRef.current?.getBoundingClientRect().height || EST_H) => {
     const r = btnRef.current?.getBoundingClientRect()
     if (!r) return
-    const below = r.bottom + EST_H + 8 <= window.innerHeight
+    const below = r.bottom + h + 8 <= window.innerHeight
     setPos({
-      top: Math.round(below ? r.bottom + 8 : Math.max(8, r.top - EST_H - 8)),
+      // Clamped to the window even when neither side fits, so a panel taller than the viewport is
+      // scrolled to rather than cut off at the top.
+      top: Math.round(Math.max(8, below ? r.bottom + 8 : Math.min(r.top - h - 8, window.innerHeight - h - 8))),
       left: Math.round(Math.max(8, Math.min(r.left, window.innerWidth - PANEL_W - 8))),
     })
   }
@@ -45,11 +61,7 @@ export function InfoTip({ term }: { term: string }) {
     const reposition = () => {
       const r = btnRef.current?.getBoundingClientRect()
       if (!r) return
-      const below = r.bottom + EST_H + 8 <= window.innerHeight
-      setPos({
-        top: Math.round(below ? r.bottom + 8 : Math.max(8, r.top - EST_H - 8)),
-        left: Math.round(Math.max(8, Math.min(r.left, window.innerWidth - PANEL_W - 8))),
-      })
+      place()
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
@@ -62,6 +74,15 @@ export function InfoTip({ term }: { term: string }) {
       window.removeEventListener('resize', reposition)
       window.removeEventListener('keydown', onKey)
     }
+  }, [open])
+
+  // MEASURE, THEN PLACE PROPERLY. The first paint uses the estimate; this corrects it with the real
+  // height on the same frame, so a long entry flips above instead of running off the bottom.
+  useLayoutEffect(() => {
+    if (!open) return
+    const h = popRef.current?.getBoundingClientRect().height
+    if (h) place(h)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   // Never leave a close timer running after unmount.
@@ -92,6 +113,7 @@ export function InfoTip({ term }: { term: string }) {
         pos &&
         createPortal(
           <div
+            ref={popRef}
             id={panelId}
             className="infotip-pop"
             role="tooltip"
@@ -102,6 +124,15 @@ export function InfoTip({ term }: { term: string }) {
             <div className="infotip-term">{entry.term}</div>
             <div className="infotip-short">{entry.short}</div>
             {entry.more && <div className="infotip-more">{entry.more}</div>}
+            {/* A real list, so a definition whose content is "here are the N things" can be scanned
+                for the one line you came for instead of read as a paragraph twice. */}
+            {entry.points && entry.points.length > 0 && (
+              <ul className="infotip-points">
+                {entry.points.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            )}
             {seeAlso.length > 0 && <div className="infotip-see">See also: {seeAlso.join(', ')}</div>}
           </div>,
           document.body,
