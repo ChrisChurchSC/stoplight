@@ -4983,10 +4983,18 @@ button.mf-open:focus-visible,
    three named things rather than forty rows. Scoped to that adjacency on purpose: the same class
    also labels the first thing in a panel, and a rule above the top item would fence it off from the
    header. */
+/* A head that OPENS A NEW GROUP after one has closed gets a rule, and it spans the panel like every
+   other rule in here: inset it read as a divider belonging to the list above rather than as the panel
+   dividing. The text keeps its indent — only the line runs out to the edges.
+   .flow-ctxlist joined the list because "Channels" follows one, and was the one group head in the
+   brief with nothing above it to earn a rule from. */
 .flow-recform + .flow-inspect-label,
+.flow-ctxlist + .flow-inspect-label,
 .flow-inspect-input + .flow-inspect-label {
   border-top: 1px solid var(--border);
-  padding-top: 15px;
+  margin-left: -14px;
+  margin-right: -14px;
+  padding: 15px 14px 0;
 }
 /* UNLESS IT CONTINUES THE GROUP ABOVE IT. The rule means "a new named thing starts here", and the
    campaign name is not a new thing: it is the field above, scoped. Following an input was enough to
