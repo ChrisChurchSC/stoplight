@@ -8579,9 +8579,23 @@ export function FlowsView() {
               one group of fields, and the hairline sections are kept for what follows, which is a
               readout and an action rather than anything you type. */}
           {TAKES_CONTEXT.has(nt.kind) && (
-            <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-              {kindLabel.charAt(0).toUpperCase() + kindLabel.slice(1)} description
-            </label>
+            <>
+              <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                {kindLabel.charAt(0).toUpperCase() + kindLabel.slice(1)} description
+              </label>
+              {/* WHERE IT LANDS, said once and always. It lived on the drop target, so it was only
+                  readable while a file was already in the air — after the decision it describes.
+
+                  NOT "it becomes this {kindLabel}'s own document", which was the drop target's
+                  wording and is only true of the drop target. Typing here and generating fills the
+                  record's FIELDS; it does not make a document. What is true of both, and is the
+                  non-obvious part either way, is whose it becomes — so that is what this says, in
+                  the same terms the attached document uses a few rows down ("Every campaign that
+                  uses it reads this") rather than in a second vocabulary for one fact. */}
+              <span className="flow-inspect-sub">
+                Either way it becomes the {kindLabel}&rsquo;s own — every campaign using it reads this.
+              </span>
+            </>
           )}
           {TAKES_CONTEXT.has(nt.kind) && (() => {
             // The same record the Name field above writes to, resolved once at the top of the panel.
@@ -8665,8 +8679,10 @@ export function FlowsView() {
                         <path d="M14 3v4h4" />
                       </svg>
                     </span>
+                    {/* Just the act. The consequence is on the line under the field's title, which
+                        sits outside this overlay and stays readable behind it — saying it in both
+                        places is the same fact twice, a few rows apart, in a narrow column. */}
                     <span className="flow-drop-over-main">Drop to use it</span>
-                    <span className="flow-drop-over-sub">It becomes this {kindLabel}&rsquo;s own document.</span>
                   </div>
                 )}
                 {/* THE PROMPT, AND ONLY THE PROMPT.
