@@ -673,6 +673,59 @@ const isBuildChip = (s: string): boolean => BUILD_ONLY_CHIP.test(s.trim())
  */
 const CONNECT_SIDES = ['left', 'right', 'top', 'bottom'] as const
 
+/**
+ * HOW LONG AGO IT SAVED, spelled out. A status line is read as a sentence, so "1 min ago" rather
+ * than the "1m ago" a compact timestamp beside a comment wants.
+ *
+ * There are three near-copies of a timeAgo in this codebase (VersionHistory, CommentDrawer,
+ * CommentInbox) and they do not agree — two of them go straight from "just now" to hours, so a
+ * comment from fifty minutes back reads "just now" there. This is deliberately not a fourth of the
+ * same thing: it is minutes-first because the interesting window for a save is the last few of them.
+ */
+const savedAgo = (ms: number): string => {
+  const s = Math.round(ms / 1000)
+  if (s < 45) return 'just now'
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m} min ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h} hr ago`
+  return `${Math.round(h / 24)} d ago`
+}
+
+/**
+ * The panel's save status. Its own component for one reason: it re-renders on a clock, and FlowsView
+ * is thirteen thousand lines with a canvas under it — ticking the whole thing every half minute to
+ * age one word would be a poor trade. The interval only runs while there is an age to show.
+ */
+function SavedStatus({ state, at, onSave }: { state: 'idle' | 'saving' | 'saved'; at: number | null; onSave: () => void }) {
+  const [, tick] = useState(0)
+  const showAge = state === 'idle' && at !== null
+  useEffect(() => {
+    if (!showAge) return
+    // Half a minute: fine for a label whose smallest unit is a minute, and it never has to be
+    // exactly right — only never wrong enough to notice.
+    const id = window.setInterval(() => tick((n) => n + 1), 30_000)
+    return () => window.clearInterval(id)
+  }, [showAge])
+
+  const label =
+    state === 'saving' ? 'Saving…'
+    : state === 'saved' ? 'Saved ✓'
+    : at !== null ? `Saved ${savedAgo(Date.now() - at)}`
+    : 'Saved'
+
+  return (
+    <button
+      className={`flow-save-status${state === 'saved' ? ' on' : ''}`}
+      disabled={state === 'saving'}
+      title="Saves on its own, within a second of an edit. Press to write it now."
+      onClick={onSave}
+    >
+      {label}
+    </button>
+  )
+}
+
 export function FlowsView() {
   const { brands, canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -714,6 +767,8 @@ export function FlowsView() {
    * work the debounce was going to do later, and it says when it is done.
    */
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  /** When the last write landed, so the status can say how long ago rather than only that it did. */
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
   const savedTimer = useRef<number | null>(null)
   useEffect(() => () => { if (savedTimer.current) window.clearTimeout(savedTimer.current) }, [])
   const markCardDirty = (id: string) => setDirtyCards((d) => (d[id] ? d : { ...d, [id]: Date.now() }))
@@ -924,7 +979,17 @@ export function FlowsView() {
    * an empty second name field on a card nobody asked it of is exactly the clutter it was moved out
    * of the way to avoid. A card that already HAS an override shows the field regardless.
    */
-  const [aliasOpen, setAliasOpen] = useState<string | null>(null)
+  /**
+   * The card whose name is being edited in the panel header, and the text being typed for it.
+   *
+   * Editing happens in the title because the title is the name — a Name field under a heading already
+   * displaying that name asked you to name a thing it was showing you. `renameCancelled` exists
+   * because Escape has to leave without writing, and leaving the field is also how you commit: the
+   * blur that ends the edit cannot tell by itself which of the two just happened.
+   */
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const renameCancelled = useRef(false)
   /**
    * ONE hidden picker for every card, same as the Data source card's: the card that asked is held in
    * a ref, since mounting an input per card puts dozens in the tree for a control used once.
@@ -6938,6 +7003,14 @@ export function FlowsView() {
     if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
     boardSaveTimer.current = window.setTimeout(() => {
       saveFlowBoard(boardSnapshot(boardKey))
+      // AND SAY SO. saveState was written only by the Save button, so it reported which button had
+      // been pressed rather than whether the board was written — a status driven by it would have
+      // sat silent through every autosave, which is all of them. Reporting the debounce is what
+      // lets the panel answer "did that take?" without a button asking to be pressed.
+      if (savedTimer.current) window.clearTimeout(savedTimer.current)
+      setSaveState('saved')
+      setLastSavedAt(Date.now())
+      savedTimer.current = window.setTimeout(() => setSaveState('idle'), 1600)
     }, 600)
     return () => {
       if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
@@ -6972,6 +7045,7 @@ export function FlowsView() {
       /* best effort by contract: it never rejects, and the save banner owns real failures */
     }
     setSaveState('saved')
+    setLastSavedAt(Date.now())
     savedTimer.current = window.setTimeout(() => setSaveState('idle'), 2000)
   }
 
@@ -8387,6 +8461,21 @@ export function FlowsView() {
      * NEEDS_BRAND_TO_MINT kinds, and only before a record exists — the field stays on the card,
      * where what you type is at least kept.
      */
+    /**
+     * HOW MANY LOOSE CARDS THIS WOULD BUNDLE, which is also whether the action exists at all.
+     *
+     * The same pool convertSelection acts on, so a label cannot promise one card and bundle three.
+     * Zero on a card already inside a smart object: that one is saved by definition, and its own
+     * panel is where the library rung is decided.
+     */
+    const promoteCount = placementOf(nt.id)
+      ? 0
+      : // The same expression `convertible` reads in the right-click menu, so the icon and the menu
+        // cannot disagree about whether there is anything to convert or how much of it there is.
+        (selected.size ? [...selected] : sel ? [sel] : []).filter(
+          (id) => objects.some((o) => o.id === id) && !placementOf(id),
+        ).length
+
     const nameRec = recordForCard(nt)
     const recordName = nameRec ? String(nameRec.current[nameRec.nameKey] ?? '').trim() : ''
     const canNameRecord = !!nameRec && (!!nt.refId || !NEEDS_BRAND_TO_MINT.has(nt.kind) || !!brand)
@@ -8406,7 +8495,66 @@ export function FlowsView() {
               {/* The card's NAME heads its panel, falling back to the kind. With four Audience cards
                   on a board, four panels headed "Audience" gave you no way to tell from the panel
                   which one you had selected. */}
-              <span className="flow-panel-title">{title}</span>
+              {/* THE TITLE IS THE NAME, so it is edited where it is shown. A Name field sat under a
+                  heading already displaying that name, asking you to name a thing it was showing you —
+                  and beneath it a second field for calling it something else on this board, which was
+                  a rare and deliberate act taking up a permanent row.
+
+                  The pencil appears on hovering the header, so the heading is a heading until you
+                  reach for it. Keyboard users get it on focus, or the panel would have a control they
+                  can tab to and never see.
+
+                  What it writes is unchanged from the field it replaces: the record, so renaming here
+                  renames it everywhere that record is used, and the card itself only where there is no
+                  record to carry the name. */}
+              {renaming === nt.id ? (
+                <input
+                  className="flow-panel-title-input"
+                  autoFocus
+                  value={renameDraft}
+                  placeholder={canNameRecord ? `Name this ${kindLabel}…` : 'Name this card…'}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={() => {
+                    if (!renameCancelled.current) {
+                      const next = renameDraft.trim()
+                      if (canNameRecord && nameRec) {
+                        nameRec.apply({ [nameRec.nameKey]: next })
+                        // A board-local name would mask what was just typed, and nothing makes one
+                        // any more, so an old one stops hiding the record it belongs to.
+                        if (nt.name) renameObject(nt.id, '')
+                      } else {
+                        renameObject(nt.id, next)
+                      }
+                    }
+                    renameCancelled.current = false
+                    setRenaming(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                    else if (e.key === 'Escape') { e.preventDefault(); renameCancelled.current = true; e.currentTarget.blur() }
+                  }}
+                />
+              ) : (
+                <>
+                  <span className="flow-panel-title" title={title}>{title}</span>
+                  <button
+                    className="flow-panel-rename"
+                    title={`Rename this ${kindLabel}`}
+                    aria-label={`Rename this ${kindLabel}`}
+                    onClick={() => {
+                      // The stored name, not the displayed one: with nothing named the title falls
+                      // back to the kind, and opening the box on "Brand" would offer that as a name.
+                      setRenameDraft(canNameRecord ? recordName : nt.name ?? '')
+                      setRenaming(nt.id)
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 20h8" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                    </svg>
+                  </button>
+                </>
+              )}
               {/* SAY THAT THIS ONE IS NOT FINISHED.
                   The card acquires, reads and cites a table, and the parts that are missing
                   (connecting LinkedIn or Instagram, reading an .xlsx, comparing two periods) are
@@ -8418,6 +8566,42 @@ export function FlowsView() {
                   took a third of the width off the definition underneath and wrapped it to three
                   lines. It qualifies the card's name, so it belongs beside the name. */}
               {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
+          {/* MAKING IT REUSABLE IS A THING YOU DO TO THE CARD, not a thing the card says about
+              itself, so it sits with the panel's own controls rather than in the body.
+
+              It spent a while at the foot of the panel under a heading called "Keeping it": a rule,
+              an uppercase label and eighteen pixels of margin spent on one rare button, with a
+              heading that did not say what it meant until you read the button under it. And a
+              full-width box at the bottom of a panel is the shape of a primary action, which this is
+              not. As an icon it costs a corner and stops competing with the fields.
+
+              The count is in the label because the selection decides it: bundling three cards while
+              saying "this" would be the label lying about what the click does. */}
+          {/* THE WORDS THE CANVAS ALREADY USES, plus the keystroke it already has. This action was not
+              new when it arrived in the panel: the right-click menu has offered it all along as
+              "Make a smart object" / "Bundle into a smart object" on ⌘⇧B. Two names for one act is
+              how you end up believing they are two acts, and a tooltip is a free place to teach a
+              shortcut to somebody who found the long way round. */}
+          {promoteCount > 0 && (
+            <button
+              className="flow-panel-action"
+              title={`${promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}  ⌘⇧B`}
+              aria-label={promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}
+              onClick={() => convertSelection()}
+            >
+              {/* Two diamonds, one inside the other: an instance of a thing, which is what a smart
+                  object is. Nothing in the app drew one before, so this follows the house language
+                  rather than an existing mark: 24 grid, 1.7 stroke, currentColor, round joins. */}
+              {/* Drawn to the same extent as the collapse glyph beside it — 4 to 20 on the 24 grid,
+                  where that one's panel rect runs 4 to 20. At 2.8 to 21.2 it was the same box and the
+                  same 16px, but a bigger drawing inside it, so the pair read as mismatched even once
+                  their centres agreed to the pixel. */}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 4 20 12 12 20 4 12z" />
+                <path d="M12 9 15 12 12 15 9 12z" />
+              </svg>
+            </button>
+          )}
             </span>
             {/* Once the title is the card's NAME, the header stops saying what kind of card it is —
                 the glyph is the only thing left carrying that, and a colour is not a word. So the
@@ -8429,66 +8613,6 @@ export function FlowsView() {
           </span>
         </div>
         <div className="flow-inspect">
-          {/* NAME IT. Above the fill box on purpose: it is one line, it is not authoring, and it is
-              the answer to "which card am I looking at" — which you need before anything below is
-              worth reading. The fill box is still the first thing here that DOES anything.
-              Blank is fine; the card then answers to the record it names, as it always did. */}
-          {/* SAVE, at the top of the panel and on every card.
-              The board has always autosaved, and the panel said so by having no Save at all, which
-              answers the question by never mentioning it. This one does the work the debounce was
-              going to do later (see saveNow) and reports when it is done, so "did that take?" has an
-              answer you can point at rather than a convention you have to know. */}
-          <div className="flow-insp-saverow">
-            <button
-              className="flow-insp-save"
-              disabled={saveState === 'saving'}
-              title="Write this board and your records now, instead of waiting for the autosave"
-              onClick={() => void saveNow()}
-            >
-              {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
-            </button>
-            <span className="flow-insp-saverow-note">Edits save on their own; this does it now.</span>
-          </div>
-          <label className="flow-inspect-label">Name</label>
-          {/* BUFFERED, because this one can mint. Committing per keystroke on a card that has no
-              record yet would put the first letter you typed into the library as a record and then
-              rename it eleven times; on blur it is one record with the name you meant. It is also
-              why ensurePersonFor and the rest keep mintedRecordRef — see the note there. */}
-          <BufferedInput
-            className="flow-inspect-input"
-            value={canNameRecord ? recordName : nt.name ?? ''}
-            placeholder={canNameRecord ? `Name this ${kindLabel}…` : `Name this card…`}
-            onCommit={(v) => {
-              if (canNameRecord && nameRec) nameRec.apply({ [nameRec.nameKey]: v.trim() })
-              else renameObject(nt.id, v)
-            }}
-          />
-          {/* AND THE RARE CASE, ONE LINE DOWN: calling it something else on this board only.
-              Worth keeping — a card can honestly need a name the library should not be called — but
-              it is not what somebody opening a blank card came here to do, and for as long as it
-              WAS the Name field the common act had nowhere to go. Offered only where the field
-              above is writing to a record, since with no record there is one name and no second one
-              to override it with. */}
-          {canNameRecord && (nt.name || aliasOpen === nt.id ? (
-            <>
-              <label className="flow-inspect-label">Called this on this campaign</label>
-              <BufferedInput
-                className="flow-inspect-input"
-                value={nt.name ?? ''}
-                placeholder={recordName || `Name this ${kindLabel}…`}
-                onCommit={(v) => { renameObject(nt.id, v); if (!v.trim()) setAliasOpen(null) }}
-              />
-              <div className="flow-inspect-note" style={{ marginTop: 6 }}>
-                The board and the grid call it this. Records still calls it
-                {recordName ? <strong> {recordName}</strong> : ` the ${kindLabel}'s own name`}. Clear
-                the box to go back to it.
-              </div>
-            </>
-          ) : (
-            <button className="flow-doc-override-go" style={{ marginTop: 8 }} onClick={() => setAliasOpen(nt.id)}>
-              Call it something else on this campaign
-            </button>
-          ))}
           {nt.kind === 'data-source' && (
             <p className="flow-inspect-note flow-wip-note">
               This card is still being built. Pasting, uploading and describing a table all work, and
@@ -8511,6 +8635,29 @@ export function FlowsView() {
               So the fields are gone from here. They still exist and are still filled: Generate writes
               them, and they are edited where records are edited. What a card asks you for now is the
               thing only you can give it, in the form you already have it in. */}
+          {/* WHAT IT SAYS. The panel asks three things in the order you would do them: what the card
+              is called, what it says, and where that reaches. They were eleven controls in one flat
+              column, so the order was real and invisible.
+
+              A rule between each, and a label on each, which is all it takes. Uppercase section heads
+              were tried here and were too much furniture for three groups — they made the two boxes
+              you type into look like different kinds of thing, when Name and the description are the
+              same kind of thing. */}
+          {TAKES_CONTEXT.has(nt.kind) && (
+            <>
+              {/* THE DEFINITION GOES IN THE ONE PLACE DEFINITIONS GO. This was two lines of grey
+                  under the label saying where an answer lands, which is true but is one of four
+                  things worth knowing about this field and was the only one with room to be said.
+                  As a glossary entry it can carry the rest: that the box is a prompt and loses what
+                  you type unless you press Generate, that Generate fills only the gaps, and that a
+                  long paste quietly becomes a document. InfoTip is the app's single definition
+                  primitive by rule, so none of this needs a second mechanism. */}
+              <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                {kindLabel.charAt(0).toUpperCase() + kindLabel.slice(1)} description
+                <InfoTip term="cardDescription" />
+              </label>
+            </>
+          )}
           {TAKES_CONTEXT.has(nt.kind) && (() => {
             // The same record the Name field above writes to, resolved once at the top of the panel.
             const target = nameRec
@@ -8548,6 +8695,7 @@ export function FlowsView() {
             return (
               <div
                 className="flow-context"
+                style={{ position: 'relative' }}
                 /**
                  * DROP A FILE ANYWHERE ON EITHER PART, not just on the button. dropEffect has to be
                  * set on EVERY dragover or the browser refuses the drop, and preventDefault on both
@@ -8574,6 +8722,30 @@ export function FlowsView() {
                   if (file) void attachDocFile(nt.id, file)
                 }}
               >
+                {/* WHERE THE DASHED TARGET WENT: over the field, while a file is actually in the air.
+                    An overlay rather than a region that appears in the flow, because .flow-doc's own
+                    note already warns why — a border that arrives mid-drag shifts the thing you are
+                    aiming at out from under the cursor. This costs no layout at all.
+
+                    It is also the one place the landing note is worth reading. "It becomes this
+                    brand's own document" was on a panel visible at all times, explaining a decision
+                    nobody had made yet; here it is answering "what happens if I let go", at the
+                    moment that is the actual question. Only where there is a field to cover — a
+                    Company card's dashed target is on screen already. */}
+                {canGenerate && docDropOn === nt.id && (
+                  <div className="flow-drop-over" aria-hidden="true">
+                    <span className="flow-drop-over-ic">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" />
+                        <path d="M14 3v4h4" />
+                      </svg>
+                    </span>
+                    {/* Just the act. The consequence is on the line under the field's title, which
+                        sits outside this overlay and stays readable behind it — saying it in both
+                        places is the same fact twice, a few rows apart, in a narrow column. */}
+                    <span className="flow-drop-over-main">Drop to use it</span>
+                  </div>
+                )}
                 {/* THE PROMPT, AND ONLY THE PROMPT.
                     The document and its upload button used to sit inside this box, which made the
                     box mean two different things: a thing you write in, and a thing that holds a
@@ -8610,19 +8782,19 @@ export function FlowsView() {
                         All three are true and none is urgent: the box takes a description, and in a
                         panel this narrow the instruction is the only part that has to be legible at
                         a glance. */}
-                    <div className="flow-fill-head">
-                      {/* Generate fills only what is still empty, so over a record that already
-                          says something the ask is the gaps, not the whole thing. */}
-                      <span className="flow-fill-title">
-                        {said.length ? `Add to this ${kindLabel}` : `Describe this ${kindLabel}`}
-                      </span>
-                    </div>
                     <textarea
                       className="flow-fill-input"
                       rows={4}
                       value={prompting[nt.id] ?? ''}
-                      /* No placeholder: the heading above it already says what the box is for, and
-                         what used to sit here was an example (see FILL_PLACEHOLDER). */
+                      /* IN THE BOX, NOT OVER IT. This was a 600-weight heading on its own row above
+                         the textarea, which read as a third thing to get past once the field itself
+                         is labelled — and it stayed there while you typed, restating the label over
+                         your own words. As a placeholder it is faint, it is the same sentence, and it
+                         gets out of the way the moment there is anything to say. Still not an example
+                         (see FILL_PLACEHOLDER for why those went); still carries the one fact worth
+                         keeping — that over a record which already says something, Generate is being
+                         asked for the gaps rather than the whole thing. */
+                      placeholder={said.length ? `Add to this ${kindLabel}…` : `Describe this ${kindLabel}…`}
                       onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
                       /**
                        * A PASTE LONG ENOUGH TO BE A DOCUMENT BECOMES ONE, the same move a pasted
@@ -8648,23 +8820,47 @@ export function FlowsView() {
                       }}
                     />
                     <div className="flow-fill-foot">
+                      {/* A DISABLED BUTTON SHOULD SAY WHY. Empty box, greyed Generate, nothing
+                          explaining which of the two it is waiting on — and the box above takes a
+                          dropped file as well, so "nothing to work from" is not self-evident. */}
                       <button
                         className="flow-fill-go"
                         disabled={busy || !(prompting[nt.id] ?? '').trim()}
+                        title={busy ? 'Working…' : !(prompting[nt.id] ?? '').trim() ? `Say something about this ${kindLabel} first — a sentence is enough` : `Write this ${kindLabel} from what you have said`}
                         onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
                       >
                         {busy ? 'Generating…' : 'Generate'}
+                      </button>
+                      {/* THE OTHER ROUTE, BESIDE THE FIRST ONE. It was a four-row dashed panel below
+                          an "or", which made one question look like two — and before that it was a
+                          small link under that "or", which made the second route look like a footnote
+                          to the first. A button next to Generate is neither: two ways to answer, the
+                          same size, on one line. Same handler the dashed target used.
+
+                          The dashed target is not gone, it is deferred: it appears over the field
+                          while a file is actually being dragged (see the overlay below), which is
+                          also where it can say where the file lands, at the moment that matters. */}
+                      <button
+                        className="flow-fill-doc-go"
+                        disabled={busy}
+                        title={`Give this ${kindLabel} a document instead — it becomes the ${kindLabel}'s own`}
+                        onClick={() => { docTargetRef.current = { cardId: nt.id, override: false }; docFileRef.current?.click() }}
+                      >
+                        Upload a .md
                       </button>
                       {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
                     </div>
                   </div>
                 )}
-                {/* THE OTHER WAY TO ANSWER THE CARD, under the first and separated from it.
-                    The two are alternatives, not a control and its fallback, so the word between
-                    them is doing real work — and on a Company card, where there is nothing to
-                    generate, there is no "or" and this is simply the only way in. */}
-                <div className={`flow-doc${docDropOn === nt.id ? ' dropping' : ''}`}>
-                  {canGenerate && <span className="flow-doc-or">or</span>}
+                {/* WHAT AN UPLOADED DOCUMENT IS, once there is one — and on a Company card, the only
+                    way in, because there is nothing there to generate from. The "or" that used to
+                    head this went with the panel it divided: with Upload sitting beside Generate
+                    there is no second region for a word to sit between. */}
+                {/* The region outline answers only where the overlay does not. It existed to say
+                    "the whole region takes the drop, not just the button" — which the overlay now says
+                    for any card with a prompt box, and where this region is empty it was drawing a
+                    stray dashed strip under the overlay saying nothing. */}
+                <div className={`flow-doc${docDropOn === nt.id && !canGenerate ? ' dropping' : ''}`}>
                   {/* THE PITCH IS EMPTY-STATE COPY AND GOES WHEN THE STATE DOES.
                       A heading offering to take a document, and a paragraph explaining what that
                       would do, sitting above a document already attached, is the panel talking past
@@ -8674,7 +8870,13 @@ export function FlowsView() {
                       fact twice, thirty words apart, in a column this narrow. What stays true once
                       a document is attached is said by the document's own rows; this only earns its
                       place when there is nothing there. */}
-                  {!ref && (
+                  {/* AND ONLY WHERE IT IS THE WAY IN. On a card with a prompt box, Upload now sits
+                      beside Generate and this four-row dashed panel said the same thing a second
+                      time, twice the size, under a divider — one question wearing two answers. It
+                      still appears there, but over the field and only while a file is being dragged.
+                      A Company card has no prompt box, so here it is not a duplicate of anything:
+                      it is the only way in, and it keeps its full size and its lead. */}
+                  {!ref && !canGenerate && (
                     <>
                       {/* AND NO HEADING WHERE THE BUTTON IS ALREADY THE HEADING.
                           The cut above took the pitch out of the attached state; this takes it out
@@ -8880,45 +9082,6 @@ export function FlowsView() {
             )
           })()}
 
-          {/* SAVING THE CARD SO ANOTHER CAMPAIGN CAN USE IT.
-              It sat under the Name field, on the argument that a control nobody scrolls to is a
-              control nobody has — which is true, and it had been buried under Applied to before
-              that. What it cost up there was the top of the panel: three rows in, between naming
-              the card and saying what it is, a button offering to file the card somewhere, wearing
-              .flow-insp-open — a full-width bordered box the same height as the input directly
-              above it, so it read as a second empty text field. Two of the first four rows were
-              about where the card is kept rather than what it says.
-
-              So it comes down to here, under the box that answers the card, and stops looking like
-              a field. It is still above Applied to, the fold it was rescued from, and the panel it
-              now follows is short: a name, a prompt and an upload.
-
-              Only for a loose card. One already inside a smart object is saved by definition, and
-              the object's own panel is where its library rung is decided (see "Add to the brand
-              library" there). */}
-          {!placementOf(nt.id) && (() => {
-            // The same pool convertSelection will actually act on, so the label cannot promise one
-            // card and bundle three. Called with no state changes first, because it reads the
-            // selection from this render and a setSel here would not have landed by then.
-            const n = (selected.size ? [...selected] : sel ? [sel] : []).filter(
-              (id) => objects.some((o) => o.id === id) && !placementOf(id),
-            ).length
-            if (!n) return null
-            return (
-              <div className="flow-insp-promote">
-                <button
-                  className="flow-insp-promote-go"
-                  title="Keep this on the shelf: place it on another campaign instead of rebuilding it"
-                  onClick={() => convertSelection()}
-                >
-                  {n > 1 ? `Save these ${n} cards as a smart object` : 'Save as a smart object'}
-                </button>
-                {/* One line, not two. The second sentence explained a rung of the library you reach
-                    from a panel you have not opened yet, which is a thing to say there. */}
-                <span className="flow-insp-promote-note">Kept on this campaign until you add it to the brand library.</span>
-              </div>
-            )
-          })()}
 
           {/* NO RECORD FORMS. Eleven of them stood here — person, audience, company, trigger, brand,
               season, proof point, voice, concept, message, product — and between them twenty-five
@@ -8988,9 +9151,42 @@ export function FlowsView() {
           {(() => {
             const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
             const targets = downstreamTargets(board, nt.id)
-            // Nothing when it feeds nothing. An unwired card is the normal state of a card you are
-            // still filling in, and a paragraph explaining that was the loudest thing on the panel.
-            if (!targets.length) return null
+            /**
+             * SIZED TO WHAT IT HAS TO SAY. As one shape for all three answers this readout charged a
+             * label, a rule and a 44px row with an icon to tell you, on the commonest card in the
+             * app, that a wire you can see six inches to the left is connected. That is what made it
+             * read as furniture.
+             *
+             * It says three different things and only one of them is worth a list:
+             *  - NOTHING. The silent failure this panel can produce: a card filled in perfectly that
+             *    no asset ever reads. Worth interrupting for, and the only per-card place it is said.
+             *    (hasWiredContext gates generating on a board with no wires at all; nothing else
+             *    tells you THIS card is stranded.)
+             *  - THE WHOLE CAMPAIGN, and nothing else. One hop, one obvious answer, one line.
+             *  - ANYTHING ELSE. Now it is telling you something you cannot see: downstreamTargets
+             *    walks THROUGH intervening cards, so a card three hops upstream reports the posts at
+             *    the end of the chain rather than the card next door. That earns the list, and the
+             *    rows are worth clicking because they go there.
+             */
+            if (!targets.length) {
+              return (
+                <>
+                  <div className="flow-inspect-rule" />
+                  <div className="flow-inspect-note flow-reach-none">
+                    Not wired to anything, so nothing reads this card yet. Draw a wire to the campaign
+                    or to a channel.
+                  </div>
+                </>
+              )
+            }
+            if (targets.length === 1 && targets[0] === 'campaign') {
+              return (
+                <>
+                  <div className="flow-inspect-rule" />
+                  <div className="flow-inspect-note">Applies to every asset in the campaign.</div>
+                </>
+              )
+            }
             const named = targets.map((t) => {
               if (t === 'campaign') return { id: t, label: 'The whole campaign', sub: 'every asset', tone: CAMPAIGN_TONE, channel: undefined as ChannelId | undefined }
               const d = viewDelivs.find((x) => x.key === t)
@@ -9001,9 +9197,16 @@ export function FlowsView() {
             })
             return (
               <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  Applied to · {named.length}
-                </label>
+                <div className="flow-inspect-rule" />
+                {/* A LABEL, LIKE THE FIELDS ABOVE IT. It was an uppercase section head with a rule,
+                    which was the right device while there were two of these down here and a wrong one
+                    now that it is alone: a rule separates groups, and there is nothing left to
+                    separate from. The panel reads as one rhythm this way, label and content the whole
+                    way down, rather than fields in one voice and everything else in another.
+
+                    The count went with it. On one target it read "Applied to · 1" above a single row
+                    that already named it, which is a number you can see. */}
+                <label className="flow-inspect-label">Where it applies{named.length > 1 ? ` · ${named.length}` : ''}</label>
                 {/* Same shape as the brief's Deliverables list, and clickable for the same reason:
                     these name things that exist on the board, so reading one and wanting to open it
                     is the obvious next move. It used to be an inert label/value pair that looked
@@ -9024,6 +9227,7 @@ export function FlowsView() {
               </>
             )
           })()}
+
           {nt.kind === 'data-source' &&
           (() => {
             const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
@@ -10410,6 +10614,13 @@ export function FlowsView() {
           )}
         </div>
         <div className="flow-top-right">
+          {/* WHETHER THE BOARD IS SAVED BELONGS TO THE BOARD, not to whichever card is selected.
+              It spent a day in the card panel's header, where it was the same sentence on all eleven
+              kinds of panel and competed for a narrow title row that already carried a name and a
+              definition. The credits readout moved here for the same reason and says so above: the
+              header is where facts about the thing you are working in live, and the canvas toolbar is
+              a row of things you DO to it. */}
+          {boardsHydrated && <SavedStatus state={saveState} at={lastSavedAt} onSave={() => void saveNow()} />}
           {/* WHAT IS LEFT TO SPEND, in the header rather than on the canvas toolbar. The balance is
               a property of the workspace, not of the board you happen to be looking at, and the
               toolbar it used to sit on is a row of things you DO to the canvas. Reads the provider

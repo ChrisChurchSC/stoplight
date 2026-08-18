@@ -11,6 +11,12 @@ export interface GlossaryEntry {
   short: string
   /** Optional second paragraph for a distinction worth stating. */
   more?: string
+  /**
+   * Optional short lines, rendered as a list under the definition. For a term whose whole content is
+   * "here are the N things you can do", which as prose is a paragraph you have to read twice to find
+   * the one line you came for. Keep each to a sentence; anything that needs a paragraph is `more`.
+   */
+  points?: string[]
   /** Related glossary keys, rendered as a "See also" line. */
   seeAlso?: string[]
 }
@@ -163,6 +169,28 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     term: 'Records assistant',
     short:
       "The chat for the record type you are viewing. In Build it adds, edits, and cleans up your records (you approve each change); in Analyze it answers questions without changing anything.",
+  },
+  cardDescription: {
+    term: 'Card description',
+    /**
+     * WRITTEN FROM THE BEHAVIOUR, as this file's header asks. Three things here are not visible from
+     * the panel and each one costs somebody something:
+     *  - the box is a prompt held in component state, so typing in it and clicking away loses the
+     *    typing. Generate is the only thing that writes.
+     *  - Generate fills the fields that are still empty, so it adds to a card rather than replacing
+     *    what is already there.
+     *  - a paste over PASTE_AS_DOC_CHARS becomes the card's document instead of a prompt, silently.
+     * No em dashes, per this file's own rule.
+     */
+    short: 'What a card knows about the thing it stands for. Every asset in the campaign is written from it.',
+    points: [
+      'Nothing is saved until you press Generate.',
+      'Generate fills only what is still empty.',
+      'Upload a .md to use a document instead, kept whole.',
+      'A long paste becomes a document too.',
+      'It is saved on the thing itself, so every campaign using it reads this.',
+    ],
+    seeAlso: ['object', 'wiredContext'],
   },
   wiredContext: {
     term: 'Informing the messaging',

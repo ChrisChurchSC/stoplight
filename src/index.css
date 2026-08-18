@@ -4640,12 +4640,48 @@ button.mf-open:focus-visible,
   position: relative;
 }
 /* Collapse button pinned to the panel's top-right; sits above the panel content. */
-.flow-panel-collapse { position: absolute; top: 14px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+/* top matches .flow-panel-head's padding-top, which is what everything else in the header is
+   measured from. At 14 it floated 2px above its own header content — invisible while it was the only
+   control up there, and plainly crooked next to a second icon that is laid out in the title row. */
+.flow-panel-collapse { position: absolute; top: 16px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .flow-panel-collapse:hover { background: var(--surface-2); color: var(--text); }
-.flow-panel-collapse svg { width: 15px; height: 15px; }
-/* Collapsed brief: a thin rail with a reopen button */
-.flow-panel-rail { width: 48px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
-.flow-panel-rail-btn { width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
+/* A CARD-LEVEL ACTION, sharing the corner with the panel's own controls. Same size and hover as the
+   collapse button beside it, and offset to clear it: the collapse is absolute at right 12 and 28
+   wide, so this ends where that begins. In the header's flex row rather than absolute, so a long
+   title shortens against it instead of running underneath. */
+.flow-panel-action {
+  flex: 0 0 auto;
+  /* ON THE TITLE'S LINE, pushed to its end. As a child of the header's own row it took its width from
+     the definition underneath, and "Brand · Who this campaign writes as" wrapped to two lines. Beside
+     the title it competes with something that already shortens.
+     No margin against the collapse button: .flow-panel-head already reserves 48px on the right for
+     it, so the 34px added here was clearing an edge that was clear, and parked the two controls 42px
+     apart. Sitting at the end of the row leaves 8. */
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease, background 120ms ease;
+}
+.flow-panel-action svg { width: 16px; height: 16px }
+.flow-panel-action:hover { background: var(--surface-2); color: var(--text) }
+.flow-panel-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+.flow-panel-collapse svg { width: 16px; height: 16px; }
+/* Collapsed brief: a thin rail with a reopen button.
+   THE BUTTON DOES NOT MOVE WHEN THE PANEL GOES. Both controls already started at the same pixel, but
+   the collapsed one was 34 square against the expanded one's 28, so the glyph inside it sat 3px down
+   and 3px right of where it had just been and the icon appeared to hop as the panel closed. Same
+   size, and placed against the rail's right edge rather than centred in it, because centring a
+   narrower button in a 48px rail would have moved it 2px the other way. */
+.flow-panel-rail { width: 48px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: flex-end; padding: 16px 12px 0 0; }
+.flow-panel-rail-btn { width: 28px; height: 28px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
 .flow-panel-rail-btn:hover { border-color: var(--accent); color: var(--accent); }
 .flow-panel-rail-btn svg { width: 16px; height: 16px; }
 .flow-panel-head {
@@ -4783,12 +4819,62 @@ button.mf-open:focus-visible,
 .flow-panel .flow-panel-head {
   padding-right: 48px;
 }
+/* THE PENCIL, on hover of the header. Hidden at rest because the heading is a heading most of the
+   time, and revealed on focus as well, or the panel would carry a control a keyboard can reach and an
+   eye never finds. */
+.flow-panel-rename {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 5px;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+.flow-panel-rename svg { width: 14px; height: 14px }
+.flow-panel-head:hover .flow-panel-rename,
+.flow-panel-rename:focus-visible { opacity: 1 }
+.flow-panel-rename:hover { color: var(--text); background: var(--surface-2) }
+.flow-panel-rename:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+
+/* Editing in place: the title's own type, in a box, on the line the title was on. Negative margin so
+   the header does not grow by the box's padding as it opens. */
+.flow-panel-title-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 2px 7px;
+  margin: -3px 0;
+  outline: none;
+}
+.flow-panel-title-input:focus { border-color: var(--accent) }
+
 .flow-panel-title {
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
   flex: 1;
   min-width: 0;
+  /* ONE LINE. A card named after a real organisation ("Northwind Pharmacy Group Holdings
+     International") wrapped a 15px bold title to three lines and took the header from 68px to 113px,
+     pushing the panel's first field down with it. The full name is on the element's own tooltip, and
+     the definition underneath still says what kind of card it is. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* The title stacked over the kind's one-line definition. The column takes the flex the title used
    to, and the title stops stretching inside it. */
@@ -4945,6 +5031,19 @@ button.mf-open:focus-visible,
   border-top: 1px solid var(--border);
   padding-top: 15px;
 }
+/* UNLESS IT CONTINUES THE GROUP ABOVE IT. The rule means "a new named thing starts here", and the
+   campaign name is not a new thing: it is the field above, scoped. Following an input was enough to
+   earn a rule for as long as every label after one did open something new, and the alias field is the
+   first that does not, so it was drawing a line between a field and its own qualifier. */
+/* A RULE BETWEEN GROUPS, run out to the panel's edges. Inset to the body's padding it reads as
+   another element in the column, one more thing at the same indent as the fields; full width it reads
+   as the panel dividing, which is what it is for. The -14px matches .flow-inspect's own padding. */
+.flow-inspect-rule {
+  height: 1px;
+  background: var(--border);
+  margin: 16px -14px;
+}
+
 .flow-inspect-input {
   width: 100%;
   box-sizing: border-box;
@@ -4992,30 +5091,34 @@ button.mf-open:focus-visible,
    thing here that is not about what the card says, and a button spanning the panel would read as
    the primary act of filling the card in, which it is not. The line beside it says the autosave is
    still doing its job, so the button reads as "now" rather than as "or else". */
-.flow-insp-saverow {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 12px;
-}
-.flow-insp-save {
-  flex: none;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  border-radius: 8px;
-  padding: 5px 12px;
-  font: inherit; font-size: 12px; font-weight: 600;
-  color: var(--text);
+/* SAVED, in the header, as a state rather than an errand. Quiet at rest and quiet while it works:
+   the whole point is that it is not asking for anything, so it must not pull the eye off the card's
+   name beside it. It keeps a button's affordances (focus ring, hover, press) because it is still
+   pressable — it just stops looking like the first thing to do. */
+.flow-save-status {
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 7px;
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-faint);
   cursor: pointer;
-  /* The label swaps between Save / Saving… / Saved ✓, and a button that resizes under the cursor
-     as it works is a button that moves away from the second press. */
-  min-width: 74px;
+  white-space: nowrap;
+  transition: color 120ms ease, border-color 120ms ease;
 }
-.flow-insp-save:hover:not(:disabled) { border-color: var(--border-strong, var(--border)); }
-.flow-insp-save:disabled { opacity: 0.6; cursor: default; }
-.flow-insp-save:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.flow-insp-saverow-note {
-  min-width: 0;
-  font-size: 10.5px; line-height: 1.35; color: var(--text-faint);
+.flow-save-status:hover:not(:disabled) {
+  color: var(--text-muted);
+  border-color: var(--border);
 }
+/* The one moment it is worth noticing: an edit has just been written. */
+.flow-save-status.on { color: var(--green, #15803d) }
+.flow-save-status:disabled { cursor: default }
+.flow-save-status:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+
 .flow-insp-open {
   margin-top: 8px;
   width: 100%;
@@ -5315,6 +5418,14 @@ button.mf-open:focus-visible,
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-2);
+  transition: border-color 120ms ease;
+}
+/* WHERE THE CURSOR IS. The textarea sets outline: none and nothing replaced it, so typing into this
+   field looked identical to not being in it — and for a keyboard user tabbing through the panel there
+   was no way to tell they had arrived. On the box rather than the textarea, because the box is what
+   reads as the field; same accent border every other input here uses on focus. */
+.flow-fillbox:focus-within {
+  border-color: var(--accent);
 }
 /* WHAT THE RECORD ALREADY SAYS, above the box that offers to write it. Same frame as that box, so
    the two read as one question answered twice: here is what it says, and here is where to add. */
@@ -5351,6 +5462,50 @@ button.mf-open:focus-visible,
   min-height: 76px;
 }
 .flow-fill-input::placeholder { color: var(--text-faint); }
+/* UPLOAD, THE SAME SIZE AS GENERATE AND BESIDE IT. Quieter than Generate on purpose — describing the
+   card is the ordinary route, and Generate is the button that acts on what you wrote — but the same
+   height and shape, because they are two answers to one question and not a control and its fallback. */
+.flow-fill-doc-go {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: none;
+  border-radius: 7px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.flow-fill-doc-go:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong, var(--border)) }
+.flow-fill-doc-go:disabled { opacity: 0.55; cursor: default }
+.flow-fill-doc-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+
+/* THE TARGET, ONLY WHILE A FILE IS IN THE AIR. Absolute so it costs no layout: the .flow-doc note
+   below explains why that matters — a region appearing mid-drag moves what you are aiming at out from
+   under the cursor. pointer-events off so it cannot eat the drop it is advertising; the handlers are
+   on the wrapper underneath it. */
+.flow-drop-over {
+  position: absolute;
+  inset: -3px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  pointer-events: none;
+  border: 1px dashed var(--accent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent));
+  text-align: center;
+  padding: 12px;
+}
+.flow-drop-over-ic { display: flex; color: var(--accent) }
+.flow-drop-over-ic svg { width: 18px; height: 18px }
+.flow-drop-over-main { font-size: 12.5px; font-weight: 650; color: var(--accent) }
+.flow-drop-over-sub { font-size: 11px; color: var(--text-muted) }
 /* THE OTHER WAY IN, under the prompt rather than inside it. Both of these used to live in the box
    above, which made that box mean two things at once — somewhere to write, and somewhere holding a
    file you did not write — and put an attached document above the textarea, so the box you type in
@@ -5358,12 +5513,6 @@ button.mf-open:focus-visible,
 .flow-doc { margin-top: 12px; }
 /* The classic divider, because these are alternatives and not a control with a fallback. Rules
    either side so it separates rather than labelling what follows. */
-.flow-doc-or {
-  display: flex; align-items: center; gap: 8px;
-  margin: 0 0 10px;
-  font-size: 11px; color: var(--text-faint);
-}
-.flow-doc-or::before, .flow-doc-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .flow-doc-lead { display: block; margin-bottom: 7px; }
 .flow-doc-title { display: block; font-size: 12px; font-weight: 650; color: var(--text); }
 .flow-doc-help { display: block; margin-top: 2px; font-size: 11px; line-height: 1.45; color: var(--text-faint); }
@@ -5482,23 +5631,6 @@ button.mf-open:focus-visible,
    Auto width and a row of its own: as .flow-insp-open it was a full-width bordered box the height of
    the Name input directly above it, which is how a button offering to file the card away came to read
    as a second, empty name field. */
-.flow-insp-promote { margin-top: 16px; }
-.flow-insp-promote-go {
-  display: inline-block;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  border-radius: 8px;
-  padding: 5px 11px;
-  font: inherit; font-size: 11.5px; font-weight: 600;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.flow-insp-promote-go:hover { color: var(--text); border-color: var(--border-strong, var(--border)); }
-.flow-insp-promote-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.flow-insp-promote-note {
-  display: block; margin-top: 6px;
-  font-size: 10.5px; line-height: 1.45; color: var(--text-faint);
-}
 /* THE NAME IS A CHIP AGAIN, closed on all four sides. It used to be the lid of the always-open text
    box below it — shared border, no seam — which was right while the two were one object. The text
    now sits behind a disclosure, so a chip with its bottom edge rubbed out would be a lid on nothing.
@@ -5563,7 +5695,20 @@ button.mf-open:focus-visible,
   border: 3px solid var(--surface);
 }
 .flow-fill-doc-body::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
-.flow-fill-foot { display: flex; align-items: center; gap: 9px; margin-top: 6px; flex-wrap: wrap; }
+/* TWO ANSWERS, HALF THE ROW EACH. They are alternatives of equal standing, and sized to their own
+   labels they read as a primary with something tacked beside it — "Generate" being the shorter word
+   made the quieter button the wider one, which is backwards. flex-basis 0 so the split is the row and
+   not the text: equal halves whatever the labels say in another language. */
+.flow-fill-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.flow-fill-foot > .flow-fill-go,
+.flow-fill-foot > .flow-fill-doc-go {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 8px;
+  text-align: center;
+}
+/* And the note takes its own line rather than a third of the row. */
+.flow-fill-foot > .flow-fill-note { flex: 1 0 100%; }
 /* The OTHER way to answer the card. Quiet where Generate is solid: nothing but the weight says
    which one leads, because on a Company card this button is the only one there is. */
 .flow-fill-upload {
@@ -23724,6 +23869,21 @@ table.aud-sheet td.stick .aud-cell {
   color: var(--text-muted);
   margin-top: 6px;
 }
+/* Marker outside the text so the lines align on their first word rather than on the bullet, which
+   is what makes a short list scannable at a glance. */
+.infotip-points {
+  margin: 7px 0 0;
+  padding: 0 0 0 15px;
+  list-style: disc;
+  color: var(--text-muted);
+}
+.infotip-points li {
+  margin-top: 4px;
+  padding-left: 2px;
+  line-height: 1.45;
+}
+.infotip-points li::marker { color: var(--text-faint) }
+
 .infotip-see {
   margin-top: 7px;
   font-size: 11px;
@@ -24674,6 +24834,11 @@ table.aud-sheet td.stick .aud-cell {
    tag does not need to reserve that space a second time. */
 .flow-panel-titlerow .flow-panel-wip { margin-right: 0; }
 .flow-wip-note { color: var(--text-faint); }
+/* THE ONE STATE WORTH NOTICING. Every other note in this panel is muted because it is background;
+   this one is the difference between a card that works and a card that does nothing, and it reads at
+   the same weight as "every asset in the campaign" if it is left grey. Not a banner either: it is
+   also the ordinary state of a card you have not finished wiring, so it is a colour and not a box. */
+.flow-reach-none { color: var(--due-late, #b91c1c); }
 
 /* A lazily loaded view that failed to arrive, almost always a chunk retired by a redeploy while
    this tab stayed open. Sized and centred like an empty state rather than an error banner: the app
@@ -25060,12 +25225,6 @@ table.aud-sheet td.stick .aud-cell {
    you use it, and the placeholder it replaced disappeared on the first keystroke. It ran a second
    line of caveats until they were cut, which is why the head is still a column: one child now, and
    the gap costs nothing if a second ever earns its place. */
-.flow-fill-head {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
-}
 .flow-fill-title {
   font-size: 12px;
   font-weight: 600;
@@ -25186,7 +25345,6 @@ table.aud-sheet td.stick .aud-cell {
     .flow-insert,
     .flow-insp-del,
     .flow-insp-open,
-    .flow-insp-promote-go,
     .flow-inspect-del,
     .flow-inspect-regen,
     .flow-lib-folder-head,
