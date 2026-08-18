@@ -675,6 +675,16 @@ const isBuildChip = (s: string): boolean => BUILD_ONLY_CHIP.test(s.trim())
 const CONNECT_SIDES = ['left', 'right', 'top', 'bottom'] as const
 
 /**
+ * WHAT A CAMPAIGN BRIEF IS, for the line under its title. Every other panel's definition comes free
+ * from OBJECT_META; the brief is not an object kind, so it needs one written. Said in the same terms
+ * the object kinds use: what this panel governs, not where it sits in a hierarchy.
+ *
+ * A constant rather than a literal at each call site, because the brief's header is built in two
+ * places and a definition typed twice is a definition that disagrees with itself later.
+ */
+const CAMPAIGN_BRIEF_DESC = 'What the campaign is for, and what it makes'
+
+/**
  * HOW LONG AGO IT SAVED, spelled out. A status line is read as a sentence, so "1 min ago" rather
  * than the "1m ago" a compact timestamp beside a comment wants.
  *
@@ -12068,10 +12078,9 @@ export function FlowsView() {
               renderLayers()
             ) : (
               <>
-                <div className="flow-panel-head">
-                  <CampaignTile />
-                  <span className="flow-panel-title">Campaign brief</span>
-                </div>
+                {/* CampaignTile is its own glyph rather than a stroke icon, so it goes in as the icon
+                    node and PanelHead draws no tone behind it. */}
+                <PanelHead icon={<CampaignTile />} title="Campaign brief" sub={CAMPAIGN_BRIEF_DESC} />
                 <div className="flow-inspect">
                   {/* SAVE UPDATES for the brief. The theme and the objective are the frame every asset
                       in the campaign was written to, so changing one dates the whole set at once —
@@ -12102,7 +12111,6 @@ export function FlowsView() {
                       campaign and the things it is built from are edited the same way instead of each
                       panel inventing its own controls. The native selects are gone with it: they were
                       the last unsearchable pickers in the inspector. */}
-                  <label className="flow-inspect-label">What this campaign is</label>
                   <div className="flow-recform">
                     <div className="flow-recform-field">
                       <span className="flow-recform-key">Name</span>
@@ -12284,14 +12292,10 @@ export function FlowsView() {
             </>
           ) : sel === 'campaign' ? (
             <>
-              <div className="flow-panel-head">
-                <CampaignTile />
-                <span className="flow-panel-title">Campaign brief</span>
-              </div>
+              <PanelHead icon={<CampaignTile />} title="Campaign brief" sub={CAMPAIGN_BRIEF_DESC} />
               <div className="flow-inspect">
                 {/* Same record form as the saved brief above, and as the Brand and Product cards.
                     A campaign should not change shape the moment it is saved. */}
-                <label className="flow-inspect-label">What this campaign is</label>
                 <div className="flow-recform">
                   <div className="flow-recform-field">
                     <span className="flow-recform-key">Name</span>
