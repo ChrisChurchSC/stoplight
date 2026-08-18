@@ -6609,10 +6609,13 @@ button.mf-open:focus-visible,
    control for the same number inside 90px. Belt and braces, since a stray type="number" elsewhere
    would otherwise reintroduce them. */
 .flow-step-input {
-  width: 54px;
+  /* SAME STEPPER, whether the number can be typed or not. This one carried a divider on each side and
+     a fixed 54px, so beside the length stepper — a plain span between the same two buttons — it read
+     as a segmented control next to a single field. The dividers were the only thing saying "you can
+     type here", and a focus tint already says it at the moment it matters. */
+  flex: 1;
+  min-width: 0;
   border: 0;
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
   background: none;
   font: inherit;
   font-size: 13px;
@@ -6649,6 +6652,9 @@ button.mf-open:focus-visible,
   color: var(--text);
 }
 .flow-step span {
+  /* Flexes for the same reason the input does, so the value is centred in whatever is left between
+     the two buttons rather than in a fixed box that happens to sit near the middle. */
+  flex: 1;
   min-width: 84px;
   text-align: center;
   font-size: 13px;
