@@ -35,7 +35,160 @@ async function dispatch(action, args) {
 
 const text = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] })
 
-const server = new McpServer({ name: 'breadcrumbs', version: '0.1.0' })
+/**
+ * HOW TO USE THIS SERVER, sent once at connect.
+ *
+ * Sixty-odd tools with no stated order is why a session used to start wherever the person's first
+ * sentence landed: assets generated for a brand with no audiences, a campaign built before anyone
+ * said what it was for. Every tool worked. The order nobody stated is what went wrong.
+ *
+ * Short on purpose. It states the order, the two questions that must be ASKED rather than inferred,
+ * and the one call that answers "where am I" against the real workspace — everything else the tool
+ * descriptions already say, and a long preamble is one the model stops reading.
+ */
+const INSTRUCTIONS = `Breadcrumbs is a campaign workspace: brands, the messaging behind them, and the assets written from it.
+
+START HERE. Call whats_next at the beginning of a session, and again whenever you finish something
+or are unsure what to do. It reads the real workspace and returns where it is, the single next thing
+worth doing, and the exact calls that would do it. Prefer it over guessing an order.
+
+THE ORDER THE WORK HAPPENS: a brand -> who it sells to and what backs its claims -> the goal ->
+a campaign -> the direction behind it (object cards) -> assets -> the gaps -> a review -> approval.
+Skipping a rung does not fail, it just produces confident work aimed at nothing.
+
+ASK, DO NOT INFER, on two things. The GOAL (which GTM motion this campaign is for) and WHICH
+CHANNELS it should live on. Neither is derivable from the brand, and a wrong guess is invisible:
+the campaign comes out coherent, complete and aimed at the wrong thing. whats_next will tell you
+when one of these is outstanding, and phrase the question.
+
+READ BEFORE YOU WRITE. get_brand before writing to a brand, get_asset_fields before authoring an
+asset, get_object_fields before adding an object card. The field sets are per format and per kind
+and are not guessable; anything you do not write renders blank.
+
+FILL EVERY FIELD. An asset card renders every component its format defines (a website has nine) and
+an object card contributes only the direction it carries. Every write returns which components are
+still empty — act on that rather than treating a successful write as a finished card.
+
+REVIEW BEFORE YOU CALL IT DONE. review_campaign returns everything worth doing on a campaign,
+ranked, each finding carrying the call that fixes it.
+
+Drafts land for a human to confirm. Say what you changed and what is still outstanding.`
+
+const server = new McpServer({ name: 'breadcrumbs', version: '0.1.0' }, { instructions: INSTRUCTIONS })
+
+/**
+ * GUIDED WAYS IN, as prompts rather than more tools.
+ *
+ * A tool list is a menu you have to already know how to order from. These are the four things
+ * people actually arrive wanting to do, and each one states the ORDER for that job — ask first,
+ * read before writing, fill every field, review at the end — so the structure survives being
+ * started from a blank message box.
+ *
+ * They ask questions and stop. A prompt that provisioned a whole brand from one click would be
+ * making the two decisions this server is careful never to infer.
+ */
+const prompt = (text) => ({ messages: [{ role: 'user', content: { type: 'text', text } }] })
+
+server.registerPrompt(
+  'start',
+  {
+    title: 'Where am I?',
+    description: 'Read the workspace and say what is worth doing next. The safe way to begin.',
+    argsSchema: { campaign: z.string().optional().describe('A campaign to focus on (optional)') },
+  },
+  ({ campaign }) =>
+    prompt(
+      `Call whats_next${campaign ? ` for the campaign "${campaign}"` : ''} and tell me where this workspace is.\n\n` +
+        `Give me: the one thing worth doing next and why, then the whole ladder so I can see what is done and what is not. ` +
+        `If the next rung needs a decision from me — the goal, which channels — ask me the question rather than choosing. ` +
+        `Do not change anything yet.`,
+    ),
+)
+
+server.registerPrompt(
+  'set-up-a-brand',
+  {
+    title: 'Set up a brand',
+    description: 'Read a brand off its website, then fill the gaps by asking — audiences, proof, voice.',
+    argsSchema: { url: z.string().optional().describe('The brand’s website'), brand: z.string().optional().describe('An existing brand to continue') },
+  },
+  ({ url, brand }) =>
+    prompt(
+      (brand
+        ? `Continue setting up the brand "${brand}" in Breadcrumbs.\n\nStart by calling get_brand to see what is already connected.`
+        : `Set up a brand in Breadcrumbs from ${url ? `its website: ${url}` : 'a website I will give you — ask me for it first'}.\n\nUse setup_client (or pull_live_assets on an existing brand) to read what it already has live.`) +
+        `\n\nThen show me what came back and what is still thin, and fill the gaps WITH me: ` +
+        `add_audience for who it sells to, add_proof_point for what backs the claims. ` +
+        `Ask me before inventing an audience or a claim — a plausible invented proof point is worse than a missing one. ` +
+        `Finish by calling whats_next so I can see what is left.`,
+    ),
+)
+
+server.registerPrompt(
+  'plan-a-campaign',
+  {
+    title: 'Plan a campaign',
+    description: 'Ask the goal, put the direction on the board, then generate — in that order.',
+    argsSchema: { brand: z.string().optional(), campaign: z.string().optional().describe('What to call it') },
+  },
+  ({ brand, campaign }) =>
+    prompt(
+      `Plan a campaign in Breadcrumbs${brand ? ` for "${brand}"` : ''}${campaign ? `, called "${campaign}"` : ''}.\n\n` +
+        `Work in this order and do not skip ahead:\n` +
+        `1. Ask me what the goal is — what success looks like — and set the GTM motion from my answer. Do not pick one for me.\n` +
+        `2. Ask me which channels this should live on.\n` +
+        `3. Put the DIRECTION on the board before generating anything: call get_object_fields, then add_object_card for the audience, the message and the proof — a campaign generated with no direction is written from the brief alone.\n` +
+        `4. Only then generate_assets.\n` +
+        `5. Finish with review_campaign and tell me what it found.`,
+    ),
+)
+
+server.registerPrompt(
+  'review-a-campaign',
+  {
+    title: 'Review a campaign',
+    description: 'Everything worth doing on a campaign, ranked — then work through it with me.',
+    argsSchema: { campaign: z.string().optional().describe('The campaign to review') },
+  },
+  ({ campaign }) =>
+    prompt(
+      `Review ${campaign ? `the campaign "${campaign}"` : 'a campaign in Breadcrumbs — ask me which one'} with review_campaign.\n\n` +
+        `Show me the findings worst-first, grouped by what kind of problem they are, and for each one tell me what it costs. ` +
+        `Then apply the mechanical fixes (apply_fix) and tell me which findings need a real decision from me instead. ` +
+        `Do not approve anything without asking.`,
+    ),
+)
+
+server.registerPrompt(
+  'fill-the-gaps',
+  {
+    title: 'Fill in what is blank',
+    description: 'Find every half-built asset and object card on a campaign, and finish them.',
+    argsSchema: { campaign: z.string().optional() },
+  },
+  ({ campaign }) =>
+    prompt(
+      `Find everything half-built on ${campaign ? `"${campaign}"` : 'a campaign in Breadcrumbs — ask me which one'} and finish it.\n\n` +
+        `Call review_campaign with includeCopyCheck: false for the fast structural pass. ` +
+        `For each asset with blank components, call get_asset_fields for its channel and type, then edit_asset with EVERY key it lists — ` +
+        `a component you leave out renders blank on the card. Do the same for object cards carrying no direction. ` +
+        `Write in the brand's voice using what get_brand returns, and show me what you wrote before moving on.`,
+    ),
+)
+
+server.registerTool(
+  'whats_next',
+  {
+    title: 'Where this workspace is, and what to do next',
+    description:
+      "THE ENTRY POINT — call this first in a session, and again whenever you finish something or are unsure what to do. Reads the real workspace and returns: which rung of the work it is on (brand -> audiences and proof -> goal -> campaign -> direction -> assets -> channels -> filled components -> review -> approval), a one-line headline about THIS workspace, why that rung matters, the exact calls that would finish it, and the whole ladder with each rung's state. When the rung needs an answer only the person can give — what the goal is, which channels to run — it returns the question to ask them rather than an action to take. Pass a campaign to ask about one campaign.",
+    inputSchema: {
+      brand: z.string().optional().describe('The brand to ask about (defaults to the one the app is scoped to)'),
+      campaign: z.string().optional().describe('The campaign to ask about. Without it, the answer is about the brand as a whole.'),
+    },
+  },
+  async (a) => text(await dispatch('getNextStep', a)),
+)
 
 server.registerTool(
   'list_clients',
