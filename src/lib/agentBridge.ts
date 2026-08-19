@@ -5,7 +5,8 @@ import { newDescriptor } from '../domain/descriptors'
 import { newLibraryCta } from '../domain/library'
 import { clientForCampaign } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
-import { messagingFields } from '../domain/messaging'
+import { GENERIC_CTA_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys } from '../domain/assetFields'
+import { isCtaField } from '../domain/messaging'
 import { detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
 import type { RowStatus, TrafficRow } from '../domain/types'
@@ -37,27 +38,56 @@ const list = (v: unknown): string[] =>
           .filter(Boolean)
       : []
 
-/** A row's messaging field keys by role, so semantic fields (headline / primaryText /
- *  description / cta) map onto the right keys for edit + author. */
-function messagingKeys(channel: TrafficRow['channel'], assetType: string) {
-  const fields = messagingFields(channel, assetType)
-  return {
-    headlineKey: fields.find((f) => /headline|subject|title|subhead/i.test(f.key))?.key,
-    ctaKey: fields.find((f) => /cta/i.test(f.key))?.key,
-    descKey: fields.find((f) => /desc|preview/i.test(f.key))?.key,
-    primaryKey: (fields.find((f) => /primary|body|caption|intro|post|message/i.test(f.key)) ?? fields[0])?.key,
+/** The four friendly copy args the asset tools have always taken, alongside `fields`. */
+const COPY_ARGS = ['headline', 'primaryText', 'description', 'cta'] as const
+
+/** True for a `fields` arg worth applying: a plain object of key → copy. */
+const isFieldMap = (v: unknown): boolean =>
+  !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length > 0
+
+/**
+ * What every asset write tells the caller about the CARD, not just the row.
+ *
+ * An agent cannot fill a component it does not know exists, and it could not see that it had left
+ * one empty either — a hand-authored website landed with four of its nine fields written and the
+ * response said nothing but "ok". So each write now answers three things: where each alias actually
+ * went (a surprising resolution is visible rather than silent), which aliases this format has no
+ * home for and were therefore NOT stored, and which components are still blank.
+ */
+function copyReport(
+  channel: TrafficRow['channel'],
+  assetType: string | undefined,
+  messaging: Record<string, string> | undefined,
+  applied: { mapped: Record<string, string | undefined>; unmapped: string[]; clamped: string[] } | null,
+) {
+  const coverage = fieldCoverage(channel, assetType, messaging)
+  const out: Record<string, unknown> = { fields: coverage }
+  if (applied) {
+    if (Object.keys(applied.mapped).length) out.wroteTo = applied.mapped
+    // Copy that went NOWHERE. Loud, because the old behaviour was to drop it without a word.
+    if (applied.unmapped.length) {
+      out.notStored = applied.unmapped
+      out.notStoredWhy =
+        `This asset has no field for: ${applied.unmapped.join(', ')}. That copy was NOT saved — ` +
+        `re-send it under a real key from get_asset_fields.`
+    }
+    if (applied.clamped.length) out.clampedToLimit = applied.clamped
   }
+  if (coverage.missing.length) {
+    out.fieldsNote =
+      `${coverage.missing.length} of ${coverage.filled.length + coverage.missing.length} components are still empty ` +
+      `(${coverage.missing.join(', ')}) and render blank on the card. Fill them with edit_asset \`fields\`.`
+  }
+  return out
 }
-/** Write the provided semantic copy fields into a messaging map (untouched fields stay). */
-function applyCopyFields(channel: TrafficRow['channel'], assetType: string, base: Record<string, string>, a: Args): Record<string, string> {
-  const k = messagingKeys(channel, assetType)
-  const m = { ...base }
-  if (typeof a.headline === 'string' && k.headlineKey) m[k.headlineKey] = a.headline
-  if (typeof a.primaryText === 'string' && k.primaryKey) m[k.primaryKey] = a.primaryText
-  if (typeof a.description === 'string' && k.descKey) m[k.descKey] = a.description
-  if (typeof a.cta === 'string' && k.ctaKey) m[k.ctaKey] = a.cta
-  return m
+
+/** The first component carrying text, in the order the card renders them, trimmed to a name. */
+function firstFilled(messaging: Record<string, string>, channel: TrafficRow['channel'], assetType?: string): string {
+  const first = fieldCoverage(channel, assetType, messaging).filled[0]
+  const value = (first ? messaging[first] : '')?.trim() ?? ''
+  return value.length > 60 ? `${value.slice(0, 60).trimEnd()}…` : value
 }
+
 /** Resolve proofPoints (rtb ids OR labels) to rtb ids for a brand. */
 function resolveProofIds(brand: string, proofPoints: string[]): string[] {
   const rtbs = useTrafficStore.getState().brandSystems[brand]?.rtbs ?? []
@@ -119,11 +149,11 @@ function sortRows(rows: TrafficRow[], sort?: string): TrafficRow[] {
 /** Map a row to the asset shape the connector returns (shared by list_assets + get_canvas). */
 function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { label: string; stage?: string }[]) {
   const firstSentence = (s: string) => (s.split(/(?<=[.!?])\s+/)[0] ?? s).trim()
-  const fields = messagingFields(r.channel, r.assetType)
-  const headlineKey = fields.find((f) => /headline|subject|title|subhead/i.test(f.key))?.key
-  const ctaKey = fields.find((f) => /cta/i.test(f.key))?.key
-  const descKey = fields.find((f) => /desc|preview/i.test(f.key))?.key
-  const primaryKey = (fields.find((f) => /primary|body|caption|intro|post|message/i.test(f.key)) ?? fields[0])?.key
+  const roles = messagingKeys(r.channel, r.assetType)
+  const headlineKey = roles.headline
+  const ctaKey = roles.cta
+  const descKey = roles.description
+  const primaryKey = roles.primaryText
   const m = r.messaging ?? {}
   const stage = funnelStageFor(r.channel, r.assetType)
   const primaryText = primaryKey ? (m[primaryKey] ?? '') : ''
@@ -158,6 +188,8 @@ function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { 
     variantOf: r.variantOf ?? '',
     branchOf: r.branchOf ?? '',
     components: m,
+    /** Every component this format defines, and which of them are still blank on the card. */
+    fields: fieldCoverage(r.channel, r.assetType, m),
     proofPoints: proofIds.map((id) => proofLabel.get(id) ?? id),
   }
 }
@@ -213,7 +245,7 @@ const BUSINESS_MODEL_BY_MOTION: Record<string, string> = {
 export const GRETEL_ACTIONS = [
   // reads
   'listClients', 'getBrand', 'getStrategy', 'listAssets', 'listCanvases',
-  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck',
+  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'getAssetFields',
   // additive brand records
   'addAudience', 'addProofPoint', 'addSubject', 'addHook', 'addCta',
 ] as const
@@ -782,16 +814,27 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (str(a.format).trim()) patch.format = str(a.format).trim()
     const stage = str(a.stage).trim().toLowerCase()
     if (['awareness', 'consideration', 'conversion', 'retention'].includes(stage)) patch.funnelStage = stage as never
-    if (['headline', 'primaryText', 'description', 'cta'].some((k) => typeof a[k] === 'string'))
-      patch.messaging = applyCopyFields(channel, assetType, row.messaging ?? {}, a)
+    // A write is any alias OR the key-addressed `fields` map — the map is the only way to reach a
+    // component no alias names (a website's subhead, proof-stat, FAQ and footer CTA among them).
+    let applied: ReturnType<typeof applyCopyFields> | null = null
+    if (COPY_ARGS.some((k) => typeof a[k] === 'string') || isFieldMap(a.fields)) {
+      applied = applyCopyFields(channel, assetType, row.messaging ?? {}, a)
+      patch.messaging = applied.messaging
+    }
     const proofPoints = list(a.proofPoints)
     if (proofPoints.length) {
       const ids = resolveProofIds(brand, proofPoints)
-      const pk = messagingKeys(channel, assetType).primaryKey ?? 'primary'
+      const pk = messagingKeys(channel, assetType).primaryText ?? 'primary'
       patch.rtbMap = { ...(row.rtbMap ?? {}), [pk]: ids }
     }
     await useTrafficStore.getState().updateRow(id, patch)
-    return { id, updated: Object.keys(patch), note: 'Re-run run_coherence_check to see the edit reflected.' }
+    const after = useTrafficStore.getState().rows.find((r) => r.id === id)
+    return {
+      id,
+      updated: Object.keys(patch),
+      ...copyReport(channel, assetType, after?.messaging ?? patch.messaging ?? row.messaging, applied),
+      note: 'Re-run run_coherence_check to see the edit reflected.',
+    }
   },
 
   // Apply a coherence check's suggested fix to the flagged asset (the repair payoff).
@@ -828,6 +871,29 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     return { breakId, reassigned: true }
   },
 
+  // The components a card of this channel + type actually renders. The read that has to come
+  // BEFORE hand-authoring: without it an agent can only guess at the keys, and every field it
+  // cannot name arrives empty on a card that reads as finished.
+  async getAssetFields(a) {
+    const channel = (str(a.channel).trim() || 'instagram') as TrafficRow['channel']
+    const assetType = str(a.assetType).trim() || undefined
+    const fields = describeAssetFields(channel, assetType)
+    // Organic formats define no CTA component, but the card renders a CTA row regardless and reads
+    // it off a generic `cta` key — so it is writable here even though it is not in the schema.
+    const genericCta = fields.every((f) => !isCtaField(f.key))
+    return {
+      channel,
+      assetType,
+      fields,
+      keys: fields.map((f) => f.key),
+      ...(genericCta ? { alsoAccepts: [GENERIC_CTA_KEY] } : {}),
+      note:
+        `Pass every one of these keys in add_asset/edit_asset \`fields\` to fill the card. ` +
+        `A key left out renders blank.` +
+        (genericCta ? ` This format folds its CTA into the copy, but the card still shows a CTA row — set \`cta\` to fill it.` : ''),
+    }
+  },
+
   // Hand-author a first-class asset into a campaign (no generation step).
   async addAsset(a) {
     const brand = str(a.brand).trim()
@@ -836,19 +902,23 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const channel = (str(a.channel).trim() || 'Instagram') as TrafficRow['channel']
     const assetType = str(a.assetType).trim() || undefined
     const stage = str(a.stage).trim().toLowerCase()
+    const applied = applyCopyFields(channel, assetType, {}, a)
     const patch: Partial<TrafficRow> = {
       channel,
-      assetName: str(a.assetName).trim() || str(a.headline).trim() || 'Authored asset',
+      // An asset addressed by `fields` need never pass `headline` — and on a format with no headline
+      // component it cannot — so the name falls back to the first component that carries text
+      // rather than leaving a canvas of identical "Authored asset" cards.
+      assetName: str(a.assetName).trim() || str(a.headline).trim() || firstFilled(applied.messaging, channel, assetType) || 'Authored asset',
       audience: str(a.audience).trim() || undefined,
       format: str(a.format).trim() || undefined,
     }
     if (assetType) patch.assetType = assetType
     if (['awareness', 'consideration', 'conversion', 'retention'].includes(stage)) patch.funnelStage = stage as never
-    patch.messaging = applyCopyFields(channel, assetType ?? '', {}, a)
+    patch.messaging = applied.messaging
     const proofPoints = list(a.proofPoints)
     if (proofPoints.length) {
       const ids = resolveProofIds(brand, proofPoints)
-      const pk = messagingKeys(channel, assetType ?? '').primaryKey ?? 'primary'
+      const pk = messagingKeys(channel, assetType).primaryText ?? 'primary'
       patch.rtbMap = { [pk]: ids }
     }
     // Provenance: a hand-written asset is 'authored'; an imported one passes source/url/media.
@@ -861,7 +931,15 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       patch.mediaRef = mediaRefs[0]
     }
     const row = await useTrafficStore.getState().addAsset(brand, campaign, patch)
-    return { id: row.id, assetName: row.assetName, brand, campaign, source: row.source, status: row.status }
+    return {
+      id: row.id,
+      assetName: row.assetName,
+      brand,
+      campaign,
+      source: row.source,
+      status: row.status,
+      ...copyReport(channel, assetType, row.messaging, applied),
+    }
   },
 
   // Bulk-import real content into a canvas as first-class assets (Buffer posts, scraped

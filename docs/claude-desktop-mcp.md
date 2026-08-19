@@ -86,6 +86,27 @@ These let your own Claude drive the four jobs directly. Everything lands as a dr
 | `generate_assets` | `brand`, `campaign`, `strategy?` | **4) Generates draft assets** for a campaign from everything connected (seeds the strategy's deliverables, then drafts the copy) |
 | `map_client` | `url`, `notes?` | Maps a client's current live messaging (alias target of `pull_live_assets`) |
 
+### Filling every field on a card
+
+An asset card renders every copy component its FORMAT defines, and the set differs per channel: a
+website has nine (hero headline, subhead, hero CTA, body, social proof, proof stat, mid CTA, FAQ,
+footer CTA), an email has five, an Instagram post has one. Anything you don't write renders blank.
+
+`add_asset` / `edit_asset` take `fields`: a map of the format's REAL keys to copy. That is the only
+way to reach a component no alias names.
+
+| Tool | Args | What it does |
+|---|---|---|
+| `get_asset_fields` | `channel`, `assetType?` | The exact components that card renders — key, label, recommended + hard char limits. **Call before authoring.** |
+| `add_asset` | `brand`, `campaign`, `fields`, `channel?`, `assetType?`, `stage?`, `audience?`, `proofPoints?`, … | Hand-authors a first-class asset |
+| `edit_asset` | `assetId`, `fields`, … | Edits any component of an existing asset |
+
+`headline` / `primaryText` / `description` / `cta` still work as shorthand for the four commonest
+components, and `fields` wins where both name the same key. A shorthand the format has no component
+for is **reported back, not stored** — the reply's `notStored` names it, so copy never disappears
+quietly. Every write also returns `fields: { filled, missing, complete }`, and `list_assets` returns
+the same per asset, so a half-built card is visible instead of reading as finished.
+
 ## What "set up a client" scrapes
 
 - **Website: full multi-page crawl.** Homepage plus the highest-signal internal pages

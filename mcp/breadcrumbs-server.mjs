@@ -518,9 +518,15 @@ server.registerTool(
   {
     title: 'Edit an asset',
     description:
-      'Edit an asset’s copy and targeting: headline, primaryText, description, cta, proofPoints (rtb ids or labels), audience, stage, channel, format. Editing changes the content, so re-run run_coherence_check to see the result. This is how a flagged break gets fixed by hand.',
+      'Edit an asset’s copy and targeting. Pass `fields` (key → copy, from get_asset_fields) to set ANY component the card renders — that is the only way to reach a subhead, proof stat, FAQ or footer CTA. headline/primaryText/description/cta still work as shorthand for the four commonest. The reply reports which components are still empty. Editing changes the content, so re-run run_coherence_check to see the result. This is how a flagged break gets fixed by hand.',
     inputSchema: {
       assetId: z.string().describe('The asset id (from list_assets)'),
+      fields: z
+        .record(z.string())
+        .optional()
+        .describe(
+          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. Beats the four aliases below, which only reach four components and cannot name the rest.',
+        ),
       headline: z.string().optional(),
       primaryText: z.string().optional(),
       description: z.string().optional(),
@@ -556,11 +562,25 @@ server.registerTool(
 )
 
 server.registerTool(
+  'get_asset_fields',
+  {
+    title: 'The components an asset card renders',
+    description:
+      'The exact copy components a card of this channel + asset type renders — key, label, recommended and hard character limits. Call this BEFORE add_asset / edit_asset: the component set is per format (a website has nine, an email five, an Instagram post one), the keys are not guessable, and every one you do not write renders blank on the card.',
+    inputSchema: {
+      channel: z.string().describe('Channel id, e.g. website, email, meta-ads, instagram, blog, proposal'),
+      assetType: z.string().optional().describe('Asset type, when the format overrides the channel default (e.g. video, short)'),
+    },
+  },
+  async (a) => text(await dispatch('getAssetFields', a)),
+)
+
+server.registerTool(
   'add_asset',
   {
     title: 'Hand-author an asset',
     description:
-      'Create a bespoke asset by hand (no generation): set channel, stage, audience, format, headline, primaryText, description, cta, proofPoints. It is first-class (appears in list_assets, tagged authored, coherence-checked). Use for 1:1 ABM emails and one-off pieces.',
+      'Create a bespoke asset by hand (no generation): set channel, stage, audience, format, proofPoints and the copy. CALL get_asset_fields FIRST for this channel + assetType, then pass every key it lists in `fields` — an asset card renders each component it defines (a website has nine) and anything you omit shows up blank. The reply names whatever is still empty. It is first-class (appears in list_assets, tagged authored, coherence-checked). Use for 1:1 ABM emails and one-off pieces.',
     inputSchema: {
       brand: z.string().describe('The brand'),
       campaign: z.string().describe('The campaign to author into'),
@@ -570,6 +590,12 @@ server.registerTool(
       audience: z.string().optional(),
       format: z.string().optional(),
       assetName: z.string().optional(),
+      fields: z
+        .record(z.string())
+        .optional()
+        .describe(
+          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. Beats the four aliases below, which only reach four components and cannot name the rest.',
+        ),
       headline: z.string().optional(),
       primaryText: z.string().optional(),
       description: z.string().optional(),
