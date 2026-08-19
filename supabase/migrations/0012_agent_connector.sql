@@ -152,9 +152,16 @@ begin
 end;
 $$;
 
--- The verifier is internal. Leaving it callable would let anyone with the anon key read a token row
--- (including its hash and workspace) by guessing, which is exactly what the hashing is for.
-revoke all on function public.agent_token_row(text) from anon, authenticated;
+-- FROM PUBLIC, not from the role names. Postgres grants EXECUTE on a new function to PUBLIC, and
+-- anon and authenticated reach it through that — so revoking from them by name leaves the grant
+-- they were actually using, and the function stays callable with the anon key that ships in every
+-- browser bundle. This file got that wrong once; see 0013.
+--
+-- The verifier is internal: leaving it callable offers an unauthenticated caller a token-validity
+-- oracle it has no reason to be able to ask. The prune is an unauthenticated DELETE.
+revoke all on function public.agent_token_row(text) from public, anon, authenticated;
+revoke all on function public.agent_enqueue(text, text, jsonb) from public;
+revoke all on function public.agent_result(text, uuid) from public;
 -- The two entry points ARE the API, and they authenticate themselves from their first argument.
 grant execute on function public.agent_enqueue(text, text, jsonb) to anon, authenticated;
 grant execute on function public.agent_result(text, uuid) to anon, authenticated;
@@ -167,3 +174,5 @@ returns void language sql security definer set search_path = public as $$
   where (status <> 'pending' and completed_at < now() - interval '1 hour')
      or (status = 'pending' and created_at < now() - interval '10 minutes');
 $$;
+-- Internal housekeeping, not an API. Same PUBLIC grant applies, so it needs the same revoke.
+revoke all on function public.agent_commands_prune() from public, anon, authenticated;
