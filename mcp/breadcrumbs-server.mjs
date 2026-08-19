@@ -521,11 +521,12 @@ server.registerTool(
       'Edit an asset’s copy and targeting. Pass `fields` (key → copy, from get_asset_fields) to set ANY component the card renders — that is the only way to reach a subhead, proof stat, FAQ or footer CTA. headline/primaryText/description/cta still work as shorthand for the four commonest. The reply reports which components are still empty. Editing changes the content, so re-run run_coherence_check to see the result. This is how a flagged break gets fixed by hand.',
     inputSchema: {
       assetId: z.string().describe('The asset id (from list_assets)'),
+      mediaType: z.enum(['image', 'video', 'text', 'link']).optional().describe('What the asset is made of (default image). image/video/link cards render an in-creative copy row; a text asset does not.'),
       fields: z
         .record(z.string())
         .optional()
         .describe(
-          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. Beats the four aliases below, which only reach four components and cannot name the rest.',
+          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer", "in-creative-copy" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. `in-creative-copy` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it. Beats the four aliases below, which only reach four components and cannot name the rest.',
         ),
       headline: z.string().optional(),
       primaryText: z.string().optional(),
@@ -562,14 +563,92 @@ server.registerTool(
 )
 
 server.registerTool(
+  'review_campaign',
+  {
+    title: 'Review a whole campaign and say what to do',
+    description:
+      "One read of an entire campaign — its copy, its completeness and its wiring — returned as a ranked list of findings, each carrying the exact call that fixes it. Runs the Claude coherence check (claims with no proof, weak CTAs, assets repeating each other) AND the passes it cannot see: asset cards with components still blank, object cards carrying no direction, CTAs pointed at assets that are gone, handoffs no button covers. Use this as the standing 'how is this campaign doing' call; use run_coherence_check when you only want the copy breaks.",
+    inputSchema: {
+      campaign: z.string().describe('The campaign to review'),
+      includeCopyCheck: z
+        .boolean()
+        .optional()
+        .describe('Run the Claude coherence check too (default true). Pass false for a fast structural-only pass — it is the slow half.'),
+    },
+  },
+  async (a) => text(await dispatch('runCampaignReview', a)),
+)
+
+server.registerTool(
+  'get_object_fields',
+  {
+    title: 'What an object card asks for',
+    description:
+      'The direction a flow-board object card of this kind asks for — key, label, hint, character cap — plus the record type it names. Direction is the INSTRUCTION the card gives the copy writer (an Audience asks for a pain and an objection; a Trigger for what the reader just did and the ask), and it is what the card contributes: one with none adds a name and nothing else. Call before add_object_card / edit_object_card. Some kinds (voice, concept, note, brand, product, pattern) ask for no direction and contribute through their record.',
+    inputSchema: { kind: z.string().describe('Card kind: audience, proof-point, company, person, message, voice, trigger, brand, product, concept, season, pattern') },
+  },
+  async (a) => text(await dispatch('getObjectFields', a)),
+)
+
+server.registerTool(
+  'list_object_cards',
+  {
+    title: 'The object cards on a campaign’s board',
+    description:
+      'Every object card on a campaign’s flow board: id, kind, name, the record it points at, its direction, and which of its questions are still unanswered. Use it to see what is instructing the copy on this campaign, and which cards are contributing nothing yet.',
+    inputSchema: { campaign: z.string().describe('The campaign whose board to read') },
+  },
+  async (a) => text(await dispatch('listObjectCards', a)),
+)
+
+server.registerTool(
+  'add_object_card',
+  {
+    title: 'Put an object card on a campaign’s board',
+    description:
+      'Add an object card to a campaign’s flow board — the cards that instruct the copy writer, as opposed to the assets it writes. Call get_object_fields first and pass every key it lists in `fields`: a card with no direction contributes a name and nothing else. The reply names whatever is still unanswered.',
+    inputSchema: {
+      campaign: z.string().describe('The campaign whose board to add to'),
+      kind: z.string().describe('Card kind: audience, proof-point, company, person, message, voice, trigger, brand, product, concept, season, pattern'),
+      name: z.string().optional().describe('What to call this card, in your own words (survives changing the record under it)'),
+      note: z.string().optional().describe('A team note on the card. Never sent to the copy writer — direction is what reaches it.'),
+      fields: z
+        .record(z.string())
+        .optional()
+        .describe('The card’s direction by key → answer, from get_object_fields. e.g. { pain, objection } on an audience card.'),
+      refId: z.string().optional().describe('Id of the record this card points at, when you have one'),
+    },
+  },
+  async (a) => text(await dispatch('addObjectCard', a)),
+)
+
+server.registerTool(
+  'edit_object_card',
+  {
+    title: 'Sharpen an object card',
+    description:
+      'Edit an object card already on a board: its name, its note, the record it points at, and its direction. Keys you do not mention keep their answers; an empty string clears one. This is how a card that contributes nothing gets given something to say.',
+    inputSchema: {
+      objectId: z.string().describe('The card id (from list_object_cards)'),
+      name: z.string().optional(),
+      note: z.string().optional(),
+      fields: z.record(z.string()).optional().describe('Direction by key → answer. Empty string clears a key.'),
+      refId: z.string().optional(),
+    },
+  },
+  async (a) => text(await dispatch('editObjectCard', a)),
+)
+
+server.registerTool(
   'get_asset_fields',
   {
     title: 'The components an asset card renders',
     description:
-      'The exact copy components a card of this channel + asset type renders — key, label, recommended and hard character limits. Call this BEFORE add_asset / edit_asset: the component set is per format (a website has nine, an email five, an Instagram post one), the keys are not guessable, and every one you do not write renders blank on the card.',
+      'The exact copy components a card of this channel + asset type renders — key, label, recommended and hard character limits. Call this BEFORE add_asset / edit_asset: the component set is per format (a website has nine, an email five, an Instagram post one), the keys are not guessable, and every one you do not write renders blank on the card. Includes `in-creative-copy` (the words inside the artwork — overlays, voiceover, page text) for image/video/link assets.',
     inputSchema: {
-      channel: z.string().describe('Channel id, e.g. website, email, meta-ads, instagram, blog, proposal'),
+      channel: z.string().describe('Channel id, display label or short tag — e.g. website, email, meta-ads, instagram, "Meta Ads". An unrecognized name is an error, not a silent fallback.'),
       assetType: z.string().optional().describe('Asset type, when the format overrides the channel default (e.g. video, short)'),
+      mediaType: z.enum(['image', 'video', 'text', 'link']).optional().describe('What the asset is made of (default image). image/video/link cards render an in-creative copy row; a text asset does not.'),
     },
   },
   async (a) => text(await dispatch('getAssetFields', a)),
@@ -590,11 +669,12 @@ server.registerTool(
       audience: z.string().optional(),
       format: z.string().optional(),
       assetName: z.string().optional(),
+      mediaType: z.enum(['image', 'video', 'text', 'link']).optional().describe('What the asset is made of (default image). image/video/link cards render an in-creative copy row; a text asset does not.'),
       fields: z
         .record(z.string())
         .optional()
         .describe(
-          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. Beats the four aliases below, which only reach four components and cannot name the rest.',
+          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer", "in-creative-copy" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. `in-creative-copy` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it. Beats the four aliases below, which only reach four components and cannot name the rest.',
         ),
       headline: z.string().optional(),
       primaryText: z.string().optional(),

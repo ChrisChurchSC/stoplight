@@ -5,11 +5,15 @@ import { newDescriptor } from '../domain/descriptors'
 import { newLibraryCta } from '../domain/library'
 import { clientForCampaign } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
-import { GENERIC_CTA_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys } from '../domain/assetFields'
+import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
+import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
+import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
+import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
+import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
 import { detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
-import type { RowStatus, TrafficRow } from '../domain/types'
+import type { MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { type AssetFilter, type ViewGroupBy, assetMatchesFilter, assetDate, groupKeyFor, resolveWindow } from '../domain/savedViews'
 import { GTM_STRATEGIES, resolveStrategyKey } from '../domain/strategies'
 import { conditionSentence } from '../domain/conditions'
@@ -59,8 +63,9 @@ function copyReport(
   assetType: string | undefined,
   messaging: Record<string, string> | undefined,
   applied: { mapped: Record<string, string | undefined>; unmapped: string[]; clamped: string[] } | null,
+  row?: { mediaType?: MediaType; extractedCopy?: string },
 ) {
-  const coverage = fieldCoverage(channel, assetType, messaging)
+  const coverage = fieldCoverage(channel, assetType, messaging, row)
   const out: Record<string, unknown> = { fields: coverage }
   if (applied) {
     if (Object.keys(applied.mapped).length) out.wroteTo = applied.mapped
@@ -77,6 +82,61 @@ function copyReport(
     out.fieldsNote =
       `${coverage.missing.length} of ${coverage.filled.length + coverage.missing.length} components are still empty ` +
       `(${coverage.missing.join(', ')}) and render blank on the card. Fill them with edit_asset \`fields\`.`
+  }
+  return out
+}
+
+/**
+ * A loose channel value from an agent, resolved to the canonical id — or rejected.
+ *
+ * The component schema is keyed by canonical id, and an unrecognized key falls back to a generic
+ * headline / body / CTA triple. So `channel: "Instagram"` (the natural capitalization, and what the
+ * tools themselves defaulted to) silently authored against a three-field fallback instead of
+ * Instagram's single caption — and then reported the card COMPLETE, because it was complete for the
+ * schema it had wrongly resolved. Naming the channel wrong has to be an error the agent can see,
+ * not a quietly different card.
+ */
+function channelArg(value: unknown, fallback: TrafficRow['channel'] = 'instagram'): TrafficRow['channel'] {
+  const raw = str(value).trim()
+  if (!raw) return fallback
+  const id = resolveChannelId(raw)
+  if (!id) throw new Error(`unknown channel "${raw}". Use a canonical id, e.g. ${CHANNEL_LIST.slice(0, 6).map((c) => c.id).join(', ')}…`)
+  return id
+}
+
+const MEDIA_TYPES: MediaType[] = ['image', 'video', 'text', 'link']
+
+/** The asset's media type, which decides whether its card carries an in-creative row. */
+function mediaArg(value: unknown, fallback: MediaType = 'image'): MediaType {
+  const raw = str(value).trim().toLowerCase()
+  if (!raw) return fallback
+  if (!MEDIA_TYPES.includes(raw as MediaType)) throw new Error(`unknown mediaType "${raw}". Use one of: ${MEDIA_TYPES.join(', ')}`)
+  return raw as MediaType
+}
+
+/** A card kind an agent named, checked against the set the toolbar itself offers. */
+function objectKindArg(value: unknown): CanvasObjectKind {
+  const raw = str(value).trim().toLowerCase().replace(/\s+/g, '-')
+  const hit = OBJECT_CARD_KINDS.find((k) => k === raw)
+  if (!hit) throw new Error(`unknown card kind "${str(value).trim()}". Use one of: ${OBJECT_CARD_KINDS.join(', ')}`)
+  return hit
+}
+
+/** A free-ish spot for a new card, so a board written over MCP is readable rather than a pile. */
+function nextSlot(pos: Record<string, { x: number; y: number }>): { x: number; y: number } {
+  const n = Object.keys(pos ?? {}).length
+  return { x: 60 + (n % 5) * 280, y: 60 + Math.floor(n / 5) * 220 }
+}
+
+/** What an object-card write reports back: what it still owes, in the card's own vocabulary. */
+function objectCardReport(kind: CanvasObjectKind, direction: { key: string; value: string }[], clamped: string[]) {
+  const coverage = directionCoverage(kind, direction)
+  const out: Record<string, unknown> = { fields: coverage }
+  if (clamped.length) out.clampedToLimit = clamped
+  if (coverage.missing.length) {
+    out.fieldsNote =
+      `${coverage.missing.join(', ')} unanswered. Direction is what this card contributes to the copy — ` +
+      `without it the card adds a name and nothing else.`
   }
   return out
 }
@@ -188,8 +248,9 @@ function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { 
     variantOf: r.variantOf ?? '',
     branchOf: r.branchOf ?? '',
     components: m,
-    /** Every component this format defines, and which of them are still blank on the card. */
-    fields: fieldCoverage(r.channel, r.assetType, m),
+    inCreativeCopy: r.extractedCopy ?? '',
+    /** Every component this card renders, and which of them are still blank. */
+    fields: fieldCoverage(r.channel, r.assetType, m, r),
     proofPoints: proofIds.map((id) => proofLabel.get(id) ?? id),
   }
 }
@@ -245,7 +306,7 @@ const BUSINESS_MODEL_BY_MOTION: Record<string, string> = {
 export const GRETEL_ACTIONS = [
   // reads
   'listClients', 'getBrand', 'getStrategy', 'listAssets', 'listCanvases',
-  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'getAssetFields',
+  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'runCampaignReview', 'getAssetFields', 'getObjectFields', 'listObjectCards',
   // additive brand records
   'addAudience', 'addProofPoint', 'addSubject', 'addHook', 'addCta',
 ] as const
@@ -805,7 +866,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const row = st.rows.find((r) => r.id === id)
     if (!row) throw new Error(`asset not found: ${id}`)
     const brand = clientForCampaign(row.campaign)
-    const channel = (str(a.channel).trim() || row.channel) as TrafficRow['channel']
+    const channel = channelArg(a.channel, row.channel)
     const assetType = str(a.assetType).trim() || row.assetType || ''
     const patch: Partial<TrafficRow> = {}
     if (str(a.channel).trim()) patch.channel = channel
@@ -816,10 +877,13 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (['awareness', 'consideration', 'conversion', 'retention'].includes(stage)) patch.funnelStage = stage as never
     // A write is any alias OR the key-addressed `fields` map — the map is the only way to reach a
     // component no alias names (a website's subhead, proof-stat, FAQ and footer CTA among them).
+    const mediaType = mediaArg(a.mediaType, row.mediaType)
+    if (str(a.mediaType).trim()) patch.mediaType = mediaType
     let applied: ReturnType<typeof applyCopyFields> | null = null
     if (COPY_ARGS.some((k) => typeof a[k] === 'string') || isFieldMap(a.fields)) {
-      applied = applyCopyFields(channel, assetType, row.messaging ?? {}, a)
+      applied = applyCopyFields(channel, assetType, row.messaging ?? {}, a, mediaType)
       patch.messaging = applied.messaging
+      if (applied.inCreativeCopy !== undefined) patch.extractedCopy = applied.inCreativeCopy
     }
     const proofPoints = list(a.proofPoints)
     if (proofPoints.length) {
@@ -832,7 +896,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     return {
       id,
       updated: Object.keys(patch),
-      ...copyReport(channel, assetType, after?.messaging ?? patch.messaging ?? row.messaging, applied),
+      ...copyReport(channel, assetType, after?.messaging ?? patch.messaging ?? row.messaging, applied, after ?? row),
       note: 'Re-run run_coherence_check to see the edit reflected.',
     }
   },
@@ -875,22 +939,186 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
   // BEFORE hand-authoring: without it an agent can only guess at the keys, and every field it
   // cannot name arrives empty on a card that reads as finished.
   async getAssetFields(a) {
-    const channel = (str(a.channel).trim() || 'instagram') as TrafficRow['channel']
+    const channel = channelArg(a.channel)
     const assetType = str(a.assetType).trim() || undefined
-    const fields = describeAssetFields(channel, assetType)
+    const mediaType = mediaArg(a.mediaType)
+    const fields = describeAssetFields(channel, assetType, mediaType)
     // Organic formats define no CTA component, but the card renders a CTA row regardless and reads
     // it off a generic `cta` key — so it is writable here even though it is not in the schema.
     const genericCta = fields.every((f) => !isCtaField(f.key))
     return {
       channel,
       assetType,
+      mediaType,
       fields,
       keys: fields.map((f) => f.key),
       ...(genericCta ? { alsoAccepts: [GENERIC_CTA_KEY] } : {}),
       note:
         `Pass every one of these keys in add_asset/edit_asset \`fields\` to fill the card. ` +
         `A key left out renders blank.` +
-        (genericCta ? ` This format folds its CTA into the copy, but the card still shows a CTA row — set \`cta\` to fill it.` : ''),
+        (genericCta ? ` This format folds its CTA into the copy, but the card still shows a CTA row — set \`cta\` to fill it.` : '') +
+        (rendersInCreative(mediaType)
+          ? ` \`${IN_CREATIVE_KEY}\` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it.`
+          : ` A text asset has no creative, so it renders no in-creative row.`),
+    }
+  },
+
+  /**
+   * ONE READ OF A WHOLE CAMPAIGN: its copy, its completeness and its wiring, ranked, each finding
+   * carrying the call that fixes it.
+   *
+   * run_coherence_check reads the COPY and is the sharper instrument for it — a claim with no
+   * proof, a weak CTA, two assets saying the same thing. What it cannot see is whether the campaign
+   * is finished: an asset with six of its nine components blank is perfectly coherent, because
+   * every word it does contain is fine. This runs that check AND the completeness pass, and returns
+   * them as one ordered list, because two tools reporting on the same campaign in two vocabularies
+   * is how half of it goes unread.
+   */
+  async runCampaignReview(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const st0 = useTrafficStore.getState()
+    const rows = st0.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
+    const brand = clientForCampaign(campaign)
+    const board = boardFor(st0.flowBoards, campaign)
+    const review = reviewCampaign({ campaign, rows, objects: board.objects })
+
+    // The copy check, unless the caller only wants the structural pass (it calls the model, so it
+    // is the slow half and worth being able to skip).
+    let breaks: Suggestion[] = []
+    let checked = false
+    let fixable: unknown[] = []
+    if (a.includeCopyCheck !== false) {
+      const res = (await handlers.runCoherenceCheck({ client: brand, campaign })) as {
+        breaks: { axis: string; severity: string; headline: string }[]
+        fixable: { id: string; headline: string; asset: string; severity: string }[]
+      }
+      checked = true
+      fixable = res.fixable
+      const fixableByHeadline = new Map(res.fixable.map((f) => [f.headline, f]))
+      breaks = res.breaks.map((b) => {
+        const fix = fixableByHeadline.get(b.headline)
+        return {
+          kind: 'copy-break' as never,
+          severity: (['high', 'medium', 'low'].includes(b.severity) ? b.severity : 'medium') as 'high' | 'medium' | 'low',
+          what: b.headline,
+          why: `A ${b.axis} break in the campaign's copy.`,
+          where: fix?.asset ? { assetName: fix.asset } : {},
+          // A break with a mechanical fix says so; the rest need a real edit, and saying "apply_fix"
+          // for those would be promising a button that does nothing.
+          fix: fix ? `apply_fix(breakId: "${fix.id}")` : 'Edit, reject or delete the asset — no mechanical fix for this one.',
+        }
+      })
+    }
+
+    const suggestions = rankSuggestions([...review.suggestions, ...breaks])
+    return {
+      campaign,
+      brand,
+      assetCount: review.assetCount,
+      objectCardCount: review.objectCardCount,
+      copyCheckRun: checked,
+      total: suggestions.length,
+      suggestions,
+      fixable,
+      note: suggestions.length
+        ? `${suggestions.length} finding(s), highest severity first. Each carries the call that fixes it.`
+        : `Nothing to raise: every asset's components are filled, every card carries direction, and the copy check found no breaks.`,
+    }
+  },
+
+  // ── Object cards ────────────────────────────────────────────────────────────────────────────
+  // The OTHER kind of card in this app: the ones on a campaign's flow board that instruct the copy
+  // writer (an Audience card carrying a pain, a Trigger carrying the ask). Gretel could put them on
+  // a board from inside the app; nothing outside could, so a campaign set up over MCP arrived with
+  // deliverables and no direction behind them.
+
+  // What a card of this kind asks for. The read that comes before writing one.
+  async getObjectFields(a) {
+    const kind = objectKindArg(a.kind)
+    const asks = describeObjectFields(kind)
+    return {
+      kind,
+      fields: asks,
+      keys: asks.map((f) => f.key),
+      recordType: recordTypeFor(kind),
+      note: asks.length
+        ? `Pass these keys in add_object_card/edit_object_card \`fields\`. Direction is what the card ` +
+          `contributes to the copy — a card with none adds a name and nothing else.`
+        : `A ${kind} card asks for no direction: it contributes through the record it names. Set \`record\` or \`name\`.`,
+    }
+  },
+
+  // Every object card on a campaign's board, with what each one still owes.
+  async listObjectCards(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const board = boardFor(useTrafficStore.getState().flowBoards, campaign)
+    const cards = board.objects.map(objectCardView)
+    return {
+      campaign,
+      total: cards.length,
+      cards,
+      incomplete: cards.filter((c) => !c.fields.complete).map((c) => c.id),
+    }
+  },
+
+  // Put a card on a campaign's board.
+  async addObjectCard(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const kind = objectKindArg(a.kind)
+    const { direction, clamped } = applyDirection(kind, [], a.fields as Record<string, unknown> | undefined)
+    const made: CanvasObject = {
+      id: freshObjectId(),
+      kind,
+      text: str(a.note).trim(),
+      ...(str(a.name).trim() ? { name: str(a.name).trim() } : {}),
+      ...(str(a.refId).trim() ? { refId: str(a.refId).trim() } : {}),
+      ...(direction.length ? { direction } : {}),
+    }
+    const board = boardFor(useTrafficStore.getState().flowBoards, campaign)
+    useTrafficStore.getState().saveFlowBoard({
+      ...board,
+      objects: [...board.objects, made],
+      // Laid out rather than stacked at the origin: a board of cards all at 0,0 is one card as far
+      // as anyone looking at it is concerned.
+      pos: { ...board.pos, [made.id]: nextSlot(board.pos) },
+    })
+    return {
+      id: made.id,
+      campaign,
+      kind,
+      name: made.name ?? '',
+      ...objectCardReport(kind, direction, clamped),
+    }
+  },
+
+  // Sharpen a card already on a board: its name, its note, its direction, the record it points at.
+  async editObjectCard(a) {
+    const id = str(a.objectId).trim() || str(a.id).trim()
+    if (!id) throw new Error('objectId is required')
+    const boards = useTrafficStore.getState().flowBoards
+    const board = boards.find((b) => b.objects.some((o) => o.id === id))
+    if (!board) throw new Error(`object card not found: ${id}`)
+    const existing = board.objects.find((o) => o.id === id)!
+    const { direction, clamped } = applyDirection(existing.kind, existing.direction, a.fields as Record<string, unknown> | undefined)
+    const next: CanvasObject = {
+      ...existing,
+      ...(typeof a.name === 'string' ? { name: str(a.name).trim() } : {}),
+      ...(typeof a.note === 'string' ? { text: str(a.note).trim() } : {}),
+      ...(str(a.refId).trim() ? { refId: str(a.refId).trim() } : {}),
+      ...(direction.length ? { direction } : { direction: undefined }),
+    }
+    useTrafficStore.getState().saveFlowBoard({
+      ...board,
+      objects: board.objects.map((o) => (o.id === id ? next : o)),
+    })
+    return {
+      id,
+      campaign: board.key,
+      kind: existing.kind,
+      ...objectCardReport(existing.kind, direction, clamped),
     }
   },
 
@@ -899,10 +1127,11 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const brand = str(a.brand).trim()
     const campaign = str(a.campaign).trim()
     if (!brand || !campaign) throw new Error('brand and campaign are required')
-    const channel = (str(a.channel).trim() || 'Instagram') as TrafficRow['channel']
+    const channel = channelArg(a.channel)
     const assetType = str(a.assetType).trim() || undefined
+    const mediaType = mediaArg(a.mediaType)
     const stage = str(a.stage).trim().toLowerCase()
-    const applied = applyCopyFields(channel, assetType, {}, a)
+    const applied = applyCopyFields(channel, assetType, {}, a, mediaType)
     const patch: Partial<TrafficRow> = {
       channel,
       // An asset addressed by `fields` need never pass `headline` — and on a format with no headline
@@ -911,7 +1140,9 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       assetName: str(a.assetName).trim() || str(a.headline).trim() || firstFilled(applied.messaging, channel, assetType) || 'Authored asset',
       audience: str(a.audience).trim() || undefined,
       format: str(a.format).trim() || undefined,
+      mediaType,
     }
+    if (applied.inCreativeCopy !== undefined) patch.extractedCopy = applied.inCreativeCopy
     if (assetType) patch.assetType = assetType
     if (['awareness', 'consideration', 'conversion', 'retention'].includes(stage)) patch.funnelStage = stage as never
     patch.messaging = applied.messaging
@@ -938,7 +1169,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       campaign,
       source: row.source,
       status: row.status,
-      ...copyReport(channel, assetType, row.messaging, applied),
+      ...copyReport(channel, assetType, row.messaging, applied, row),
     }
   },
 

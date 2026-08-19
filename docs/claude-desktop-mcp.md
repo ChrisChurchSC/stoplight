@@ -107,6 +107,39 @@ for is **reported back, not stored** — the reply's `notStored` names it, so co
 quietly. Every write also returns `fields: { filled, missing, complete }`, and `list_assets` returns
 the same per asset, so a half-built card is visible instead of reading as finished.
 
+### Object cards — the other kind of card
+
+An asset is what the writer produces. An **object card** is what instructs it: an Audience card
+carrying the pain to argue from, a Trigger carrying what the reader just did and the ask. That
+instruction is called **direction**, its vocabulary is closed and differs per kind, and it is what
+the card contributes — a card with none adds a name and nothing else.
+
+| Tool | Args | What it does |
+|---|---|---|
+| `get_object_fields` | `kind` | What a card of this kind asks: key, label, hint, cap. **Call before writing one.** |
+| `add_object_card` | `campaign`, `kind`, `fields`, `name?`, `note?`, `refId?` | Puts a card on the campaign's board |
+| `edit_object_card` | `objectId`, `fields`, `name?`, `note?` | Answers a card's questions; empty string clears one |
+| `list_object_cards` | `campaign` | Every card on the board and what each still owes |
+
+Some kinds (`voice`, `concept`, `note`, `brand`, `product`, `pattern`) ask for no direction — they
+contribute through the record they name, and are reported complete rather than permanently unfinished.
+
+### Reviewing a campaign
+
+| Tool | Args | What it does |
+|---|---|---|
+| `review_campaign` | `campaign`, `includeCopyCheck?` | One ranked list of everything worth doing, each finding carrying the call that fixes it |
+| `run_coherence_check` | `client`, `campaign?` | The copy breaks alone (the slower, sharper half) |
+
+`review_campaign` runs the coherence check **and** the passes it cannot make. The check reads the
+copy — a claim with no proof, a weak CTA, two assets repeating each other. What it has never been
+able to see is whether the campaign is *finished*: an asset with six of nine components blank is
+perfectly coherent, because every word it does contain is fine. So the review also reports asset
+cards with blank components, object cards carrying no direction, CTAs pointed at assets that are
+gone, and handoffs no button covers — ranked worst-first, in a stable order.
+
+Pass `includeCopyCheck: false` for a fast structural-only pass.
+
 ## What "set up a client" scrapes
 
 - **Website: full multi-page crawl.** Homepage plus the highest-signal internal pages
