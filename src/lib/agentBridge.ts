@@ -10,6 +10,7 @@ import { isCtaField } from '../domain/messaging'
 import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
+import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
 import { detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
 import type { MediaType, RowStatus, TrafficRow } from '../domain/types'
@@ -305,7 +306,7 @@ const BUSINESS_MODEL_BY_MOTION: Record<string, string> = {
 export const GRETEL_ACTIONS = [
   // reads
   'listClients', 'getBrand', 'getStrategy', 'listAssets', 'listCanvases',
-  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'getAssetFields', 'getObjectFields', 'listObjectCards',
+  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'runCampaignReview', 'getAssetFields', 'getObjectFields', 'listObjectCards',
   // additive brand records
   'addAudience', 'addProofPoint', 'addSubject', 'addHook', 'addCta',
 ] as const
@@ -959,6 +960,70 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         (rendersInCreative(mediaType)
           ? ` \`${IN_CREATIVE_KEY}\` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it.`
           : ` A text asset has no creative, so it renders no in-creative row.`),
+    }
+  },
+
+  /**
+   * ONE READ OF A WHOLE CAMPAIGN: its copy, its completeness and its wiring, ranked, each finding
+   * carrying the call that fixes it.
+   *
+   * run_coherence_check reads the COPY and is the sharper instrument for it — a claim with no
+   * proof, a weak CTA, two assets saying the same thing. What it cannot see is whether the campaign
+   * is finished: an asset with six of its nine components blank is perfectly coherent, because
+   * every word it does contain is fine. This runs that check AND the completeness pass, and returns
+   * them as one ordered list, because two tools reporting on the same campaign in two vocabularies
+   * is how half of it goes unread.
+   */
+  async runCampaignReview(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const st0 = useTrafficStore.getState()
+    const rows = st0.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
+    const brand = clientForCampaign(campaign)
+    const board = boardFor(st0.flowBoards, campaign)
+    const review = reviewCampaign({ campaign, rows, objects: board.objects })
+
+    // The copy check, unless the caller only wants the structural pass (it calls the model, so it
+    // is the slow half and worth being able to skip).
+    let breaks: Suggestion[] = []
+    let checked = false
+    let fixable: unknown[] = []
+    if (a.includeCopyCheck !== false) {
+      const res = (await handlers.runCoherenceCheck({ client: brand, campaign })) as {
+        breaks: { axis: string; severity: string; headline: string }[]
+        fixable: { id: string; headline: string; asset: string; severity: string }[]
+      }
+      checked = true
+      fixable = res.fixable
+      const fixableByHeadline = new Map(res.fixable.map((f) => [f.headline, f]))
+      breaks = res.breaks.map((b) => {
+        const fix = fixableByHeadline.get(b.headline)
+        return {
+          kind: 'copy-break' as never,
+          severity: (['high', 'medium', 'low'].includes(b.severity) ? b.severity : 'medium') as 'high' | 'medium' | 'low',
+          what: b.headline,
+          why: `A ${b.axis} break in the campaign's copy.`,
+          where: fix?.asset ? { assetName: fix.asset } : {},
+          // A break with a mechanical fix says so; the rest need a real edit, and saying "apply_fix"
+          // for those would be promising a button that does nothing.
+          fix: fix ? `apply_fix(breakId: "${fix.id}")` : 'Edit, reject or delete the asset — no mechanical fix for this one.',
+        }
+      })
+    }
+
+    const suggestions = rankSuggestions([...review.suggestions, ...breaks])
+    return {
+      campaign,
+      brand,
+      assetCount: review.assetCount,
+      objectCardCount: review.objectCardCount,
+      copyCheckRun: checked,
+      total: suggestions.length,
+      suggestions,
+      fixable,
+      note: suggestions.length
+        ? `${suggestions.length} finding(s), highest severity first. Each carries the call that fixes it.`
+        : `Nothing to raise: every asset's components are filled, every card carries direction, and the copy check found no breaks.`,
     }
   },
 

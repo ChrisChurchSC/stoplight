@@ -563,6 +563,23 @@ server.registerTool(
 )
 
 server.registerTool(
+  'review_campaign',
+  {
+    title: 'Review a whole campaign and say what to do',
+    description:
+      "One read of an entire campaign — its copy, its completeness and its wiring — returned as a ranked list of findings, each carrying the exact call that fixes it. Runs the Claude coherence check (claims with no proof, weak CTAs, assets repeating each other) AND the passes it cannot see: asset cards with components still blank, object cards carrying no direction, CTAs pointed at assets that are gone, handoffs no button covers. Use this as the standing 'how is this campaign doing' call; use run_coherence_check when you only want the copy breaks.",
+    inputSchema: {
+      campaign: z.string().describe('The campaign to review'),
+      includeCopyCheck: z
+        .boolean()
+        .optional()
+        .describe('Run the Claude coherence check too (default true). Pass false for a fast structural-only pass — it is the slow half.'),
+    },
+  },
+  async (a) => text(await dispatch('runCampaignReview', a)),
+)
+
+server.registerTool(
   'get_object_fields',
   {
     title: 'What an object card asks for',
