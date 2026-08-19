@@ -521,11 +521,12 @@ server.registerTool(
       'Edit an asset’s copy and targeting. Pass `fields` (key → copy, from get_asset_fields) to set ANY component the card renders — that is the only way to reach a subhead, proof stat, FAQ or footer CTA. headline/primaryText/description/cta still work as shorthand for the four commonest. The reply reports which components are still empty. Editing changes the content, so re-run run_coherence_check to see the result. This is how a flagged break gets fixed by hand.',
     inputSchema: {
       assetId: z.string().describe('The asset id (from list_assets)'),
+      mediaType: z.enum(['image', 'video', 'text', 'link']).optional().describe('What the asset is made of (default image). image/video/link cards render an in-creative copy row; a text asset does not.'),
       fields: z
         .record(z.string())
         .optional()
         .describe(
-          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. Beats the four aliases below, which only reach four components and cannot name the rest.',
+          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer", "in-creative-copy" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. `in-creative-copy` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it. Beats the four aliases below, which only reach four components and cannot name the rest.',
         ),
       headline: z.string().optional(),
       primaryText: z.string().optional(),
@@ -566,10 +567,11 @@ server.registerTool(
   {
     title: 'The components an asset card renders',
     description:
-      'The exact copy components a card of this channel + asset type renders — key, label, recommended and hard character limits. Call this BEFORE add_asset / edit_asset: the component set is per format (a website has nine, an email five, an Instagram post one), the keys are not guessable, and every one you do not write renders blank on the card.',
+      'The exact copy components a card of this channel + asset type renders — key, label, recommended and hard character limits. Call this BEFORE add_asset / edit_asset: the component set is per format (a website has nine, an email five, an Instagram post one), the keys are not guessable, and every one you do not write renders blank on the card. Includes `in-creative-copy` (the words inside the artwork — overlays, voiceover, page text) for image/video/link assets.',
     inputSchema: {
-      channel: z.string().describe('Channel id, e.g. website, email, meta-ads, instagram, blog, proposal'),
+      channel: z.string().describe('Channel id, display label or short tag — e.g. website, email, meta-ads, instagram, "Meta Ads". An unrecognized name is an error, not a silent fallback.'),
       assetType: z.string().optional().describe('Asset type, when the format overrides the channel default (e.g. video, short)'),
+      mediaType: z.enum(['image', 'video', 'text', 'link']).optional().describe('What the asset is made of (default image). image/video/link cards render an in-creative copy row; a text asset does not.'),
     },
   },
   async (a) => text(await dispatch('getAssetFields', a)),
@@ -590,11 +592,12 @@ server.registerTool(
       audience: z.string().optional(),
       format: z.string().optional(),
       assetName: z.string().optional(),
+      mediaType: z.enum(['image', 'video', 'text', 'link']).optional().describe('What the asset is made of (default image). image/video/link cards render an in-creative copy row; a text asset does not.'),
       fields: z
         .record(z.string())
         .optional()
         .describe(
-          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. Beats the four aliases below, which only reach four components and cannot name the rest.',
+          'The card’s components by their REAL key → copy, e.g. { subhead, "proof-stat", faq, "cta-footer", "in-creative-copy" }. Call get_asset_fields first and pass EVERY key it lists: a key you leave out renders blank on the card. `in-creative-copy` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it. Beats the four aliases below, which only reach four components and cannot name the rest.',
         ),
       headline: z.string().optional(),
       primaryText: z.string().optional(),

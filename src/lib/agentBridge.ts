@@ -5,12 +5,12 @@ import { newDescriptor } from '../domain/descriptors'
 import { newLibraryCta } from '../domain/library'
 import { clientForCampaign } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
-import { GENERIC_CTA_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys } from '../domain/assetFields'
+import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
 import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
-import type { RowStatus, TrafficRow } from '../domain/types'
+import type { MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { type AssetFilter, type ViewGroupBy, assetMatchesFilter, assetDate, groupKeyFor, resolveWindow } from '../domain/savedViews'
 import { GTM_STRATEGIES, resolveStrategyKey } from '../domain/strategies'
 import { conditionSentence } from '../domain/conditions'
@@ -60,8 +60,9 @@ function copyReport(
   assetType: string | undefined,
   messaging: Record<string, string> | undefined,
   applied: { mapped: Record<string, string | undefined>; unmapped: string[]; clamped: string[] } | null,
+  row?: { mediaType?: MediaType; extractedCopy?: string },
 ) {
-  const coverage = fieldCoverage(channel, assetType, messaging)
+  const coverage = fieldCoverage(channel, assetType, messaging, row)
   const out: Record<string, unknown> = { fields: coverage }
   if (applied) {
     if (Object.keys(applied.mapped).length) out.wroteTo = applied.mapped
@@ -98,6 +99,16 @@ function channelArg(value: unknown, fallback: TrafficRow['channel'] = 'instagram
   const id = resolveChannelId(raw)
   if (!id) throw new Error(`unknown channel "${raw}". Use a canonical id, e.g. ${CHANNEL_LIST.slice(0, 6).map((c) => c.id).join(', ')}…`)
   return id
+}
+
+const MEDIA_TYPES: MediaType[] = ['image', 'video', 'text', 'link']
+
+/** The asset's media type, which decides whether its card carries an in-creative row. */
+function mediaArg(value: unknown, fallback: MediaType = 'image'): MediaType {
+  const raw = str(value).trim().toLowerCase()
+  if (!raw) return fallback
+  if (!MEDIA_TYPES.includes(raw as MediaType)) throw new Error(`unknown mediaType "${raw}". Use one of: ${MEDIA_TYPES.join(', ')}`)
+  return raw as MediaType
 }
 
 /** The first component carrying text, in the order the card renders them, trimmed to a name. */
@@ -207,8 +218,9 @@ function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { 
     variantOf: r.variantOf ?? '',
     branchOf: r.branchOf ?? '',
     components: m,
-    /** Every component this format defines, and which of them are still blank on the card. */
-    fields: fieldCoverage(r.channel, r.assetType, m),
+    inCreativeCopy: r.extractedCopy ?? '',
+    /** Every component this card renders, and which of them are still blank. */
+    fields: fieldCoverage(r.channel, r.assetType, m, r),
     proofPoints: proofIds.map((id) => proofLabel.get(id) ?? id),
   }
 }
@@ -835,10 +847,13 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (['awareness', 'consideration', 'conversion', 'retention'].includes(stage)) patch.funnelStage = stage as never
     // A write is any alias OR the key-addressed `fields` map — the map is the only way to reach a
     // component no alias names (a website's subhead, proof-stat, FAQ and footer CTA among them).
+    const mediaType = mediaArg(a.mediaType, row.mediaType)
+    if (str(a.mediaType).trim()) patch.mediaType = mediaType
     let applied: ReturnType<typeof applyCopyFields> | null = null
     if (COPY_ARGS.some((k) => typeof a[k] === 'string') || isFieldMap(a.fields)) {
-      applied = applyCopyFields(channel, assetType, row.messaging ?? {}, a)
+      applied = applyCopyFields(channel, assetType, row.messaging ?? {}, a, mediaType)
       patch.messaging = applied.messaging
+      if (applied.inCreativeCopy !== undefined) patch.extractedCopy = applied.inCreativeCopy
     }
     const proofPoints = list(a.proofPoints)
     if (proofPoints.length) {
@@ -851,7 +866,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     return {
       id,
       updated: Object.keys(patch),
-      ...copyReport(channel, assetType, after?.messaging ?? patch.messaging ?? row.messaging, applied),
+      ...copyReport(channel, assetType, after?.messaging ?? patch.messaging ?? row.messaging, applied, after ?? row),
       note: 'Re-run run_coherence_check to see the edit reflected.',
     }
   },
@@ -896,20 +911,25 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
   async getAssetFields(a) {
     const channel = channelArg(a.channel)
     const assetType = str(a.assetType).trim() || undefined
-    const fields = describeAssetFields(channel, assetType)
+    const mediaType = mediaArg(a.mediaType)
+    const fields = describeAssetFields(channel, assetType, mediaType)
     // Organic formats define no CTA component, but the card renders a CTA row regardless and reads
     // it off a generic `cta` key — so it is writable here even though it is not in the schema.
     const genericCta = fields.every((f) => !isCtaField(f.key))
     return {
       channel,
       assetType,
+      mediaType,
       fields,
       keys: fields.map((f) => f.key),
       ...(genericCta ? { alsoAccepts: [GENERIC_CTA_KEY] } : {}),
       note:
         `Pass every one of these keys in add_asset/edit_asset \`fields\` to fill the card. ` +
         `A key left out renders blank.` +
-        (genericCta ? ` This format folds its CTA into the copy, but the card still shows a CTA row — set \`cta\` to fill it.` : ''),
+        (genericCta ? ` This format folds its CTA into the copy, but the card still shows a CTA row — set \`cta\` to fill it.` : '') +
+        (rendersInCreative(mediaType)
+          ? ` \`${IN_CREATIVE_KEY}\` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it.`
+          : ` A text asset has no creative, so it renders no in-creative row.`),
     }
   },
 
@@ -920,8 +940,9 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!brand || !campaign) throw new Error('brand and campaign are required')
     const channel = channelArg(a.channel)
     const assetType = str(a.assetType).trim() || undefined
+    const mediaType = mediaArg(a.mediaType)
     const stage = str(a.stage).trim().toLowerCase()
-    const applied = applyCopyFields(channel, assetType, {}, a)
+    const applied = applyCopyFields(channel, assetType, {}, a, mediaType)
     const patch: Partial<TrafficRow> = {
       channel,
       // An asset addressed by `fields` need never pass `headline` — and on a format with no headline
@@ -930,7 +951,9 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       assetName: str(a.assetName).trim() || str(a.headline).trim() || firstFilled(applied.messaging, channel, assetType) || 'Authored asset',
       audience: str(a.audience).trim() || undefined,
       format: str(a.format).trim() || undefined,
+      mediaType,
     }
+    if (applied.inCreativeCopy !== undefined) patch.extractedCopy = applied.inCreativeCopy
     if (assetType) patch.assetType = assetType
     if (['awareness', 'consideration', 'conversion', 'retention'].includes(stage)) patch.funnelStage = stage as never
     patch.messaging = applied.messaging
@@ -957,7 +980,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       campaign,
       source: row.source,
       status: row.status,
-      ...copyReport(channel, assetType, row.messaging, applied),
+      ...copyReport(channel, assetType, row.messaging, applied, row),
     }
   },
 
