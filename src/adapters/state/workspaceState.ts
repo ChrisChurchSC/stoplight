@@ -59,9 +59,34 @@ export type SaveTrouble = {
   message: string
   /** True when every stuck write failed for want of a workspace (signed out, or no membership). */
   signedOut: boolean
+  /**
+   * True when a write was REFUSED because the workspace copy moved on under this tab.
+   *
+   * Categorically different from the failures above and has to be presented differently. Those are
+   * "we could not reach the server, we will keep trying"; this one is "the server has something
+   * newer and retrying would destroy it". The value is safe in localStorage; what it needs is a
+   * reload, not another attempt.
+   */
+  conflict: boolean
 }
 
-const troubled = new Map<string, { message: string; signedOut: boolean }>()
+const troubled = new Map<string, { message: string; signedOut: boolean; conflict?: boolean }>()
+
+/**
+ * The `updated_at` this tab last SAW for each key — from the hydrate that loaded it, or from its
+ * own confirmed write. It is the precondition every mirror sends: update this row only if it still
+ * looks the way I was last told it looked.
+ *
+ * Without it the mirror was a plain upsert, so a tab holding an older value would overwrite a newer
+ * one whenever it next flushed, and say nothing. That is not hypothetical: on 18 August 2026 a tab
+ * that had been open across a database-side merge wrote its stale campaign list back over the
+ * merged one, dropping 39 campaigns, and then twenty minutes later replaced a restored task list
+ * with its own empty one. Both writes reported success.
+ *
+ * A key absent from this map has never been seen by this tab, so its write is an insert and a row
+ * already being there is itself the conflict.
+ */
+const seen = new Map<string, string>()
 const listeners = new Set<(t: SaveTrouble | null) => void>()
 
 function currentTrouble(): SaveTrouble | null {
@@ -72,6 +97,7 @@ function currentTrouble(): SaveTrouble | null {
     keys: entries.map(([k]) => k),
     message: newest.message,
     signedOut: entries.every(([, t]) => t.signedOut),
+    conflict: entries.some(([, t]) => t.conflict === true),
   }
 }
 
@@ -115,6 +141,28 @@ function failed(key: string, p: PendingWrite, message: string, signedOut: boolea
       void mirror(key)
     }, delay)
   }
+  emit()
+}
+
+/**
+ * A write the server refused because the row moved on. NOT a failure to reach it, and so not
+ * retried: the same conditional write would be refused again, and the only way to "win" would be to
+ * drop the precondition, which is the behaviour this exists to end.
+ *
+ * The pending value stays pending. It is in localStorage, this tab still shows it, and the moment
+ * something re-hydrates the key the tab learns the newer stamp and can write again.
+ */
+function conflicted(key: string, p: PendingWrite): void {
+  p.failures = 0
+  if (p.timer) {
+    clearTimeout(p.timer)
+    p.timer = null
+  }
+  troubled.set(key, {
+    message: 'This was changed somewhere else. Reload to see the newer version.',
+    signedOut: false,
+    conflict: true,
+  })
   emit()
 }
 
@@ -162,19 +210,53 @@ async function mirror(key: string): Promise<void> {
       const seq = p.seq
       const value = p.value
       let message: string | null = null
+      /**
+       * CONDITIONAL, not an upsert. The row is written only if its updated_at still matches what
+       * this tab last saw, so a tab holding an older value is refused instead of winning.
+       *
+       * Never seen it? Then this is an insert, and a row already existing IS the conflict: some
+       * other writer created it while this tab believed the key was empty.
+       */
+      const stamp = new Date().toISOString()
+      const prev = seen.get(key)
+      let conflict = false
       try {
         // The error is READ, not discarded. postgrest-js resolves with { error } instead of
-        // rejecting unless shouldThrowOnError is set (it isn't anywhere here), so `await
-        // …upsert(…)` on its own swallows an RLS denial, an expired JWT and an oversized payload
-        // alike — and the line below would then mark the write confirmed. supabaseSheetAdapter
-        // .writeBatch learned the same lesson; this path hadn't.
-        const { error } = await client
-          .from('workspace_state')
-          .upsert({ workspace_id: ws, key, value, updated_at: new Date().toISOString() })
-        message = error?.message ?? null
+        // rejecting unless shouldThrowOnError is set (it isn't anywhere here), so `await …(…)` on
+        // its own swallows an RLS denial, an expired JWT and an oversized payload alike — and the
+        // line below would then mark the write confirmed. supabaseSheetAdapter.writeBatch learned
+        // the same lesson; this path hadn't.
+        if (prev) {
+          const { data, error } = await client
+            .from('workspace_state')
+            .update({ value, updated_at: stamp })
+            .eq('workspace_id', ws)
+            .eq('key', key)
+            .eq('updated_at', prev)
+            .select('updated_at')
+          message = error?.message ?? null
+          // No error and no row matched means the precondition failed: the row is still there, it
+          // just does not look the way this tab was told it looked.
+          if (!message && (data?.length ?? 0) === 0) conflict = true
+          else if (!message) seen.set(key, stamp)
+        } else {
+          const { data, error } = await client
+            .from('workspace_state')
+            .insert({ workspace_id: ws, key, value, updated_at: stamp })
+            .select('updated_at')
+          if (error?.code === '23505') conflict = true
+          else {
+            message = error?.message ?? null
+            if (!message && (data?.length ?? 0) > 0) seen.set(key, stamp)
+          }
+        }
       } catch (e) {
         // Network failure. localStorage still holds the value, and the retry below re-sends it.
         message = String((e as Error)?.message ?? e)
+      }
+      if (conflict) {
+        conflicted(key, p)
+        return
       }
       if (message) {
         failed(key, p, message, false)
@@ -278,9 +360,19 @@ export async function hydrateState(): Promise<{ state: Record<string, unknown>; 
   if (!isSupabaseConfigured || !supabase) return { state: {}, ok: true }
   const ws = await getActiveWorkspaceId()
   if (!ws) return { state: {}, ok: false, error: 'Not signed in to a workspace' }
-  const { data, error } = await supabase.from('workspace_state').select('key, value').eq('workspace_id', ws)
+  const { data, error } = await supabase
+    .from('workspace_state')
+    .select('key, value, updated_at')
+    .eq('workspace_id', ws)
   if (error) return { state: {}, ok: false, error: error.message }
   const out: Record<string, unknown> = {}
-  for (const r of data ?? []) out[(r as { key: string }).key] = (r as { value: unknown }).value
+  for (const r of data ?? []) {
+    const row = r as { key: string; value: unknown; updated_at?: string }
+    out[row.key] = row.value
+    // The stamp every later write is measured against. Hydrating is also how a tab recovers from a
+    // conflict: it learns the newer stamp here and its next write is accepted.
+    if (row.updated_at) seen.set(row.key, row.updated_at)
+    else seen.delete(row.key)
+  }
   return { state: out, ok: true }
 }
