@@ -270,6 +270,14 @@ const OVERRIDES: Record<string, MessagingField[]> = {
 
 const FALLBACK: MessagingField[] = [headline(80), body(), cta(30)]
 
+/**
+ * Every `channel:assetType` pair with a schema of its own — the formats whose components differ
+ * from their channel's default. Exported so a test can walk EVERY card shape the app can render
+ * rather than the handful someone thought to list, which is the only way "an agent can fill every
+ * field" stays true as formats are added.
+ */
+export const MESSAGING_OVERRIDE_FORMATS: string[] = Object.keys(OVERRIDES)
+
 /** The messaging component fields for an asset, by its channel + type. */
 export function messagingFields(channel: ChannelId, assetType?: string): MessagingField[] {
   if (assetType) {
