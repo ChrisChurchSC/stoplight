@@ -100,10 +100,24 @@ describe('the prompt and the allowlist agree', () => {
     }
   })
 
-  it('routes appAction through the guarded seam, not the handler map', () => {
+  /**
+   * This used to assert that FlowsView called `runAppAction(`, because in-app Gretel was the thing
+   * the allowlist existed to narrow. Gretel hands off to an outside agent now (GretelHandoff.tsx),
+   * so no component runs an app action at all, and `runAppAction` has no caller left.
+   *
+   * WORTH KNOWING, and not something this file can assert away: the bridge's own dispatch
+   * (agentBridge.ts onCommand) has always gone to the FULL `handlers` map rather than through
+   * `runAppAction`, deliberately — the MCP server was the remote control that got the whole map,
+   * and the allowlist was the narrower hole cut for the in-app assistant. With that assistant gone
+   * the allowlist narrows nothing that is running. Either point onCommand at `runAppAction` too, or
+   * decide the wide map is right for a connector that only reaches a dev server on localhost.
+   *
+   * What still holds, and is checked here: the UI never touches the handler map directly.
+   */
+  it('keeps the handler map out of the UI layer', () => {
     const view = readFileSync(join(root, 'src/components/FlowsView.tsx'), 'utf8')
-    expect(view).toContain('runAppAction(')
-    // Importing the map itself would bypass the allowlist entirely.
     expect(view).not.toContain('handlers[')
+    const handoff = readFileSync(join(root, 'src/components/GretelHandoff.tsx'), 'utf8')
+    expect(handoff).not.toContain('handlers[')
   })
 })

@@ -2139,10 +2139,12 @@ interface TrafficState {
    *  so the campaign icon rail (Files / Assets / Gretel in HomeShell) can drive and reflect it. */
   flowView: 'flow' | 'grid' | 'calendar'
   setFlowView: (v: 'flow' | 'grid' | 'calendar') => void
-  /** Whether the campaign's Gretel panel is collapsed to its rail. Lifted so the icon rail's
-   *  Gretel item can toggle and reflect it. */
-  flowChatCollapsed: boolean
-  setFlowChatCollapsed: (v: boolean) => void
+  /** Whether Gretel's hand-off dialog is open. Lifted so the icon rail's Gretel item can open it
+   *  while FlowsView, which has the campaign context the starter questions are built from, renders
+   *  it. Was flowChatCollapsed, back when Gretel was a docked chat panel instead of a door out to
+   *  an agent that speaks MCP. */
+  gretelOpen: boolean
+  setGretelOpen: (v: boolean) => void
   /** Whether the Assets library is docked as the canvas's left panel (shares the slot with Gretel,
    *  so the canvas stays put — Assets is a panel ON the one canvas, not a separate view). */
   flowAssetsOpen: boolean
@@ -3178,7 +3180,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   flowHomeNonce: 0,
   scopeBeforeFlow: null,
   flowView: 'flow',
-  flowChatCollapsed: true,
+  gretelOpen: false,
   flowAssetsOpen: false,
   sidebarCollapsed: (() => { try { return localStorage.getItem('stoplight.sidebarCollapsed') === '1' } catch { return false } })(),
   recordsChatCollapsed: (() => { try { return localStorage.getItem('stoplight.recordsChatCollapsed') === '1' } catch { return false } })(),
@@ -4636,7 +4638,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       scopeBeforeFlow: null,
     })),
   setFlowView: (v) => set((s) => (s.flowView === v ? {} : { flowView: v })),
-  setFlowChatCollapsed: (v) => set((s) => (s.flowChatCollapsed === v ? {} : { flowChatCollapsed: v })),
+  setGretelOpen: (v) => set((s) => (s.gretelOpen === v ? {} : { gretelOpen: v })),
   setFlowAssetsOpen: (v) => set((s) => (s.flowAssetsOpen === v ? {} : { flowAssetsOpen: v })),
   setRecordsChatCollapsed: (v) => {
     try { localStorage.setItem('stoplight.recordsChatCollapsed', v ? '1' : '0') } catch { /* ignore */ }
