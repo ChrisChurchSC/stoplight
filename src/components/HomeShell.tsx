@@ -73,11 +73,11 @@ function CampaignNav() {
       >
         <span className="nav-ico"><FilesIco /></span>
       </button>
-      {/* ASSETS AND GRETEL ARE PARKED. Both work, and both are beside the point right now: the
-          canvas is the thing being made good, and a rail offering three doors when one is finished
-          invites people through the other two. Disabled with the reason on the tooltip rather than
-          hidden, because a control that vanishes reads as something you broke, and these are coming
-          back. Re-enable by deleting the disabled prop and restoring the onClick. */}
+      {/* ASSETS IS STILL PARKED. It works, but the canvas is what is being made good, and a rail
+          offering a door to somewhere unfinished invites people through it. Disabled with the
+          reason on the tooltip rather than hidden, because a control that vanishes reads as
+          something you broke, and it is coming back. Re-enable by deleting the disabled prop and
+          giving it the onClick the other two have. */}
       <button
         className="nav-item soon"
         disabled
@@ -86,11 +86,14 @@ function CampaignNav() {
       >
         <span className="nav-ico"><AssetsIco /></span>
       </button>
+      {/* Gretel is live again. Same shape as Files: it does not swap the canvas out, it opens the
+          assistant docked beside it — so it closes Assets rather than coexisting with it, since the
+          two share the slot. */}
       <button
-        className="nav-item soon"
-        disabled
-        title="Gretel: the campaign assistant. Coming soon."
-        aria-label="Gretel, coming soon"
+        className={`nav-item${onBoard && !assetsOpen && !chatCollapsed ? ' active' : ''}`}
+        onClick={() => { setFlowView('flow'); setAssetsOpen(false); setChatCollapsed(false) }}
+        title="Gretel: the campaign assistant"
+        aria-label="Gretel"
       >
         <span className="nav-ico"><SparkIco /></span>
       </button>
