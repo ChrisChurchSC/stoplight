@@ -8,6 +8,8 @@ import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
 import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
+import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
+import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
 import { detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
 import type { MediaType, RowStatus, TrafficRow } from '../domain/types'
@@ -109,6 +111,33 @@ function mediaArg(value: unknown, fallback: MediaType = 'image'): MediaType {
   if (!raw) return fallback
   if (!MEDIA_TYPES.includes(raw as MediaType)) throw new Error(`unknown mediaType "${raw}". Use one of: ${MEDIA_TYPES.join(', ')}`)
   return raw as MediaType
+}
+
+/** A card kind an agent named, checked against the set the toolbar itself offers. */
+function objectKindArg(value: unknown): CanvasObjectKind {
+  const raw = str(value).trim().toLowerCase().replace(/\s+/g, '-')
+  const hit = OBJECT_CARD_KINDS.find((k) => k === raw)
+  if (!hit) throw new Error(`unknown card kind "${str(value).trim()}". Use one of: ${OBJECT_CARD_KINDS.join(', ')}`)
+  return hit
+}
+
+/** A free-ish spot for a new card, so a board written over MCP is readable rather than a pile. */
+function nextSlot(pos: Record<string, { x: number; y: number }>): { x: number; y: number } {
+  const n = Object.keys(pos ?? {}).length
+  return { x: 60 + (n % 5) * 280, y: 60 + Math.floor(n / 5) * 220 }
+}
+
+/** What an object-card write reports back: what it still owes, in the card's own vocabulary. */
+function objectCardReport(kind: CanvasObjectKind, direction: { key: string; value: string }[], clamped: string[]) {
+  const coverage = directionCoverage(kind, direction)
+  const out: Record<string, unknown> = { fields: coverage }
+  if (clamped.length) out.clampedToLimit = clamped
+  if (coverage.missing.length) {
+    out.fieldsNote =
+      `${coverage.missing.join(', ')} unanswered. Direction is what this card contributes to the copy — ` +
+      `without it the card adds a name and nothing else.`
+  }
+  return out
 }
 
 /** The first component carrying text, in the order the card renders them, trimmed to a name. */
@@ -276,7 +305,7 @@ const BUSINESS_MODEL_BY_MOTION: Record<string, string> = {
 export const GRETEL_ACTIONS = [
   // reads
   'listClients', 'getBrand', 'getStrategy', 'listAssets', 'listCanvases',
-  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'getAssetFields',
+  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'getAssetFields', 'getObjectFields', 'listObjectCards',
   // additive brand records
   'addAudience', 'addProofPoint', 'addSubject', 'addHook', 'addCta',
 ] as const
@@ -930,6 +959,101 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         (rendersInCreative(mediaType)
           ? ` \`${IN_CREATIVE_KEY}\` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it.`
           : ` A text asset has no creative, so it renders no in-creative row.`),
+    }
+  },
+
+  // ── Object cards ────────────────────────────────────────────────────────────────────────────
+  // The OTHER kind of card in this app: the ones on a campaign's flow board that instruct the copy
+  // writer (an Audience card carrying a pain, a Trigger carrying the ask). Gretel could put them on
+  // a board from inside the app; nothing outside could, so a campaign set up over MCP arrived with
+  // deliverables and no direction behind them.
+
+  // What a card of this kind asks for. The read that comes before writing one.
+  async getObjectFields(a) {
+    const kind = objectKindArg(a.kind)
+    const asks = describeObjectFields(kind)
+    return {
+      kind,
+      fields: asks,
+      keys: asks.map((f) => f.key),
+      recordType: recordTypeFor(kind),
+      note: asks.length
+        ? `Pass these keys in add_object_card/edit_object_card \`fields\`. Direction is what the card ` +
+          `contributes to the copy — a card with none adds a name and nothing else.`
+        : `A ${kind} card asks for no direction: it contributes through the record it names. Set \`record\` or \`name\`.`,
+    }
+  },
+
+  // Every object card on a campaign's board, with what each one still owes.
+  async listObjectCards(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const board = boardFor(useTrafficStore.getState().flowBoards, campaign)
+    const cards = board.objects.map(objectCardView)
+    return {
+      campaign,
+      total: cards.length,
+      cards,
+      incomplete: cards.filter((c) => !c.fields.complete).map((c) => c.id),
+    }
+  },
+
+  // Put a card on a campaign's board.
+  async addObjectCard(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const kind = objectKindArg(a.kind)
+    const { direction, clamped } = applyDirection(kind, [], a.fields as Record<string, unknown> | undefined)
+    const made: CanvasObject = {
+      id: freshObjectId(),
+      kind,
+      text: str(a.note).trim(),
+      ...(str(a.name).trim() ? { name: str(a.name).trim() } : {}),
+      ...(str(a.refId).trim() ? { refId: str(a.refId).trim() } : {}),
+      ...(direction.length ? { direction } : {}),
+    }
+    const board = boardFor(useTrafficStore.getState().flowBoards, campaign)
+    useTrafficStore.getState().saveFlowBoard({
+      ...board,
+      objects: [...board.objects, made],
+      // Laid out rather than stacked at the origin: a board of cards all at 0,0 is one card as far
+      // as anyone looking at it is concerned.
+      pos: { ...board.pos, [made.id]: nextSlot(board.pos) },
+    })
+    return {
+      id: made.id,
+      campaign,
+      kind,
+      name: made.name ?? '',
+      ...objectCardReport(kind, direction, clamped),
+    }
+  },
+
+  // Sharpen a card already on a board: its name, its note, its direction, the record it points at.
+  async editObjectCard(a) {
+    const id = str(a.objectId).trim() || str(a.id).trim()
+    if (!id) throw new Error('objectId is required')
+    const boards = useTrafficStore.getState().flowBoards
+    const board = boards.find((b) => b.objects.some((o) => o.id === id))
+    if (!board) throw new Error(`object card not found: ${id}`)
+    const existing = board.objects.find((o) => o.id === id)!
+    const { direction, clamped } = applyDirection(existing.kind, existing.direction, a.fields as Record<string, unknown> | undefined)
+    const next: CanvasObject = {
+      ...existing,
+      ...(typeof a.name === 'string' ? { name: str(a.name).trim() } : {}),
+      ...(typeof a.note === 'string' ? { text: str(a.note).trim() } : {}),
+      ...(str(a.refId).trim() ? { refId: str(a.refId).trim() } : {}),
+      ...(direction.length ? { direction } : { direction: undefined }),
+    }
+    useTrafficStore.getState().saveFlowBoard({
+      ...board,
+      objects: board.objects.map((o) => (o.id === id ? next : o)),
+    })
+    return {
+      id,
+      campaign: board.key,
+      kind: existing.kind,
+      ...objectCardReport(existing.kind, direction, clamped),
     }
   },
 
