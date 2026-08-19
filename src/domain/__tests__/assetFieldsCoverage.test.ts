@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CHANNEL_LIST, resolveChannelId } from '../channels'
 import { MESSAGING_OVERRIDE_FORMATS, messagingFields } from '../messaging'
-import { GENERIC_CTA_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys } from '../assetFields'
+import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys } from '../assetFields'
 import type { ChannelId } from '../types'
 
 /**
@@ -34,6 +34,7 @@ describe('every format the app can render', () => {
 
   it('describes every component the card renders', () => {
     for (const { channel, assetType, label } of FORMATS) {
+      // No media type asked about, so no in-creative row: the messaging components alone.
       const described = describeAssetFields(channel, assetType).map((f) => f.key)
       const actual = messagingFields(channel, assetType).map((f) => f.key)
       expect(described, `${label}: describe_asset_fields disagrees with the card`).toEqual(actual)
@@ -78,6 +79,64 @@ describe('every format the app can render', () => {
     for (const { channel, assetType, label } of FORMATS) {
       const keys = Object.values(messagingKeys(channel, assetType)).filter(Boolean)
       expect(new Set(keys).size, `${label}: two aliases collided`).toBe(keys.length)
+    }
+  })
+})
+
+describe('the in-creative row', () => {
+  it('is offered on every format when the asset has a creative to read', () => {
+    for (const { channel, assetType, label } of FORMATS) {
+      for (const media of ['image', 'video', 'link'] as const) {
+        const keys = describeAssetFields(channel, assetType, media).map((f) => f.key)
+        expect(keys, `${label}/${media}: no in-creative row offered`).toContain(IN_CREATIVE_KEY)
+      }
+      expect(
+        describeAssetFields(channel, assetType, 'text').map((f) => f.key),
+        `${label}/text: a text asset has no creative`,
+      ).not.toContain(IN_CREATIVE_KEY)
+    }
+  })
+
+  it('is written to the row, never into the messaging map', () => {
+    // It lives on the row as `extractedCopy`. Folding it into messaging would store it under a key
+    // no format defines and no card reads.
+    const { messaging, inCreativeCopy } = applyCopyFields('instagram', undefined, {}, {
+      fields: { caption: 'Post copy', [IN_CREATIVE_KEY]: 'BIG SALE, on the image itself' },
+    }, 'image')
+    expect(inCreativeCopy).toBe('BIG SALE, on the image itself')
+    expect(messaging).toEqual({ caption: 'Post copy' })
+    expect(messaging[IN_CREATIVE_KEY]).toBeUndefined()
+  })
+
+  it('is refused on a text asset, which renders no such row', () => {
+    expect(() =>
+      applyCopyFields('email', undefined, {}, { fields: { [IN_CREATIVE_KEY]: 'nowhere' } }, 'text'),
+    ).toThrow(/unknown field key/)
+  })
+
+  it('counts against a real row, and only when that row has a creative', () => {
+    const asImage = fieldCoverage('instagram', undefined, { caption: 'Post copy' }, { mediaType: 'image' })
+    expect(asImage.missing).toEqual([IN_CREATIVE_KEY])
+    expect(asImage.complete).toBe(false)
+
+    const filled = fieldCoverage('instagram', undefined, { caption: 'Post copy' }, { mediaType: 'image', extractedCopy: 'On-image words' })
+    expect(filled.complete).toBe(true)
+
+    const asText = fieldCoverage('instagram', undefined, { caption: 'Post copy' }, { mediaType: 'text' })
+    expect(asText.complete).toBe(true)
+
+    // Asked about the schema rather than a row, the answer stays about messaging alone.
+    expect(fieldCoverage('instagram', undefined, { caption: 'Post copy' }).complete).toBe(true)
+  })
+
+  it('can fill every component of every format, in-creative row included', () => {
+    for (const { channel, assetType, label } of FORMATS) {
+      const keys = describeAssetFields(channel, assetType, 'image').map((f) => f.key)
+      const fields = Object.fromEntries(keys.map((k) => [k, `copy for ${k}`]))
+      const { messaging, inCreativeCopy } = applyCopyFields(channel, assetType, {}, { fields }, 'image')
+      const coverage = fieldCoverage(channel, assetType, messaging, { mediaType: 'image', extractedCopy: inCreativeCopy })
+      expect(coverage.missing, `${label}: components left unwritable`).toEqual([])
+      expect(coverage.complete, `${label}: not complete after writing every key`).toBe(true)
     }
   })
 })

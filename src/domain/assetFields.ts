@@ -1,5 +1,5 @@
 import { clampToLimit, messagingFields, type MessagingField } from './messaging'
-import type { ChannelId } from './types'
+import type { ChannelId, MediaType } from './types'
 
 /**
  * WHAT AN AGENT IS ALLOWED TO WRITE ONTO A CARD, AND WHETHER IT WROTE ALL OF IT.
@@ -31,15 +31,26 @@ export interface AssetFieldSpec {
   multiline?: boolean
 }
 
-/** The exact components a card of this channel + type renders, in the order it renders them. */
-export function describeAssetFields(channel: ChannelId, assetType?: string): AssetFieldSpec[] {
-  return messagingFields(channel, assetType).map((f) => ({
+/**
+ * The exact components a card of this channel + type renders, in the order it renders them.
+ *
+ * `mediaType` is what decides whether the in-creative row is one of them, so it is only appended
+ * when a caller says what the asset is made of — passing nothing describes the messaging components
+ * alone. The bridge always passes it, because an agent asking "what does this card render" needs
+ * the honest answer for the card it is about to create.
+ */
+export function describeAssetFields(channel: ChannelId, assetType?: string, mediaType?: MediaType): AssetFieldSpec[] {
+  const out: AssetFieldSpec[] = messagingFields(channel, assetType).map((f) => ({
     key: f.key,
     label: f.label,
     ...(f.recommended === undefined ? {} : { recommended: f.recommended }),
     ...(f.hardLimit === undefined ? {} : { hardLimit: f.hardLimit }),
     ...(f.multiline ? { multiline: true } : {}),
   }))
+  if (mediaType && rendersInCreative(mediaType)) {
+    out.push({ key: IN_CREATIVE_KEY, label: 'In-creative copy', multiline: true })
+  }
+  return out
 }
 
 /**
@@ -51,6 +62,27 @@ export function describeAssetFields(channel: ChannelId, assetType?: string): Ass
  * "not in the schema" would refuse copy the card is sitting there waiting to display.
  */
 export const GENERIC_CTA_KEY = 'cta'
+
+/**
+ * The copy written INSIDE the creative — image and video overlays, voiceover, the words on a linked
+ * page. A card renders it as its own row, but it is not a messaging component: it lives on the row
+ * as `extractedCopy`, because it describes what the artwork already says rather than what the post
+ * says around it. The copy extractor fills it from real creative and a person can edit it on the
+ * card; addressing it by this key is how an agent reaches the same row.
+ */
+export const IN_CREATIVE_KEY = 'in-creative-copy'
+
+/** The media types whose cards render an in-creative row. Text posts have no creative to read. */
+const IN_CREATIVE_MEDIA: MediaType[] = ['image', 'video', 'link']
+
+/**
+ * Whether this card renders an in-creative row.
+ *
+ * Defaults to image, which is what the store gives an authored asset that names no media type — so
+ * the default answer matches the card the agent will actually get.
+ */
+export const rendersInCreative = (mediaType?: MediaType): boolean =>
+  IN_CREATIVE_MEDIA.includes(mediaType ?? 'image')
 
 /** The four friendly names the MCP has always taken, in the order they are resolved. */
 export const COPY_ALIASES = ['headline', 'primaryText', 'description', 'cta'] as const
@@ -124,6 +156,12 @@ export interface CopyInput {
 export interface AppliedCopy {
   /** The messaging map to store: `base` with everything this write resolved laid over it. */
   messaging: Record<string, string>
+  /**
+   * The in-creative copy this write set, when it set any. Kept OUT of `messaging` deliberately —
+   * it belongs on the row as `extractedCopy`, and folding it in would store it under a key no card
+   * reads and no format defines.
+   */
+  inCreativeCopy?: string
   /** Alias → the key it was written to. Echoed back so a surprising resolution is visible. */
   mapped: Partial<Record<CopyAlias, string>>
   /** Aliases this format has no field for. Their copy was NOT stored — say so, never swallow it. */
@@ -156,6 +194,7 @@ export function applyCopyFields(
   assetType: string | undefined,
   base: Record<string, string>,
   input: CopyInput,
+  mediaType?: MediaType,
 ): AppliedCopy {
   const specs = messagingFields(channel, assetType)
   const byKey = new Map(specs.map((f) => [f.key, f]))
@@ -183,15 +222,23 @@ export function applyCopyFields(
     put(key, raw, byKey.get(key))
   }
 
+  let inCreativeCopy: string | undefined
   const fields = input.fields
   if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
     const entries = Object.entries(fields as Record<string, unknown>).filter(([, v]) => typeof v === 'string')
-    const unknown = entries.map(([k]) => k).filter((k) => !byKey.has(k) && k !== GENERIC_CTA_KEY)
-    if (unknown.length) throw new UnknownAssetFieldError(unknown, [...specs.map((f) => f.key), GENERIC_CTA_KEY])
-    for (const [key, value] of entries) put(key, value as string, byKey.get(key))
+    // The in-creative row is only on the card when there is a creative to read, so on a text asset
+    // the key is refused rather than stored somewhere nothing renders.
+    const allowsInCreative = rendersInCreative(mediaType)
+    const valid = [...specs.map((f) => f.key), GENERIC_CTA_KEY, ...(allowsInCreative ? [IN_CREATIVE_KEY] : [])]
+    const unknown = entries.map(([k]) => k).filter((k) => !valid.includes(k))
+    if (unknown.length) throw new UnknownAssetFieldError(unknown, valid)
+    for (const [key, value] of entries) {
+      if (key === IN_CREATIVE_KEY) inCreativeCopy = value as string
+      else put(key, value as string, byKey.get(key))
+    }
   }
 
-  return { messaging, mapped, unmapped, clamped }
+  return { messaging, inCreativeCopy, mapped, unmapped, clamped }
 }
 
 /**
@@ -206,6 +253,7 @@ export function fieldCoverage(
   channel: ChannelId,
   assetType: string | undefined,
   messaging: Record<string, string> | undefined,
+  row?: { mediaType?: MediaType; extractedCopy?: string },
 ): { filled: string[]; missing: string[]; complete: boolean } {
   const m = messaging ?? {}
   const filled: string[] = []
@@ -213,6 +261,12 @@ export function fieldCoverage(
   for (const f of messagingFields(channel, assetType)) {
     if ((m[f.key] ?? '').trim()) filled.push(f.key)
     else missing.push(f.key)
+  }
+  // Counted only when asked about a real row, so a bare schema question still answers about the
+  // messaging components alone.
+  if (row && rendersInCreative(row.mediaType)) {
+    if ((row.extractedCopy ?? '').trim()) filled.push(IN_CREATIVE_KEY)
+    else missing.push(IN_CREATIVE_KEY)
   }
   return { filled, missing, complete: missing.length === 0 }
 }
