@@ -7115,6 +7115,39 @@ export function FlowsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardsHydrated])
 
+  /**
+   * CARDS THIS VIEW DID NOT PUT THERE — an object card written to the board from outside, by the
+   * MCP connector while this campaign happens to be open.
+   *
+   * The board is loaded on view-switch and lives in this component's state from then on, so an
+   * external write went into the store and was then flattened by the next autosave from here: the
+   * card was created, reported success, and vanished. Reloading the board instead would be the
+   * general "react to every flowBoards change" effect the hydration gate above deliberately refuses,
+   * because this component is the thing that writes flowBoards and would fight the user's own edits.
+   *
+   * So this MERGES rather than reloads, and only ever ADDS. A card the store has and this view does
+   * not is appended; everything already here keeps the state the person is working in, including
+   * cards they have deleted this session — those are gone from local state on purpose and a
+   * union would resurrect them, so the ids seen at load are remembered and never re-added.
+   */
+  const seenObjectIds = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!boardsHydrated || !viewName) return
+    const stored = boardFor(flowBoards, viewName)
+    const known = new Set(objects.map((o) => o.id))
+    const fresh = stored.objects.filter((o) => !known.has(o.id) && !seenObjectIds.current.has(o.id))
+    for (const o of stored.objects) seenObjectIds.current.add(o.id)
+    if (!fresh.length) return
+    setObjects((n) => [...n, ...fresh])
+    objectsRef.current = [...objectsRef.current, ...fresh]
+    setPos((pp) => {
+      const next = { ...pp }
+      for (const o of fresh) next[o.id] = stored.pos?.[o.id] ?? { x: 0, y: 0 }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowBoards, boardsHydrated, viewName])
+
   // Measure node positions (canvas-local) so the SVG connectors track them as nodes
   // move, pan, and zoom. During an active drag we SKIP the remeasure — re-reading every node's
   // bounding rect each frame can't keep 60fps on a large flow, so connectors would trail the

@@ -563,6 +563,66 @@ server.registerTool(
 )
 
 server.registerTool(
+  'get_object_fields',
+  {
+    title: 'What an object card asks for',
+    description:
+      'The direction a flow-board object card of this kind asks for — key, label, hint, character cap — plus the record type it names. Direction is the INSTRUCTION the card gives the copy writer (an Audience asks for a pain and an objection; a Trigger for what the reader just did and the ask), and it is what the card contributes: one with none adds a name and nothing else. Call before add_object_card / edit_object_card. Some kinds (voice, concept, note, brand, product, pattern) ask for no direction and contribute through their record.',
+    inputSchema: { kind: z.string().describe('Card kind: audience, proof-point, company, person, message, voice, trigger, brand, product, concept, season, pattern') },
+  },
+  async (a) => text(await dispatch('getObjectFields', a)),
+)
+
+server.registerTool(
+  'list_object_cards',
+  {
+    title: 'The object cards on a campaign’s board',
+    description:
+      'Every object card on a campaign’s flow board: id, kind, name, the record it points at, its direction, and which of its questions are still unanswered. Use it to see what is instructing the copy on this campaign, and which cards are contributing nothing yet.',
+    inputSchema: { campaign: z.string().describe('The campaign whose board to read') },
+  },
+  async (a) => text(await dispatch('listObjectCards', a)),
+)
+
+server.registerTool(
+  'add_object_card',
+  {
+    title: 'Put an object card on a campaign’s board',
+    description:
+      'Add an object card to a campaign’s flow board — the cards that instruct the copy writer, as opposed to the assets it writes. Call get_object_fields first and pass every key it lists in `fields`: a card with no direction contributes a name and nothing else. The reply names whatever is still unanswered.',
+    inputSchema: {
+      campaign: z.string().describe('The campaign whose board to add to'),
+      kind: z.string().describe('Card kind: audience, proof-point, company, person, message, voice, trigger, brand, product, concept, season, pattern'),
+      name: z.string().optional().describe('What to call this card, in your own words (survives changing the record under it)'),
+      note: z.string().optional().describe('A team note on the card. Never sent to the copy writer — direction is what reaches it.'),
+      fields: z
+        .record(z.string())
+        .optional()
+        .describe('The card’s direction by key → answer, from get_object_fields. e.g. { pain, objection } on an audience card.'),
+      refId: z.string().optional().describe('Id of the record this card points at, when you have one'),
+    },
+  },
+  async (a) => text(await dispatch('addObjectCard', a)),
+)
+
+server.registerTool(
+  'edit_object_card',
+  {
+    title: 'Sharpen an object card',
+    description:
+      'Edit an object card already on a board: its name, its note, the record it points at, and its direction. Keys you do not mention keep their answers; an empty string clears one. This is how a card that contributes nothing gets given something to say.',
+    inputSchema: {
+      objectId: z.string().describe('The card id (from list_object_cards)'),
+      name: z.string().optional(),
+      note: z.string().optional(),
+      fields: z.record(z.string()).optional().describe('Direction by key → answer. Empty string clears a key.'),
+      refId: z.string().optional(),
+    },
+  },
+  async (a) => text(await dispatch('editObjectCard', a)),
+)
+
+server.registerTool(
   'get_asset_fields',
   {
     title: 'The components an asset card renders',
