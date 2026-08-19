@@ -18,6 +18,13 @@ create table if not exists public.workspaces (
   created_at  timestamptz not null default now()
 );
 
+-- One workspace per creator. See migrations/0011 for the race this closes; in short, every
+-- application-level guard is check-then-act and concurrent first sign-ins all win their check.
+-- Partial because created_by is nullable — a deleted account leaves workspaces behind.
+create unique index if not exists workspaces_one_per_creator
+    on public.workspaces (created_by)
+ where created_by is not null;
+
 do $$ begin
   create type public.member_role as enum ('owner', 'editor', 'stakeholder');
 exception when duplicate_object then null; end $$;
