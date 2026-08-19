@@ -15,7 +15,97 @@ import { z } from 'zod'
 
 const BRIDGE = process.env.BREADCRUMBS_BRIDGE_URL || 'http://localhost:5173'
 
-async function dispatch(action, args) {
+/**
+ * TWO WAYS TO REACH THE APP, chosen by whether a token is configured.
+ *
+ * With BREADCRUMBS_TOKEN set, commands go through the WORKSPACE — a queue table in Supabase that
+ * the deployed app watches — so Desktop drives the real site with no dev server involved. Without
+ * one, the original local path: POST to the Vite plugin's endpoint.
+ *
+ * The local path could not be made to work against the deployment. It is an SSE hub holding open
+ * streams and the pending commands in module scope, and a serverless function gets a fresh instance
+ * per invocation, so the tab's stream and the command awaiting its reply would land in different
+ * ones. The database is the one thing both ends can already reach.
+ */
+const TOKEN = process.env.BREADCRUMBS_TOKEN || ''
+const SUPABASE_URL = process.env.BREADCRUMBS_SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
+const SUPABASE_ANON_KEY = process.env.BREADCRUMBS_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
+/** How long to wait for a tab to pick a command up and answer it. */
+const COMMAND_TIMEOUT_MS = Number(process.env.BREADCRUMBS_TIMEOUT_MS || 120_000)
+const POLL_MS = 400
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/** Call one of the two security-definer functions. The token authenticates the call itself. */
+async function rpc(fn, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify(body),
+  })
+  const text = await res.text()
+  let parsed
+  try {
+    parsed = text ? JSON.parse(text) : null
+  } catch {
+    parsed = text
+  }
+  if (!res.ok) {
+    const message = (parsed && (parsed.message || parsed.error || parsed.hint)) || String(parsed ?? res.status)
+    throw new Error(message)
+  }
+  return parsed
+}
+
+/** Enqueue against the workspace, then wait for the tab to answer. */
+async function dispatchViaWorkspace(action, args) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return {
+      ok: false,
+      error:
+        'BREADCRUMBS_TOKEN is set but the Supabase project is not. Add BREADCRUMBS_SUPABASE_URL and BREADCRUMBS_SUPABASE_ANON_KEY to the connector config.',
+    }
+  }
+  let id
+  try {
+    id = await rpc('agent_enqueue', { p_token: TOKEN, p_action: action, p_args: args ?? {} })
+  } catch (e) {
+    const message = String(e?.message ?? e)
+    // The one failure worth naming precisely: everything else reads as a connection problem, this
+    // one is a credential the person has to go and re-mint.
+    if (/invalid or revoked token/i.test(message)) {
+      return { ok: false, error: 'This connector token is invalid or has been revoked. Mint a new one in Breadcrumbs under Connect Claude Desktop.' }
+    }
+    return { ok: false, error: `Cannot reach the Breadcrumbs workspace: ${message}` }
+  }
+
+  const deadline = Date.now() + COMMAND_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    await sleep(POLL_MS)
+    let rows
+    try {
+      rows = await rpc('agent_result', { p_token: TOKEN, p_id: id })
+    } catch (e) {
+      return { ok: false, error: `Lost the workspace connection: ${String(e?.message ?? e)}` }
+    }
+    const row = Array.isArray(rows) ? rows[0] : rows
+    if (!row || row.status === 'pending') continue
+    if (row.status === 'error') return { ok: false, error: row.error || 'The command failed.' }
+    return row.result
+  }
+  return {
+    ok: false,
+    error:
+      'No Breadcrumbs tab picked this up. Open your Breadcrumbs site and sign in — the open tab is what runs commands — then retry.',
+  }
+}
+
+/** The original local path: the dev server's bridge plugin, dispatching into an open tab. */
+async function dispatchViaDevServer(action, args) {
   let res
   try {
     res = await fetch(`${BRIDGE}/api/agent-command`, {
@@ -31,6 +121,10 @@ async function dispatch(action, args) {
     return { ok: false, error: data.message || 'No Breadcrumbs tab is open. Open http://localhost:5173 and retry.' }
   }
   return data
+}
+
+async function dispatch(action, args) {
+  return TOKEN ? dispatchViaWorkspace(action, args) : dispatchViaDevServer(action, args)
 }
 
 const text = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] })

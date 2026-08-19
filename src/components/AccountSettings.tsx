@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
+import { createAgentToken, listAgentTokens, revokeAgentToken, type AgentToken } from '../lib/agentTokens'
 import { SKILL_LEVELS, MARKETER_ROLES } from '../domain/userPrefs'
 import { hasSavedAccount, loadAccount, saveAccount, type Account } from '../lib/account'
 
@@ -99,6 +100,149 @@ function ProfileSection() {
   )
 }
 
+/**
+ * CONNECT CLAUDE DESKTOP — mint the credential, and say plainly what it can do.
+ *
+ * A token here is full authority over this workspace: everything the connector can do, it can do,
+ * including the destructive actions. That is stated rather than buried, because the person deciding
+ * whether to paste it into a config file is the only one who can weigh it.
+ *
+ * The plaintext is generated in the browser and shown exactly once — the server only ever sees its
+ * hash. So there is no "reveal again", and the panel says so at the moment it matters rather than
+ * leaving someone to discover it after closing the dialog.
+ */
+function ConnectionsSection() {
+  const [tokens, setTokens] = useState<AgentToken[]>([])
+  const [label, setLabel] = useState('Claude Desktop')
+  const [minted, setMinted] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const refresh = () => void listAgentTokens().then(setTokens)
+  useEffect(refresh, [])
+
+  const create = async () => {
+    setBusy(true)
+    setErr(null)
+    const res = await createAgentToken(label)
+    setBusy(false)
+    if ('error' in res) {
+      setErr(res.error)
+      return
+    }
+    setMinted(res.token)
+    setCopied(false)
+    refresh()
+  }
+
+  const revoke = async (id: string) => {
+    const error = await revokeAgentToken(id)
+    if (error) setErr(error)
+    refresh()
+  }
+
+  const config = minted
+    ? JSON.stringify(
+        {
+          mcpServers: {
+            breadcrumbs: {
+              command: 'node',
+              args: ['/absolute/path/to/stoplight/mcp/breadcrumbs-server.mjs'],
+              env: {
+                BREADCRUMBS_TOKEN: minted,
+                BREADCRUMBS_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL ?? '',
+                BREADCRUMBS_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )
+    : ''
+
+  const live = tokens.filter((t) => !t.revokedAt)
+
+  return (
+    <div className="acct-prefs">
+      <div className="acct-pref">
+        <div className="acct-pref-label">Claude Desktop</div>
+        <div className="acct-pref-hint">
+          Drive this workspace from Claude Desktop. Commands run in an open Breadcrumbs tab, so keep one signed in
+          while you work — that tab is what carries them out. A token has the same authority over this workspace that
+          you do, including deleting things; revoke it here the moment you don't want it.
+        </div>
+        {!minted && (
+          <div className="acct-token-row">
+            <input
+              className="library-input"
+              placeholder="What is this for? e.g. My laptop"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+            <button className="acct-token-mint" disabled={busy} onClick={() => void create()}>
+              {busy ? 'Creating…' : 'Create a token'}
+            </button>
+          </div>
+        )}
+        {err && <div className="acct-token-err">{err}</div>}
+        {minted && (
+          <div className="acct-token-minted">
+            <div className="acct-token-once">
+              Copy this now — it is shown once. We store only a hash of it, so it cannot be shown again. Lost one?
+              Revoke it and make another.
+            </div>
+            <code className="acct-token-value">{minted}</code>
+            <div className="acct-token-cfg-label">Paste into your Claude Desktop config:</div>
+            <pre className="acct-token-cfg">{config}</pre>
+            <div className="acct-token-row">
+              <button
+                className="acct-token-mint"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(config)
+                  setCopied(true)
+                }}
+              >
+                {copied ? 'Copied' : 'Copy config'}
+              </button>
+              <button className="acct-token-done" onClick={() => setMinted(null)}>
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="acct-pref">
+        <div className="acct-pref-label">Tokens</div>
+        <div className="acct-pref-hint">
+          {live.length ? `${live.length} active.` : 'None active.'} A revoked token stops working on its next call.
+        </div>
+        {tokens.map((t) => (
+          <div className={`acct-token-item${t.revokedAt ? ' revoked' : ''}`} key={t.id}>
+            <div className="acct-token-item-main">
+              <span className="acct-token-item-label">{t.label || 'Unnamed'}</span>
+              <span className="acct-token-item-meta">
+                {t.revokedAt
+                  ? `Revoked ${new Date(t.revokedAt).toLocaleDateString()}`
+                  : t.lastUsedAt
+                    ? `Last used ${new Date(t.lastUsedAt).toLocaleString()}`
+                    : 'Never used'}
+              </span>
+            </div>
+            {!t.revokedAt && (
+              <button className="acct-token-revoke" onClick={() => void revoke(t.id)}>
+                Revoke
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Placeholder({ label }: { label: string }) {
   return <div className="acct-empty">{label} settings are coming soon.</div>
 }
@@ -179,6 +323,8 @@ export function AccountSettings() {
         return <ProfileSection />
       case 'appearance':
         return <AppearanceSection />
+      case 'connections':
+        return <ConnectionsSection />
       default:
         return <Placeholder label={current.label} />
     }

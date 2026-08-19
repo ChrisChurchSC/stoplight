@@ -374,3 +374,60 @@ create policy campaign_versions_delete on public.campaign_versions
 -- artboards, canvas card positions, campaign RTBs, accounts / target lists / campaign target,
 -- share grants, ai model choice. Listed here so the gap is visible rather than inferred from a
 -- grep for localStorage.setItem.
+
+-- ── The Claude Desktop connector (agent tokens + command queue) ──
+-- Lets the MCP server drive the DEPLOYED app: it enqueues a command against the workspace, and an
+-- open tab (still the executor, because the app's logic lives in its store) runs it and writes the
+-- answer back. The old path was a Vite dev-server plugin holding SSE streams in module scope, which
+-- could never exist in production. Full commentary in
+-- supabase/migrations/0012_agent_connector.sql — including why the two entry points are security
+-- definer functions rather than table policies (the MCP holds an opaque token, not a session, so
+-- auth.uid() is null for it and no RLS policy can recognise it).
+create extension if not exists pgcrypto;
+
+create table if not exists public.agent_tokens (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  user_id      uuid not null references auth.users on delete cascade,
+  token_hash   text not null unique,
+  label        text,
+  created_at   timestamptz not null default now(),
+  last_used_at timestamptz,
+  revoked_at   timestamptz
+);
+create index if not exists agent_tokens_workspace_idx on public.agent_tokens (workspace_id);
+alter table public.agent_tokens enable row level security;
+drop policy if exists agent_tokens_select on public.agent_tokens;
+create policy agent_tokens_select on public.agent_tokens for select using (public.is_member(workspace_id));
+drop policy if exists agent_tokens_insert on public.agent_tokens;
+create policy agent_tokens_insert on public.agent_tokens
+  for insert with check (public.is_member(workspace_id) and user_id = auth.uid());
+drop policy if exists agent_tokens_update on public.agent_tokens;
+create policy agent_tokens_update on public.agent_tokens
+  for update using (public.is_member(workspace_id)) with check (public.is_member(workspace_id));
+drop policy if exists agent_tokens_delete on public.agent_tokens;
+create policy agent_tokens_delete on public.agent_tokens for delete using (public.is_member(workspace_id));
+
+create table if not exists public.agent_commands (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  token_id     uuid references public.agent_tokens on delete set null,
+  action       text not null,
+  args         jsonb not null default '{}'::jsonb,
+  status       text not null default 'pending' check (status in ('pending', 'done', 'error')),
+  result       jsonb,
+  error        text,
+  created_at   timestamptz not null default now(),
+  claimed_at   timestamptz,
+  completed_at timestamptz
+);
+create index if not exists agent_commands_pending_idx
+  on public.agent_commands (workspace_id, created_at) where status = 'pending';
+alter table public.agent_commands enable row level security;
+drop policy if exists agent_commands_select on public.agent_commands;
+create policy agent_commands_select on public.agent_commands for select using (public.is_member(workspace_id));
+drop policy if exists agent_commands_update on public.agent_commands;
+create policy agent_commands_update on public.agent_commands
+  for update using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
+-- No insert policy on purpose: a command may only be created by agent_enqueue, which is what ties
+-- every row to a verified token.

@@ -1636,17 +1636,28 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
 let started = false
 let es: EventSource | null = null
 
+/**
+ * Run one action against this tab's store, and never throw.
+ *
+ * The single execution path, because there are two transports now: the dev server's SSE bridge and
+ * the workspace command queue the deployed app is driven through. Two copies of "look up the
+ * handler, run it, shape the error" is how one of them ends up with a slightly different idea of
+ * what an unknown action does.
+ */
+export async function runAgentAction(action: string, args?: Args): Promise<{ result?: unknown; error?: string }> {
+  try {
+    const h = handlers[action]
+    if (!h) throw new Error(`unknown action: ${action}`)
+    return { result: await h(args ?? {}) }
+  } catch (err) {
+    return { error: String((err as Error)?.message ?? err) }
+  }
+}
+
 function onCommand(e: Event): void {
   void (async () => {
     const cmd = JSON.parse((e as MessageEvent).data) as { id: string; action: string; args?: Args }
-    let payload: Record<string, unknown>
-    try {
-      const h = handlers[cmd.action]
-      if (!h) throw new Error(`unknown action: ${cmd.action}`)
-      payload = { id: cmd.id, result: await h(cmd.args ?? {}) }
-    } catch (err) {
-      payload = { id: cmd.id, error: String((err as Error)?.message ?? err) }
-    }
+    const payload: Record<string, unknown> = { id: cmd.id, ...(await runAgentAction(cmd.action, cmd.args)) }
     void apiFetch('/api/agent-result', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { startAgentQueue, stopAgentQueue } from '../lib/agentQueue'
 import {
   firstNameOf,
   getSession,
@@ -95,6 +96,23 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [company, setCompany] = useState('')
   const [companyErr, setCompanyErr] = useState<string | null>(null)
   const [googleBusy, setGoogleBusy] = useState(false)
+
+  /**
+   * WATCH FOR CLAUDE DESKTOP'S COMMANDS while somebody is signed in.
+   *
+   * Tied to the session rather than started at boot, because a command is addressed to a WORKSPACE
+   * and a signed-out tab has none. Stopped on the way out for the same reason: a poller left
+   * running after sign-out asks for another account's work every two seconds and is refused every
+   * two seconds.
+   */
+  useEffect(() => {
+    if (!user) {
+      stopAgentQueue()
+      return
+    }
+    startAgentQueue()
+    return () => stopAgentQueue()
+  }, [user])
 
   useEffect(() => {
     let mounted = true

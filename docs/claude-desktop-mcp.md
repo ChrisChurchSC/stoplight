@@ -59,6 +59,69 @@ Pieces:
    - "Write Acme's messaging in Breadcrumbs: two audiences, three proof points, and a few hooks."
    - "Generate a demand-gen campaign's assets for Acme in Breadcrumbs from everything connected."
 
+## Against the deployed site (no dev server)
+
+There are two ways to connect, and the connector picks by whether `BREADCRUMBS_TOKEN` is set.
+
+| | Local | **Deployed** |
+|---|---|---|
+| Needs `npm run dev` | yes | **no** |
+| Tab open | localhost | **your Breadcrumbs site** |
+| Transport | Vite bridge plugin (SSE) | `agent_commands` queue in Supabase |
+| Config | nothing | `BREADCRUMBS_TOKEN` |
+
+**The open tab is still the executor in both.** The app's behaviour lives in its Zustand store —
+sixty-odd actions with their own rules about what may follow what — so commands run in a real tab
+and the UI updates live. What changed is only *how the command gets there*: the local path is a Vite
+plugin holding SSE streams and pending commands in module scope, which is stateful by construction
+and could never exist on serverless. The queue lives in the database instead, which both ends can
+already reach.
+
+### Setting it up
+
+1. **Apply the migration.** Run [`supabase/migrations/0012_agent_connector.sql`](../supabase/migrations/0012_agent_connector.sql)
+   in the Supabase SQL editor (see [backend-setup](./backend-setup.md)). It adds `agent_tokens`,
+   `agent_commands`, and the two entry-point functions.
+2. **Mint a token** in the app: **Settings → Connections → Create a token**. It is shown **once** —
+   only a SHA-256 of it is stored, so it cannot be shown again. The panel hands you a ready-made
+   config block.
+3. **Paste it into your Claude Desktop config** and restart Desktop:
+
+```json
+{
+  "mcpServers": {
+    "breadcrumbs": {
+      "command": "node",
+      "args": ["/absolute/path/to/stoplight/mcp/breadcrumbs-server.mjs"],
+      "env": {
+        "BREADCRUMBS_TOKEN": "bc_…",
+        "BREADCRUMBS_SUPABASE_URL": "https://<project>.supabase.co",
+        "BREADCRUMBS_SUPABASE_ANON_KEY": "<anon key>"
+      }
+    }
+  }
+}
+```
+
+4. **Open your Breadcrumbs site and sign in.** That tab is what runs the commands. With none open,
+   calls time out with a message saying so rather than failing obscurely.
+
+Omit `BREADCRUMBS_TOKEN` and everything works exactly as before, against `localhost:5173`.
+
+### What a token can do, and how to stop it
+
+A token carries **the same authority over that workspace that you do** — every action the connector
+exposes, including `delete_asset`, `delete_campaign` and `delete_client`. It is scoped to the one
+workspace it was minted in (the workspace is read from the token, never from an argument, so a
+command cannot be aimed elsewhere), and it is worth pointing at a scratch campaign first.
+
+Revoke in the same panel; it stops working on its next call. Revoking records a timestamp rather
+than deleting the row, so a token that did something can still be accounted for afterwards.
+
+Two tabs open on one workspace do not double-run anything: a command is claimed with a conditional
+update and only the tab that wins it executes. A tab that dies mid-command releases its claim after
+90 seconds so the next one can pick it up.
+
 ## The shape of a session
 
 Sixty-odd tools with no stated order is why a session used to start wherever the first sentence
