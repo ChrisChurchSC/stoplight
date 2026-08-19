@@ -34,16 +34,17 @@ const BackIco = () => (
 function CampaignNav() {
   const flowView = useTrafficStore((s) => s.flowView)
   const setFlowView = useTrafficStore((s) => s.setFlowView)
-  const chatCollapsed = useTrafficStore((s) => s.flowChatCollapsed)
-  const setChatCollapsed = useTrafficStore((s) => s.setFlowChatCollapsed)
+  const gretelOpen = useTrafficStore((s) => s.gretelOpen)
+  const setGretelOpen = useTrafficStore((s) => s.setGretelOpen)
   const assetsOpen = useTrafficStore((s) => s.flowAssetsOpen)
   const setAssetsOpen = useTrafficStore((s) => s.setFlowAssetsOpen)
   // FlowsView owns which screen it is on, so leaving the canvas is a request rather than a state
   // this component can set directly.
   const goHome = useTrafficStore((s) => s.goFlowHome)
-  // Files / Assets / Gretel all act on the ONE canvas: Files is the board itself, Assets and
-  // Gretel are panels docked onto its left (mutually exclusive — they share the slot). None of
-  // them swaps the canvas out, so switching between them never feels like a different screen.
+  // Files and Assets act on the ONE canvas: Files is the board itself, Assets is a panel docked
+  // onto its left. Neither swaps the canvas out, so switching between them never feels like a
+  // different screen. Gretel is no longer one of them — it opens a dialog over the board rather
+  // than taking the left slot, so it leaves whatever you were in untouched behind it.
   const onBoard = flowView === 'flow'
   /**
    * ICONS ONLY inside a campaign. These three never change and never grow, and the labels repeated
@@ -66,8 +67,8 @@ function CampaignNav() {
       </button>
       <div className="railnav-sep" />
       <button
-        className={`nav-item${onBoard && !assetsOpen && chatCollapsed ? ' active' : ''}`}
-        onClick={() => { setFlowView('flow'); setAssetsOpen(false); setChatCollapsed(true) }}
+        className={`nav-item${onBoard && !assetsOpen ? ' active' : ''}`}
+        onClick={() => { setFlowView('flow'); setAssetsOpen(false) }}
         title="Files: the campaign board"
         aria-label="Files"
       >
@@ -86,13 +87,14 @@ function CampaignNav() {
       >
         <span className="nav-ico"><AssetsIco /></span>
       </button>
-      {/* Gretel is live again. Same shape as Files: it does not swap the canvas out, it opens the
-          assistant docked beside it — so it closes Assets rather than coexisting with it, since the
-          two share the slot. */}
+      {/* Gretel hands off rather than answering here: it opens a dialog with a question about what
+          is on screen and a door to Claude or ChatGPT, where the Breadcrumbs connector gives them
+          this workspace. So unlike Files and Assets it changes nothing about the canvas — no panel
+          to close, nothing to give the slot back to. */}
       <button
-        className={`nav-item${onBoard && !assetsOpen && !chatCollapsed ? ' active' : ''}`}
-        onClick={() => { setFlowView('flow'); setAssetsOpen(false); setChatCollapsed(false) }}
-        title="Gretel: the campaign assistant"
+        className={`nav-item${gretelOpen ? ' active' : ''}`}
+        onClick={() => { setFlowView('flow'); setGretelOpen(true) }}
+        title="Gretel: ask your data anything"
         aria-label="Gretel"
       >
         <span className="nav-ico"><SparkIco /></span>

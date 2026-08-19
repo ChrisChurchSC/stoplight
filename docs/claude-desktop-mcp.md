@@ -161,3 +161,28 @@ Pass `includeCopyCheck: false` for a fast structural-only pass.
   the heuristic (`setup_client` still works, just without the site-grounded proposal).
 - **Bridge URL** defaults to `http://localhost:5173`. Override with `BREADCRUMBS_BRIDGE_URL`
   in the MCP server's env if you run the dev server on another port.
+
+## Gretel is a hand-off, not a chat
+
+Gretel used to be a chat panel docked beside the campaign canvas: its own thread, its own
+model call, its own approve-then-apply queue. It is now a dialog
+(`src/components/GretelHandoff.tsx`) that does one thing — it writes a good question about
+whatever is on screen and opens Claude or ChatGPT with it prefilled. The connector above is
+what makes that question answerable.
+
+Two things follow from that, and neither is hidden:
+
+- **The write path went with the chat.** In-app Gretel could add deliverables, wire records,
+  set a budget, and build a campaign, through a validated command vocabulary the user
+  approved (`domain/flowAgent.ts`). The connector's tools are reads plus additive brand
+  records, so an outside agent can *answer about* a campaign but cannot *build* one. Closing
+  that gap means adding canvas-write tools to `mcp/breadcrumbs-server.mjs`, deliberately and
+  per action, exactly as `GRETEL_ACTIONS` says.
+- **`GRETEL_ACTIONS` now narrows nothing that runs.** That allowlist existed to give the
+  in-app assistant a smaller surface than the connector, which was always handed the whole
+  `handlers` map (`onCommand` in `src/lib/agentBridge.ts`). With the in-app assistant gone,
+  `runAppAction` has no caller. Either route `onCommand` through it, or decide the wide map
+  is right for something that only ever reaches a dev server on localhost.
+
+`server/flowAgentHandler.ts` and `src/adapters/ask/generateFlowEdit.ts` are still in the tree
+and still tested; nothing in the app calls them now.

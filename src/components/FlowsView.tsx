@@ -32,9 +32,9 @@ import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_M
 import { TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
 import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, type Product } from '../domain/product'
 import { type BrandObject } from '../domain/brandObject'
-import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
+import { AI_MODELS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
-import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
+import { DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverableGroup, type DeliverablePreset, type FlowDeliverable, freshNodeId, GROUP_TONE, nodeAssetCount, presetByKey, toneForPreset } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
@@ -47,7 +47,6 @@ import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, INDUSTRIES, SENI
 import { BufferedInput, BufferedTextarea } from './BufferedInput'
 // Only the campaign brief picks from a list now — the object cards' own forms are gone.
 import { RecordCombo } from './RecordPickers'
-import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingAllText, messagingFields } from '../domain/messaging'
@@ -76,10 +75,9 @@ import { CopyFields } from './CopyFields'
 import { Hint } from './Hint'
 import { FlowSteps } from './FlowSteps'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
-import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import { flushPersistedState } from '../adapters/state/workspaceState'
-import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
-import { FlowChat, type ChatIntent } from './FlowChat'
+import { GretelHandoff } from './GretelHandoff'
+import { starterQuestions } from '../domain/gretelQuestions'
 import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
@@ -99,7 +97,6 @@ import { readLinkFor } from '../domain/liveLink'
 import { assetTrend, type MetricTrend } from '../domain/assetTrend'
 import { listSnapshots } from '../adapters/metrics/metricSnapshots'
 import { Sparkline } from './Sparkline'
-import { runAppAction } from '../lib/agentBridge'
 
 /**
  * Flows — the campaign home + builder. A switcher lists the brand's campaigns; picking
@@ -306,33 +303,6 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
   </span>
 )
 
-/**
- * What each app action reads as in the approval list.
- *
- * Gretel's suggestions are approved one by one, so every line has to say what it will do in the
- * user's terms. "Run appAction listAssets" describes the plumbing and hides whether the app is
- * about to be read or written to — which is the one thing worth knowing before saying yes.
- *
- * An action with no label here still works; it falls back to its own name. Missing a label is a
- * cosmetic gap, not a broken command, which is why this is a lookup and not a required map.
- */
-const APP_ACTION_LABELS: Record<string, string> = {
-  listClients: 'Look up the client list',
-  getBrand: 'Read this brand',
-  getStrategy: 'Read the brand strategy',
-  listAssets: 'List the assets on this brand',
-  listCanvases: 'List the saved canvases',
-  listAccounts: 'List the target accounts',
-  listConditions: 'List the brand conditions',
-  getBrandBaseline: 'Read the brand baseline',
-  runCoherenceCheck: 'Run a coherence check',
-  addAudience: 'Add an audience to the brand',
-  addProofPoint: 'Add a proof point to the brand',
-  addSubject: 'Add a subject to the brand',
-  addHook: 'Add a hook to the brand',
-  addCta: 'Add a CTA to the brand',
-}
-
 // Quick-start templates offered in Gretel's blank-campaign state: one high-signal deliverable per
 // motion (email, content, social, web). Clicking one drops that node, so you can skip the AI and
 // start by hand. Four, not six, so the blank state stays one clear hierarchy rather than three
@@ -367,8 +337,6 @@ const DELIVERABLE_GROUPS: { group: DeliverableGroup; label: string; icon: ReactN
   { group: 'Sales & commerce', label: 'Close',
     icon: <><path d="M5.4 8h13.2l1 12.4a1.1 1.1 0 0 1-1.1 1.1H5.5a1.1 1.1 0 0 1-1.1-1.1z" /><path d="M8.8 8V6.2a3.2 3.2 0 0 1 6.4 0V8" /><path d="M9.3 14.2l2 2 3.4-3.6" /></> },
 ]
-
-const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing'] as const
 
 /**
  * OBJECTS. One thing on the campaign board: an audience, a message, a proof point, a note. Dropped
@@ -444,10 +412,6 @@ const kindsInFamily = (family: ObjectFamily): CanvasObjectKind[] =>
   (Object.keys(OBJECT_META) as CanvasObjectKind[]).filter(
     (k) => OBJECT_META[k].role === 'input' && OBJECT_META[k].family === family && !STANDALONE_KINDS.has(k),
   )
-// A card's record picker builds its own placeholder from the kind's label, which used to read
-// "Link a audience…" and "No companys established yet". Covers every current label (audience,
-// company, person, message, proof point, voice, channel, data source, trigger).
-const articleFor = (noun: string): string => (/^[aeiou]/.test(noun) ? 'an' : 'a')
 const pluralOf = (noun: string): string =>
   noun === 'person' ? 'people' : noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`
 
@@ -673,21 +637,6 @@ function elbowPath(sx: number, sy: number, tx: number, ty: number, scale = 1): s
   const rr = Math.min(r, sep / 2)
   return `M ${sx} ${sy} H ${midX - rr} Q ${midX} ${sy} ${midX} ${sy + rr * dir} V ${ty - rr * dir} Q ${midX} ${ty} ${midX + rr} ${ty} H ${tx}`
 }
-
-/**
- * A next-step chip that only asks for the build, e.g. "Build it now".
- *
- * A chip is a PROMPT, not a button: clicking one sends its text back to the chat. So a chip that
- * says "Build it now" cannot build, and clicking it twice looked like a dead control while the
- * thing that actually builds (Apply all, on the suggestions block) sat directly above it. Two
- * affordances for one action, one of them inert, is worse than one. These are dropped.
- *
- * Deliberately narrow: it matches a bare imperative and nothing else, so a real next step that
- * happens to start with the word ("Build a landing page for the offer") is still offered. "Generate
- * the copy" is deliberately NOT here: that one becomes a regenerate command, so it works.
- */
-const BUILD_ONLY_CHIP = /^(build|apply|create|make)(\s+(it|this|that|these|them|all|the campaign|the flow|the assets))?(\s+now)?\s*[.!]?$/i
-const isBuildChip = (s: string): boolean => BUILD_ONLY_CHIP.test(s.trim())
 
 /**
  * The four drag handles on a card, one per side.
@@ -1242,8 +1191,6 @@ export function FlowsView() {
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addBrandProof = useTrafficStore((s) => s.addBrandProof)
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
-  const brandRecords = useTrafficStore((s) => s.brandRecords)
-  const userPrefs = useTrafficStore((s) => s.userPrefs)
   const patchCampaignRaw = useTrafficStore((s) => s.patchCampaign)
   const showToast = useTrafficStore((s) => s.showToast)
   const showToastAction = useTrafficStore((s) => s.showToastAction)
@@ -1259,7 +1206,6 @@ export function FlowsView() {
   const allVoices = useTrafficStore((s) => s.voices)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const brandMeta = useTrafficStore((s) => s.brandMeta)
-  const mediaMixes = useTrafficStore((s) => s.mediaMixes)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
   const createDraftCampaign = useTrafficStore((s) => s.createDraftCampaign)
@@ -1325,9 +1271,6 @@ export function FlowsView() {
     }
   }
   const setFlowCanvasOpen = useTrafficStore((s) => s.setFlowCanvasOpen)
-  const flowChats = useTrafficStore((s) => s.flowChats)
-  const saveFlowChat = useTrafficStore((s) => s.saveFlowChat)
-  const deleteFlowChat = useTrafficStore((s) => s.deleteFlowChat)
   const openProject = useTrafficStore((s) => s.openProject)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
@@ -1829,13 +1772,10 @@ export function FlowsView() {
     seenHomeNonce.current = flowHomeNonce
     setFlowScreen('home')
   }, [flowHomeNonce])
-  // Flow-canvas AI chat (agentic: it edits the flow from chat).
-  const [chatMsgs, setChatMsgs] = useState<FlowChatMsg[]>([])
-  const [chatBusy, setChatBusy] = useState(false)
-  // Start collapsed: the assistant rests as a floating launcher over the canvas and opens into a
-  // card when clicked, so the canvas is clean by default.
-  const chatCollapsed = useTrafficStore((s) => s.flowChatCollapsed)
-  const setChatCollapsed = useTrafficStore((s) => s.setFlowChatCollapsed)
+  // Gretel: a dialog that hands the question to an agent that speaks MCP, not a chat that answers
+  // here. Opened from the campaign rail (HomeShell) and rendered below with this campaign's context.
+  const gretelOpen = useTrafficStore((s) => s.gretelOpen)
+  const setGretelOpen = useTrafficStore((s) => s.setGretelOpen)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
   // The campaign brief is the board's root. Deleting it hides the card (the campaign data stays);
   // "Brief" in the Add menu brings it back. On a brand-new blank campaign it's hidden too (see
@@ -1843,8 +1783,6 @@ export function FlowsView() {
   // while blank. Reset on entering a campaign.
   const [briefHidden, setBriefHidden] = useState(false)
   const [briefSummoned, setBriefSummoned] = useState(false)
-  // Gretel's empty state is the blank-campaign front door now, so there's no separate starter
-  // card to hold text, dismiss, or drag.
   // Search box on the Assets brand-library view.
   const [librarySearch, setLibrarySearch] = useState('')
   // Assets is organized by brand folders. Which brand folders are expanded (the active brand starts
@@ -1857,12 +1795,8 @@ export function FlowsView() {
     if (brand) setOpenBrandFolders((prev) => (prev.has(brand) ? prev : new Set([...prev, brand])))
   }, [brand])
   // Refs so the Cmd+. shortcut reads the panels' current state without re-binding the listener.
-  const chatCollapsedRef = useRef(chatCollapsed)
-  chatCollapsedRef.current = chatCollapsed
   const briefCollapsedRef = useRef(briefCollapsed)
   briefCollapsedRef.current = briefCollapsed
-  const chatIdRef = useRef(0)
-  const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
   // View-mode brief drafts: subject + budget buffered so a built flow's brief edits commit on
   // blur (reseeded whenever you open a different flow).
   const [viewBudgetDraft, setViewBudgetDraft] = useState('')
@@ -2636,13 +2570,12 @@ export function FlowsView() {
   // "B" opens the deliverable picker; holding Space temporarily pans (like Figma).
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + . toggles the canvas side panels (Flow assistant + inspector) for a focused,
-      // full-canvas view. Works even while a field is focused, so it's checked before the guard.
+      // Cmd/Ctrl + . toggles the inspector for a focused, full-canvas view. Works even while a
+      // field is focused, so it's checked before the guard. It used to toggle the Gretel panel
+      // alongside it; Gretel is a dialog now, and Esc is what closes those.
       if ((e.metaKey || e.ctrlKey) && e.key === '.') {
         e.preventDefault()
-        const anyOpen = !chatCollapsedRef.current || !briefCollapsedRef.current
-        setChatCollapsed(anyOpen)
-        setBriefCollapsed(anyOpen)
+        setBriefCollapsed(!briefCollapsedRef.current)
         return
       }
       // SELECT belongs here as much as INPUT does. A native select uses letter keys for type-ahead,
@@ -3259,7 +3192,6 @@ export function FlowsView() {
     const remainder = campaignBudget - each * viewPaidRows.length
     void updateRows(viewPaidRows.map((r, i) => ({ id: r.id, patch: { budget: { amount: each + (i === 0 ? remainder : 0), type: 'lifetime' as const } } })))
   }
-  const brandMixesForRefs = useMemo(() => mediaMixes.filter((m) => m.brand === brand), [mediaMixes, brand])
   // The brand's proof points (RTBs), resolved up the brand tree like generation reads them.
   const brandProof = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.rtbs : []), [brand, brandSystems, brandMeta])
   // Every Records page, as selectable tag groups: Companies / People / Segments / Channels /
@@ -6521,13 +6453,6 @@ export function FlowsView() {
     if (target) void genPreview(target)
   }
   const startNew = () => {
-    // Hand the outgoing conversation to history, then clear it. Without this the thread follows
-    // you into the next campaign: you see the previous campaign's transcript, its Apply button
-    // still points at a pending edit for the campaign you left, and because blankCampaign requires
-    // chatMsgs.length === 0 the "What are you launching?" front door never renders again for the
-    // rest of the session. Persist BEFORE clearing so the thread stays reopenable from history.
-    persistActiveChat()
-    setChatMsgs([])
     /**
      * THE CAMPAIGN EXISTS FROM THE MOMENT YOU START IT, rather than from the moment you build it.
      *
@@ -6605,12 +6530,12 @@ export function FlowsView() {
     // openView makes. It was 'all' while starting a campaign meant standing in a builder that
     // belonged to none of them.
     setCampaignFilter(started)
-    // A new campaign opens with Gretel COLLAPSED. It used to open expanded, on the reasoning that
-    // Gretel was the front door and its empty state asked what you were launching. The cards are
-    // the front door now: you start at a Brand card and connect your way to a brief, and the setup
-    // steps say so in the corner. Opening onto a chat panel over a canvas you are meant to be
-    // building on is two front doors, and the quieter one is the canvas.
-    setChatCollapsed(true)
+    // Gretel's dialog never greets a new campaign. The cards are the front door: you start at a
+    // Brand card and connect your way to a brief, and the setup steps say so in the corner. A
+    // dialog over a canvas you are meant to be building on is two front doors, and the quieter
+    // one is the canvas. It also has nothing to ask yet — an empty campaign has no shape to
+    // question — so closing it here keeps a stale one from following you in.
+    setGretelOpen(false)
   }
   /**
    * A campaign's board, ready to put on screen.
@@ -6646,8 +6571,9 @@ export function FlowsView() {
     })
   }
   const openView = (n: string) => {
-    persistActiveChat()
-    setChatMsgs([])
+    // Close Gretel on the way in: its starter questions name the campaign you were just in, and a
+    // dialog that survives the switch would offer them about the one you have opened.
+    setGretelOpen(false)
     setOpenGroupId(null)
     // The record catches up with the board before anything scopes by it: a campaign wired to a
     // Brand card before binding existed reads Unassigned until this writes what the card says.
@@ -7197,7 +7123,7 @@ export function FlowsView() {
       return same ? prev : next
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, objects, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH, flowScreen, flowView])
+  }, [nodes, objects, pos, offset, zoom, selected, connectors, viewName, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH, flowScreen, flowView])
 
   // Once a just-created card is measured, nudge it to where it was dropped.
   useEffect(() => {
@@ -7521,18 +7447,6 @@ export function FlowsView() {
     return buildFlow({ name, subject, budget, flightWeeks, refs: briefRefsEffective, audiences: audSelection, nodes: effective, objective: objectiveCfg, strategy: strategyKey })
   }
 
-  // Resolve record-tag labels back to structured references via the record groups.
-  const labelsToRefs = (labels: string[]): FlowReference[] => {
-    const out: FlowReference[] = []
-    for (const l of (Array.isArray(labels) ? labels : [])) {
-      for (const g of recordGroups) {
-        const it = g.items.find((i) => i.label === l)
-        if (it) { out.push({ type: g.type, id: it.id, label: it.label }); break }
-      }
-    }
-    return out
-  }
-
   // Create-or-reuse a brand audience by name for the chat's `createAudience` command. Reuses an
   // existing audience of the same name instead of duplicating, otherwise creates a LABELED
   // PLACEHOLDER the user fills in later (newAudience gives empty persona fields — never a fabricated
@@ -7576,563 +7490,6 @@ export function FlowsView() {
     return { ref: { type: 'proof', id: rtb.id, label }, created: true }
   }
 
-  // Resolve a chat-supplied motion (a key, a name, or an alias) to a real GTM strategy. Null when it
-  // cannot be resolved, so setStrategy no-ops instead of stamping a garbage strategy.
-  const strategyFor = (v: string): { key: string; name: string } | null => {
-    if (typeof v !== 'string' || !v.trim()) return null
-    const key = resolveStrategyKey(v.trim())
-    return key ? GTM_STRATEGIES.find((x) => x.key === key) ?? null : null
-  }
-
-  // Apply the AI's commands to the flow. Build-mode commands mutate the builder (and the
-  // canvas) and can end in a `build`; view-mode commands edit the open flow in place.
-  // Returns human-readable summaries of what was applied.
-  /**
-   * Applies approved commands and reports BOTH what landed and what did not. The skipped list is
-   * the point: the view-mode branch below handles a subset of the vocabulary, and until now every
-   * unhandled op fell out of the loop silently while the UI stamped the whole batch "Applied".
-   * Verified live on 2026-07-25: asking an open campaign to set its budget showed a check mark
-   * next to "Set budget to $9,000" while the stored budget never moved off $24,000.
-   */
-  /**
-   * The board commands, shared by both apply branches.
-   *
-   * createObject / setDirection / setModel mean the same thing on an unbuilt campaign and a live
-   * one, and adding an instruction to a live campaign then regenerating is the loop the board exists
-   * for. Two copies of this would have been two behaviours the moment one was edited.
-   */
-  const applyBoardCommand = (
-    c: FlowCommand,
-    ctx: { applied: string[]; skipped: string[]; batchRefs: Map<string, string> },
-  ) => {
-    const { applied, skipped, batchRefs } = ctx
-    if (c.op === 'createObject') {
-      const kind = c.kind as CanvasObjectKind
-      if (!OBJECT_META[kind]) { skipped.push(`Unknown card kind "${c.kind}"`); return }
-      const id = freshObjectId()
-      // A record NAME goes through the same create-or-reuse path the card's own picker uses, so the
-      // agent can name an audience without inventing a record around it.
-      const rec = c.record?.trim() ? createRecordForKind(kind, c.record.trim()) : undefined
-      // A Data source card named after a table this brand does not have would land as an empty card
-      // the user has to notice and clean up. Skipping with the fix is the more useful answer.
-      if (kind === 'data-source' && c.record?.trim() && !rec) {
-        skipped.push(`No data set called "${c.record.trim()}" on this brand. Pull or upload one, then link it.`)
-        return
-      }
-      // Validated by the same closed vocabulary as every other source of direction: an unknown key
-      // is dropped here rather than persisted and silently ignored at draft time.
-      const dir = (c.direction ?? []).filter((d) => ALL_DIRECTION_KEYS.has(d.key as DirectionKey) && d.value?.trim())
-      const spot = freeSlot()
-      setObjects((os) => [...os, { id, kind, text: c.text?.trim() ?? '', refId: rec?.id, direction: dir.length ? dir : undefined }])
-      setPos((pp) => ({ ...pp, [id]: { x: 0, y: 0 } }))
-      pendingPlace.current = { id, ...spot }
-      batchRefs.set(c.ref, id)
-      const meta = OBJECT_META[kind]
-      applied.push(`Added ${articleFor(meta.label.toLowerCase())} ${meta.label.toLowerCase()} card${rec ? ` for "${rec.label}"` : ''}`)
-      return
-    }
-    if (c.op === 'setDirection') {
-      const targetId = batchRefs.get(c.ref) ?? objects.find((o) => refForObject(o)?.label === c.ref)?.id
-      if (!targetId) { skipped.push(`No card called "${c.ref}"`); return }
-      const entries = c.entries.filter((d) => ALL_DIRECTION_KEYS.has(d.key as DirectionKey) && d.value?.trim())
-      if (!entries.length) { skipped.push(`No usable instruction for "${c.ref}"`); return }
-      setObjects((os) =>
-        os.map((o) => {
-          if (o.id !== targetId) return o
-          const keep = (o.direction ?? []).filter((d) => !entries.some((e) => e.key === d.key))
-          return { ...o, direction: [...keep, ...entries] }
-        }),
-      )
-      setRefsDirty(true)
-      applied.push(`Set ${entries.length} instruction${entries.length === 1 ? '' : 's'} on ${c.ref}`)
-      return
-    }
-    if (c.op === 'setModel') {
-      if (!AI_MODEL_IDS.has(c.value)) { skipped.push(`Unknown model "${c.value}"`); return }
-      if (viewName) patchCampaign(viewName, { aiModel: c.value === 'auto' ? undefined : c.value })
-      const m = AI_MODELS.find((x) => x.id === c.value)
-      applied.push(`This campaign now writes with ${m?.label ?? c.value}`)
-      return
-    }
-    if (c.op === 'connect' || c.op === 'disconnect') {
-      const from = resolveEndpoint(c.from, batchRefs)
-      const to = resolveEndpoint(c.to, batchRefs)
-      if (!from) { skipped.push(`Could not find "${c.from}" on the board`); return }
-      if (!to) { skipped.push(`Could not find "${c.to}" on the board`); return }
-      if (from === to) { skipped.push('A card cannot be wired to itself'); return }
-      if (c.op === 'connect') {
-        // The same two calls the drag gesture makes, so a wire drawn by the chat and one drawn by
-        // hand are the same wire: records onto the campaign (or a brand binding), or records onto
-        // the target's rows. Attach FIRST, because it can refuse (a second Brand card contradicting
-        // the one that already binds this campaign) and a refused wire must not be drawn. Skipping
-        // it here is how the agent hears about the refusal instead of stamping the batch applied.
-        if (to === 'campaign') {
-          if (!attachToCampaign(from)) { skipped.push(`Could not wire ${c.from} into ${c.to}: this campaign is already bound to another brand`); return }
-        } else if (isContextNode(from)) attachToTarget(from, to)
-        setConnectors((cs) => (cs.some((x) => x.from === from && x.to === to) ? cs : [...cs, { from, to }]))
-        applied.push(`Wired ${c.from} into ${c.to}`)
-      } else {
-        setConnectors((cs) => cs.filter((x) => !(x.from === from && x.to === to)))
-        if (to === 'campaign') detachFromCampaign(from, connectors)
-        else if (isContextNode(from)) detachFromTarget(from, to, connectors)
-        applied.push(`Unwired ${c.from} from ${c.to}`)
-      }
-    }
-  }
-  /**
-   * A name the model used, resolved to a real board id.
-   *
-   * In order: a handle from this batch, a card on the board by the record it names, the brief, then
-   * a deliverable by PRESET KEY — which is what the model is given, unlike the composite board key,
-   * which it would have to guess. Returns null rather than guessing when two cards share a label:
-   * silently wiring the wrong one is worse than saying so.
-   */
-  const resolveEndpoint = (name: string, batchRefs: Map<string, string>): string | null => {
-    const handle = batchRefs.get(name)
-    if (handle) return handle
-    const n = name.trim().toLowerCase()
-    if (n === 'campaign' || n === 'brief' || n === 'the campaign') return 'campaign'
-    const byLabel = objects.filter((o) => refForObject(o)?.label?.toLowerCase() === n)
-    if (byLabel.length === 1) return byLabel[0].id
-    if (byLabel.length > 1) return null
-    const byKind = objects.filter((o) => OBJECT_META[o.kind]?.label.toLowerCase() === n)
-    if (byKind.length === 1) return byKind[0].id
-    const preset = presetByKey(name) ?? DELIVERABLE_PRESETS.find((p) => p.label.toLowerCase() === n)
-    if (preset) {
-      const d = viewDelivs.find((x) => x.channel === preset.channel && x.assetType === preset.assetType)
-      if (d) return d.key
-      // Build mode has no rows yet, so the deliverable is still a node on the board.
-      const node = nodes.find((x) => x.presetKey === preset.key)
-      if (node) return node.id
-    }
-    return null
-  }
-
-  const applyFlowCommands = async (cmds: FlowCommand[]): Promise<{ applied: string[]; skipped: string[] }> => {
-    const applied: string[] = []
-    const skipped: string[] = []
-    /**
-     * The batch's ref handles: the model's own names for cards it created ('a1', 'msg') mapped to
-     * the real ids they became. Scoped to one batch because that is exactly how long they mean
-     * anything — the model invents them per reply and has never seen a co_… id.
-     */
-    const batchRefs = new Map<string, string>()
-    /**
-     * App actions run FIRST and in both modes, because they are not canvas edits: they read the
-     * brand or add a record the canvas commands below may then tag. Running them after would mean
-     * a createAudience in the same batch could not see a proof point this batch just added.
-     *
-     * Awaited one at a time rather than in parallel: they mutate one store, and two additive
-     * writes racing on the same record list is how duplicates appear.
-     */
-    for (const c of cmds) {
-      if (c.op !== 'appAction') continue
-      try {
-        await runAppAction(c.action, c.args ?? {})
-        applied.push(describeCommand(c))
-      } catch (e) {
-        skipped.push(`${describeCommand(c)} (${e instanceof Error ? e.message : 'failed'})`)
-      }
-    }
-    if (viewName !== null) {
-      let vRefs = [...flowRefs]
-      const createdRefs: FlowReference[] = []
-      /**
-       * The deliverables already on this campaign, by channel/type, kept live through the batch.
-       * viewDelivs is a render-time memo, so it cannot see an addViewDeliverable made two commands
-       * ago: without this set, one batch could add the same deliverable twice.
-       */
-      const vDelivKeys = new Set(viewDelivs.map((d) => `${d.channel}/${d.assetType}`))
-      for (const c of cmds) {
-        if (c.op === 'addDeliverable') {
-          const p = presetByKey(c.preset)
-          if (p) {
-            // ALREADY THERE IS NOT A REASON TO ADD IT AGAIN. A round of suggestions re-offers what
-            // the previous round already applied, and applying that second batch used to seed a
-            // whole duplicate deliverable (three "Nurture email" assets became six). Say so
-            // instead: the suggestion is honoured, it just has nothing left to do.
-            const key = `${p.channel}/${p.assetType}`
-            if (vDelivKeys.has(key)) {
-              skipped.push(`${p.label} is already on this campaign`)
-            } else {
-              vDelivKeys.add(key)
-              await addViewDeliverable(p)
-              applied.push(`Added ${p.label}`)
-            }
-          }
-        } else if (c.op === 'setRecordTags') {
-          // Preserve audiences created earlier this batch: their labels are not in the record list,
-          // so a plain replace would silently drop them.
-          const refs = labelsToRefs(c.labels)
-          vRefs = [...refs, ...createdRefs.filter((cr) => !refs.some((r) => r.id === cr.id))]
-          setCampaignReferences(viewName, vRefs)
-          setRefsDirty(true)
-          applied.push(`Tagged ${refs.length} record${refs.length === 1 ? '' : 's'}`)
-        } else if (c.op === 'createAudience') {
-          const r = ensureAudienceRef(c.name)
-          if (r) {
-            if (!vRefs.some((x) => x.type === 'segment' && x.id === r.ref.id)) vRefs = [...vRefs, r.ref]
-            if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
-            setCampaignReferences(viewName, vRefs)
-            setRefsDirty(true)
-            applied.push(r.created ? `Created a placeholder audience "${r.ref.label}"` : `Tagged audience "${r.ref.label}"`)
-          }
-        } else if (c.op === 'createProof') {
-          const r = ensureProofRef(c.text)
-          if (r) {
-            if (!vRefs.some((x) => x.type === 'proof' && x.id === r.ref.id)) vRefs = [...vRefs, r.ref]
-            if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
-            setCampaignReferences(viewName, vRefs)
-            setRefsDirty(true)
-            applied.push(r.created ? `Added a proof point "${r.ref.label}" (draft)` : `Tagged proof point "${r.ref.label}"`)
-          }
-        } else if (c.op === 'setStrategy') {
-          // View mode: persist the motion straight onto the open campaign (build mode uses wStrategy).
-          const s = strategyFor(c.value)
-          if (s) { patchCampaign(viewName, { strategy: s.key }); applied.push(`Set the strategy to ${s.name}`) }
-        } else if (c.op === 'setSubject') {
-          // Both of these are just campaign fields, and patchCampaign is already used for strategy
-          // two branches up, so there was never a reason for them to be build-mode only.
-          patchCampaign(viewName, { subject: c.value })
-          setRefsDirty(true)
-          applied.push(`Set the campaign theme to "${c.value}"`)
-        } else if (c.op === 'setFlight') {
-          // Length is a campaign field like the budget below it, and the inspector's own stepper
-          // already writes it with exactly this call. It was missing from this branch rather than
-          // withheld, so asking Gretel to change the length on a saved campaign was refused as
-          // "not available on a campaign that is already built" while the stepper two panels away
-          // did it happily.
-          const w = Math.max(1, Math.round(Number(c.weeks) || 0))
-          if (w > 0) {
-            patchCampaign(viewName, { durationWeeks: w })
-            applied.push(`Set the campaign length to ${w} week${w === 1 ? '' : 's'}`)
-          } else {
-            skipped.push(`${describeCommand(c)} (needs a length of at least one week)`)
-          }
-        } else if (c.op === 'setBudget') {
-          const n = Math.max(0, Number(String(c.value).replace(/[^0-9.]/g, '')) || 0)
-          if (n > 0) {
-            patchCampaign(viewName, { overallBudget: n })
-            applied.push(`Set the budget to $${n.toLocaleString()}`)
-          } else {
-            skipped.push(`Could not read a budget from "${c.value}"`)
-          }
-        } else if (c.op === 'regenerate') {
-          // Ask the same question the build branch asks, for the same reason. copyBlockerFor refuses
-          // a brand-less campaign, and this is the command the assistant offers RIGHT AFTER a
-          // brand-less build, so reporting "Regenerated the copy" unconditionally reproduced the
-          // exact lie that build was just fixed for, one turn later and in the same panel.
-          const regenBlocked = useTrafficStore.getState().copyBlockerFor(viewName)
-          if (regenBlocked) {
-            useTrafficStore.getState().setBrandNotice(regenBlocked)
-            skipped.push(`No copy was written. ${regenBlocked}`)
-          } else {
-            await regenerateFlow()
-            applied.push('Regenerated the copy')
-          }
-        } else if (c.op === 'createObject' || c.op === 'setDirection' || c.op === 'setModel' || c.op === 'connect' || c.op === 'disconnect') {
-          // Board ops work on a BUILT campaign too, and this is where they matter most: adding an
-          // instruction to a live campaign and regenerating is the loop the board exists for.
-          // Shared with the build-mode branch so the two cannot drift into different behaviour.
-          applyBoardCommand(c, { applied, skipped, batchRefs })
-        } else {
-          // Everything the open-campaign branch genuinely cannot do. Say so by name rather than
-          // dropping it: renaming a built campaign re-keys every row, and build/removeDeliverable
-          // would rewrite work that already exists.
-          skipped.push(`${describeCommand(c)} (not available on a campaign that is already built)`)
-        }
-      }
-      return { applied, skipped }
-    }
-    // Build mode: keep a working copy so a same-turn `build` sees every prior edit.
-    let wName = name, wSubject = subject, wBudget = budget, wFlight = flightWeeks
-    let wNodes = [...nodesRef.current]
-    let wRefs = [...briefRefsEffective]
-    let wStrategy = strategyKey
-    const createdRefs: FlowReference[] = []
-    for (const c of cmds) {
-      switch (c.op) {
-        case 'setName': setName(c.value); wName = c.value; applied.push(`Named it "${c.value}"`); break
-        case 'setStrategy': {
-          // Accept a key OR a motion name/alias; anything unresolvable no-ops rather than stamping
-          // a garbage strategy onto the campaign.
-          const s = strategyFor(c.value)
-          if (s) { setStrategyKey(s.key); wStrategy = s.key; applied.push(`Set the strategy to ${s.name}`) }
-          break
-        }
-        case 'setSubject': setSubject(c.value); wSubject = c.value; applied.push('Set the theme'); break
-        case 'setBudget': setBudget(String(c.value)); wBudget = String(c.value); applied.push(`Set budget $${Math.round(c.value).toLocaleString()}`); break
-        case 'setFlight': setFlightWeeks(c.weeks); wFlight = c.weeks; applied.push(`Set flight to ${c.weeks} week${c.weeks === 1 ? '' : 's'}`); break
-        case 'addDeliverable': {
-          const p = presetByKey(c.preset)
-          if (!p) break
-          // Idempotent by preset, which is how removeDeliverable below already treats a deliverable
-          // (it filters every node with the key). Re-offered suggestions are the common case, and
-          // applying the same "Add Nurture email" twice used to double the assets it seeds.
-          if (wNodes.some((n) => n.presetKey === p.key)) {
-            skipped.push(`${p.label} is already on this campaign`)
-            break
-          }
-          const node: FlowDeliverable = { id: freshNodeId(), presetKey: p.key, perMonth: c.perMonth ?? startCount(p) }
-          wNodes = [...wNodes, node]
-          setNodes((ns) => [...ns, node])
-          void genPreview(node)
-          applied.push(`Added ${p.label}${!(p.brand || p.runtime === 'one-off') ? ` (${node.perMonth}/month)` : ''}`)
-          break
-        }
-        case 'removeDeliverable': {
-          const p = presetByKey(c.preset)
-          wNodes = wNodes.filter((n) => n.presetKey !== c.preset)
-          setNodes((ns) => ns.filter((n) => n.presetKey !== c.preset))
-          if (p) applied.push(`Removed ${p.label}`)
-          break
-        }
-        case 'setRecordTags': {
-          // Preserve audiences created earlier this batch (their labels are not in the record list).
-          const refs = labelsToRefs(c.labels)
-          wRefs = [...refs, ...createdRefs.filter((cr) => !refs.some((r) => r.id === cr.id))]
-          setBriefRefs(wRefs)
-          applied.push(`Tagged ${refs.length} record${refs.length === 1 ? '' : 's'}`)
-          break
-        }
-        case 'createAudience': {
-          const r = ensureAudienceRef(c.name)
-          if (r) {
-            if (!wRefs.some((x) => x.type === 'segment' && x.id === r.ref.id)) { wRefs = [...wRefs, r.ref]; setBriefRefs(wRefs) }
-            if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
-            applied.push(r.created ? `Created a placeholder audience "${r.ref.label}"` : `Tagged audience "${r.ref.label}"`)
-          } else {
-            // ensureAudienceRef refuses with no brand, so it never writes into an empty-brand
-            // bucket. Right call, but saying nothing meant the suggestion list offered "Create a
-            // placeholder audience", the user applied it, and it vanished with no line either way.
-            skipped.push(
-              brand
-                ? 'Could not read an audience name from that suggestion.'
-                : `Audience "${typeof c.name === 'string' ? c.name.trim() : ''}" needs a brand first. Bind this canvas to a brand and ask again.`,
-            )
-          }
-          break
-        }
-        case 'createProof': {
-          const r = ensureProofRef(c.text)
-          if (r) {
-            if (!wRefs.some((x) => x.type === 'proof' && x.id === r.ref.id)) { wRefs = [...wRefs, r.ref]; setBriefRefs(wRefs) }
-            if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
-            applied.push(r.created ? `Added a proof point "${r.ref.label}" (draft)` : `Tagged proof point "${r.ref.label}"`)
-          } else {
-            // Same silent drop as createAudience above, same reason, same fix.
-            skipped.push(
-              brand
-                ? 'Could not read a proof point from that suggestion.'
-                : 'That proof point needs a brand first. Bind this canvas to a brand and ask again.',
-            )
-          }
-          break
-        }
-        case 'createObject':
-        case 'setDirection':
-        case 'setModel':
-        case 'connect':
-        case 'disconnect':
-          applyBoardCommand(c, { applied, skipped, batchRefs })
-          break
-        case 'build': {
-          // Building the same campaign twice APPENDS a second set of assets to it (seedCampaignAssets
-          // has no idea the first run happened), so a re-offered `build` turned four deliverables
-          // into eight. Nothing to do rather than quietly double the campaign.
-          const target = campaignNameFor(wName)
-          // Live rows only. Deleting a campaign is a SOFT delete (deleteCampaign archives its rows
-          // rather than removing them), so counting archived rows here would refuse to rebuild a
-          // campaign the user had deliberately deleted, with a message claiming it still exists.
-          if (useTrafficStore.getState().rows.some((r) => (r.campaign ?? '').trim() === target && !r.archivedAt)) {
-            skipped.push(`"${target}" is already built. Open it to change it.`)
-            break
-          }
-          // Segment refs ONLY feed the audience rotation; proof/company/etc. refs must not leak
-          // into row.audience (that would create phantom audiences). Mirrors audSelection.
-          const segAuds = wRefs.filter((r) => r.type === 'segment').map((r) => r.label)
-          const auds = segAuds.length ? segAuds : audienceNames
-          const outcome = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes, objective: objectiveCfg, strategy: wStrategy })
-          if (outcome) {
-            // SAY WHAT HAPPENED, NOT WHAT WAS ATTEMPTED. This line claimed "and wrote the copy"
-            // unconditionally, including on the run where copy was refused for having no brand to
-            // write from, which is how twelve empty assets got reported as written. The refusal
-            // carries its own wording (copyBlockerFor's), so the reason travels with the skip.
-            const n = wNodes.length
-            applied.push(`Built ${n} channel${n === 1 ? '' : 's'}${outcome.copyBlocked ? '' : ' and wrote the copy'}`)
-            if (outcome.copyBlocked) skipped.push(`No copy was written. ${outcome.copyBlocked}`)
-          }
-          break
-        }
-      }
-    }
-    return { applied, skipped }
-  }
-
-  // A human-readable one-liner for a pending command (shown in the Suggestions block).
-  const describeCommand = (c: FlowCommand): string => {
-    switch (c.op) {
-      case 'setName': return `Name it "${c.value}"`
-      case 'setSubject': return 'Set the campaign theme'
-      case 'setBudget': return `Set budget to $${Math.round(c.value).toLocaleString()}`
-      case 'setFlight': return `Set flight to ${c.weeks} week${c.weeks === 1 ? '' : 's'}`
-      case 'addDeliverable': { const p = presetByKey(c.preset); return `Add ${p?.label ?? c.preset}${c.perMonth ? ` (${c.perMonth}/month)` : ''}` }
-      case 'removeDeliverable': { const p = presetByKey(c.preset); return `Remove ${p?.label ?? c.preset}` }
-      case 'createObject': {
-        const label = OBJECT_META[c.kind as CanvasObjectKind]?.label ?? c.kind
-        const what = c.record?.trim() || c.text?.trim()?.split('\n')[0] || ''
-        const dir = c.direction?.length ? `, with ${c.direction.length} instruction${c.direction.length === 1 ? '' : 's'}` : ''
-        return `Add ${articleFor(label.toLowerCase())} ${label.toLowerCase()} card${what ? ` for ${what}` : ''}${dir}`
-      }
-      case 'setDirection':
-        return `Set ${c.entries.length} instruction${c.entries.length === 1 ? '' : 's'} on ${c.ref}`
-      case 'setModel': {
-        const m = AI_MODELS.find((x) => x.id === c.value)
-        return `Write this campaign with ${m?.label ?? c.value}`
-      }
-      case 'connect': return `Connect ${c.from} to ${c.to}`
-      case 'disconnect': return `Unwire ${c.from} from ${c.to}`
-      case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
-      case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
-      case 'createProof': return `Add a proof point "${c.text}" and tag it`
-      case 'setStrategy': return `Set the strategy to ${GTM_STRATEGIES.find((s) => s.key === c.value)?.name ?? c.value}`
-      /**
-       * Named for what it does, not what it is. "Run appAction listAssets" describes the plumbing;
-       * the person approving it needs to know the app is about to be read or written to.
-       */
-      case 'appAction': return APP_ACTION_LABELS[c.action] ?? `Run "${c.action}"`
-      // Only promise copy when there is a brand to write from. With none bound, the build seeds the
-      // assets and copyBlockerFor refuses the writing, so promising it here sets up the same lie the
-      // result card used to tell.
-      case 'build': return `Build the flow${brand ? ' and write the copy' : ''}`
-      case 'regenerate': return 'Regenerate the copy'
-    }
-  }
-
-  const runFlowChat = async (text: string, intent: ChatIntent) => {
-    const t = text.trim()
-    if (!t || chatBusy) return
-    setChatMsgs((m) => [...m, { id: nextChatId(), role: 'user', text: t }])
-    setChatBusy(true)
-    try {
-      const presets = DELIVERABLE_PRESETS.map((p) => ({ key: p.key, label: p.label, channel: p.channel, group: p.group }))
-      const records = {
-        companies: companies.map((c) => c.name),
-        people: people.map((p) => p.name),
-        segments: brandSegments.map((a) => a.name),
-        mediaMixes: brandMixesForRefs.map((m) => m.name),
-        proof: brandProof.map((r) => r.label),
-      }
-      // Names and shape only, never rows: enough to link one or say it does not exist, and not so
-      // much that a warehouse export rides along in every turn of a chat.
-      const agentDatasets = brandDatasets.map((d) => {
-        const prov = datasetProvenance(d)
-        return { name: d.name, rows: d.rows.length, measured: prov.citable, covers: prov.periodLabel }
-      })
-      const flow = viewName !== null
-        ? {
-            mode: 'view' as const,
-            name: viewShort,
-            subject: viewCampaign?.subject ?? '',
-            budget: viewCampaign?.overallBudget ?? null,
-            flightWeeks: viewFlight ?? flightWeeks,
-            deliverables: viewDelivs.map((d) => {
-              const p = DELIVERABLE_PRESETS.find((x) => x.channel === d.channel && x.assetType === d.assetType)
-              return { preset: p?.key ?? d.key, label: d.label, perMonth: d.count }
-            }),
-            recordTags: campaignWiredRefs().map((r) => r.label),
-            strategy: viewCampaign?.strategy ?? null,
-          }
-        : {
-            mode: 'build' as const,
-            name,
-            subject,
-            budget: budget ? +budget : null,
-            flightWeeks,
-            deliverables: nodesRef.current.map((n) => ({ preset: n.presetKey, label: presetByKey(n.presetKey)?.label ?? n.presetKey, perMonth: n.perMonth })),
-            recordTags: campaignWiredRefs().map((r) => r.label),
-            strategy: strategyKey ?? null,
-          }
-      // Strategy-first discovery: the motions to choose from, and what the app already knows about
-      // this brand (split across the brand record + client profile), so the chat asks PURPOSE,
-      // recommends a motion, and never re-asks what it already knows.
-      const strategyMenu = GTM_STRATEGIES.map((s) => ({ key: s.key, name: s.name, bestFor: s.bestFor, coreMetrics: s.coreMetrics }))
-      const profile = brand ? clientProfiles[brand] : undefined
-      const brandRec = brand ? brandRecords.find((r) => r.name === brand) : undefined
-      const brandFacts = {
-        businessObjective: brandRec?.businessObjective || undefined,
-        positioning: brandRec?.positioning || undefined,
-        primaryAudience: brandRec?.primaryAudience || undefined,
-        strategy: profile?.strategy || undefined,
-        businessModel: profile?.businessModel || undefined,
-        oneLiner: profile?.oneLiner || undefined,
-      }
-      const res = await generateFlowEdit({
-        brand,
-        intent,
-        flow,
-        presets,
-        records,
-        datasets: agentDatasets,
-        message: t,
-        history: chatMsgs.slice(-6).map((m) => ({ role: m.role, text: m.text })),
-        // One chat, two dials: skill level sets autonomy/verbosity, role biases vocabulary + defaults.
-        skillLevel: userPrefs.skillLevel,
-        marketerRole: userPrefs.marketerRole,
-        roleStrategy: userPrefs.marketerRole ? ROLE_PRESETS[userPrefs.marketerRole].defaultStrategy : null,
-        strategyMenu,
-        brandFacts,
-      })
-      // Analyze (or no edits proposed) is answer-only. Build proposes edits as a pending
-      // Suggestions block the user approves before they apply.
-      const commands = intent === 'analyze' ? [] : res.commands
-      const suggestions = commands.map(describeCommand)
-      const nextSteps = (res.nextSteps ?? [])
-        .map((s) => (typeof s === 'string' ? s.trim() : ''))
-        .filter((s) => s && !isBuildChip(s))
-        .slice(0, 3)
-      setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: res.reply, live: res.live, commands: commands.length ? commands : undefined, suggestions: suggestions.length ? suggestions : undefined, nextSteps: nextSteps.length ? nextSteps : undefined }])
-    } catch {
-      setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: 'Something went wrong. Try rephrasing.', live: false }])
-    } finally {
-      setChatBusy(false)
-    }
-  }
-
-  // Apply / discard a message's pending suggestions.
-  const applyPendingChat = async (msgId: string) => {
-    const msg = chatMsgs.find((m) => m.id === msgId)
-    if (!msg?.commands || chatBusy) return
-    setChatBusy(true)
-    try {
-      const { applied, skipped } = await applyFlowCommands(msg.commands)
-      setChatMsgs((m) => m.map((x) => (x.id === msgId ? { ...x, resolved: 'applied', applied, skipped } : x)))
-    } finally {
-      setChatBusy(false)
-    }
-  }
-  const discardPendingChat = (msgId: string) =>
-    setChatMsgs((m) => m.map((x) => (x.id === msgId ? { ...x, resolved: 'discarded' } : x)))
-
-  // New chat + history. The active chat is saved to history (keyed by the flow) before
-  // it's cleared or another is opened.
-  const chatFlowKey = viewName ?? BUILDER_BOARD_KEY
-  const flowHistory = useMemo(() => flowChats.filter((c) => c.flowKey === chatFlowKey), [flowChats, chatFlowKey])
-  const persistActiveChat = () => {
-    if (!chatMsgs.length) return
-    const firstUser = chatMsgs.find((m) => m.role === 'user')
-    saveFlowChat({ id: `chat_${chatMsgs[0].id}`, flowKey: chatFlowKey, title: (firstUser?.text ?? 'Chat').slice(0, 60), messages: chatMsgs, createdAt: Date.now() })
-  }
-  const newFlowChat = () => {
-    persistActiveChat()
-    setChatMsgs([])
-  }
-  const openHistoryChat = (id: string) => {
-    const h = flowChats.find((c) => c.id === id)
-    if (!h) return
-    persistActiveChat()
-    setChatMsgs(h.messages)
-  }
 
   const viewing = viewName !== null
   /**
@@ -8282,10 +7639,37 @@ export function FlowsView() {
                 ? 'generate'
                 : null
 
-  // A brand-new, untouched campaign — no deliverables, objects, chat, or name yet. It opens with a
-  // blank canvas + the "What are you launching?" starter as the only front door; the brief card
-  // isn't pre-placed until the campaign gains some shape (or the user summons it from the toolbar).
-  const blankCampaign = !viewing && nodes.length === 0 && objects.length === 0 && chatMsgs.length === 0 && !name.trim()
+  /**
+   * What Gretel's dialog offers to ask. Built from whatever the canvas actually has right now — a
+   * saved campaign's real deliverables, or the ones being dragged onto an unsaved one — because
+   * the whole value of the hand-off is that the question arrives already knowing what you are
+   * looking at. The strategy is resolved to its display NAME: the agent on the other side has
+   * never seen a strategy key.
+   */
+  const gretelStarters = useMemo(() => {
+    const key = viewing ? (viewCampaign?.strategy ?? null) : (strategyKey ?? null)
+    const strategy = key ? (GTM_STRATEGIES.find((s) => s.key === resolveStrategyKey(key))?.name ?? null) : null
+    /**
+     * `brand` is a SCOPE, and it is allowed to be empty: with the rail on "all brands" and more
+     * than one brand in the workspace, canvasBrandScope refuses to guess, which is right for a
+     * picker. It is wrong for a question — an unbuilt campaign sitting on a board wired to a Brand
+     * card produced "look at the Launch Campaign campaign" and named nobody, so the agent on the
+     * other side had two brands with that campaign and no way to choose. The BOARD knows: fall
+     * back to the brand card it is wired to before giving up on naming one.
+     */
+    // cardLabel with an EMPTY fallback on purpose: its usual fallback is the kind's own label, so
+    // an unnamed card would hand the question the literal word "Brand" to go looking for.
+    const qBrand = brand || (brandCard ? cardLabel(brandCard).trim() : '')
+    return starterQuestions({
+      brand: qBrand,
+      campaign: viewing ? viewShort : name.trim(),
+      subject: viewing ? (viewCampaign?.subject ?? '') : subject,
+      deliverables: viewing
+        ? viewDelivs.map((d) => d.label)
+        : nodes.flatMap((n) => { const p = presetByKey(n.presetKey); return p ? [p.label] : [] }),
+      strategy,
+    })
+  }, [viewing, viewCampaign, strategyKey, brand, brandCard, viewShort, name, subject, viewDelivs, nodes])
   const selDeliv = viewing ? viewDelivs.find((d) => d.key === sel) : null
   const selPost = viewing ? viewRows.find((r) => r.id === sel) : null
   // Primitive cards are selectable in BOTH modes and their ids (note_N) match none of the other
@@ -10589,7 +9973,9 @@ export function FlowsView() {
 
   return (
     <div
-      className={`flow${chatCollapsed && !flowAssetsOpen ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}${selected.size > 1 ? ' has-multi' : ''}${hasHub ? ' has-hub' : ''}`}
+      // left-collapsed: nothing is docked in the canvas's left slot, so the toolbar recentres. Was
+      // chat-collapsed, back when Gretel could be the thing sitting there.
+      className={`flow${!flowAssetsOpen ? ' left-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}${selected.size > 1 ? ' has-multi' : ''}${hasHub ? ' has-hub' : ''}`}
     >
       <header className="flow-top">
         <div className="flow-crumb">
@@ -10712,9 +10098,9 @@ export function FlowsView() {
       {flowView === 'flow' && (
         <>
       <div className="flow-body">
-        {/* The canvas's left slot: the Assets library OR Gretel (mutually exclusive). Either way the
-            canvas and inspector stay put — Files / Assets / Gretel are all the ONE board. */}
-        {flowAssetsOpen ? (() => {
+        {/* The canvas's left slot: the Assets library, or nothing. Gretel used to share this slot;
+            it is a dialog now, so the canvas and inspector stay put either way. */}
+        {flowAssetsOpen && (() => {
           const q = librarySearch.trim().toLowerCase()
           return (
             <aside className="flow-assets">
@@ -10825,29 +10211,12 @@ export function FlowsView() {
               </div>
             </aside>
           )
-        })() : (
-        <FlowChat
-          messages={chatMsgs}
-          busy={chatBusy}
-          flowMode={viewing ? 'view' : 'build'}
-          history={flowHistory}
-          collapsed={chatCollapsed}
-          blank={blankCampaign}
-          templates={STARTER_KEYS.flatMap((k) => {
-            const p = presetByKey(k)
-            return p ? [{ key: k as string, label: p.label, node: <PresetTile tone={toneForPreset(p)} channel={p.channel} /> }] : []
-          })}
-          onTemplate={(k) => { const p = presetByKey(k); if (p) addPreset(p) }}
-          onMoreTemplates={openAddDeliverable}
-          onCollapse={setChatCollapsed}
-          onSend={runFlowChat}
-          onApply={applyPendingChat}
-          onDiscard={discardPendingChat}
-          onNewChat={newFlowChat}
-          onOpenHistory={openHistoryChat}
-          onDeleteHistory={deleteFlowChat}
+        })()}
+        <GretelHandoff
+          open={gretelOpen}
+          onClose={() => setGretelOpen(false)}
+          questions={gretelStarters}
         />
-        )}
         {/* ONE hidden picker for every Data source card: the card that asked is held in a ref, since
             mounting an input per card would put dozens in the tree for a control used once. */}
         <input

@@ -4193,6 +4193,47 @@ button.mf-open:focus-visible,
 .fchat-modal-cancel:hover { background: var(--surface-2); }
 .fchat-modal-go { border: 0; background: var(--accent); color: #fff; font: inherit; font-size: 13.5px; font-weight: 700; border-radius: 9px; padding: 9px 20px; cursor: pointer; }
 .fchat-modal-go:hover { filter: brightness(1.06); }
+
+/* ── Gretel hand-off dialog (components/GretelHandoff.tsx) ────────────────────────────────────
+   Gretel does not answer in the app any more, it hands the question to an agent that speaks MCP.
+   So this is a dialog, not a panel: it sits OVER the canvas, changes nothing behind it, and every
+   exit from it (both buttons, copy, Esc) leaves the board exactly as it was. Wider than the
+   confirm dialogs above it because the thing being read is a whole question, not a yes/no. */
+.gh-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(16,24,40,.42); }
+.gh-modal { position: fixed; z-index: 61; top: 50%; left: 50%; transform: translate(-50%,-50%); width: min(560px, 92vw); max-height: 88vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 28px 70px rgba(16,24,40,.34); padding: 30px 32px; }
+.gh-modal:focus { outline: none; }
+.gh-close { position: absolute; top: 18px; right: 18px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; background: var(--surface-2); color: var(--text-muted); cursor: pointer; }
+.gh-close:hover { color: var(--text); background: var(--border); }
+.gh-close svg { width: 16px; height: 16px; }
+.gh-title { margin: 0; font-size: 26px; line-height: 1.15; font-weight: 800; letter-spacing: -.01em; color: var(--text); }
+.gh-sub { margin: 10px 0 0; font-size: 14.5px; line-height: 1.55; color: var(--text-muted); }
+
+.gh-question { margin: 22px 0 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); padding: 14px 16px 16px; }
+.gh-question-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gh-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; color: var(--text-faint); }
+.gh-shuffle { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 7px; background: transparent; color: var(--text-faint); cursor: pointer; }
+.gh-shuffle:hover { color: var(--accent); background: var(--surface); }
+.gh-shuffle svg { width: 14px; height: 14px; }
+.gh-question-text { margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: var(--text); }
+
+.gh-actions { display: flex; flex-direction: column; gap: 10px; }
+.gh-go { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; padding: 14px 18px; cursor: pointer; }
+.gh-go:hover { border-color: var(--border-strong); background: var(--border); }
+.gh-go-ic { display: inline-flex; }
+.gh-go-ic svg { width: 19px; height: 19px; }
+/* The always-works escape hatch, so it reads as secondary to the two doors above it. */
+.gh-copy { align-self: center; border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 8px; cursor: pointer; }
+.gh-copy:hover { color: var(--text); }
+.gh-btn { border: 1px solid var(--border-strong, var(--border)); background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; border-radius: 9px; padding: 9px 18px; cursor: pointer; }
+.gh-btn:hover { background: var(--surface-2); }
+
+.gh-foot { margin: 18px 0 0; text-align: center; font-size: 13.5px; color: var(--text-muted); }
+.gh-link { border: 0; background: none; padding: 0; font: inherit; font-size: inherit; font-weight: 700; color: var(--accent-2); cursor: pointer; }
+.gh-link:hover { text-decoration: underline; }
+
+.gh-steps { margin: 18px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; font-size: 14px; line-height: 1.55; color: var(--text-muted); }
+.gh-steps code, .gh-foot code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; color: var(--text); }
+.gh-code { margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.55; overflow-x: auto; }
 /* Collapsed chat: a thin rail with a reopen button */
 .fchat-rail { width: 48px; flex: 0 0 auto; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
 .fchat-rail-btn { width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); }
@@ -4203,26 +4244,26 @@ button.mf-open:focus-visible,
    and RIGHT is the inspector: when Gretel rails (left=48) and the inspector is open (right=360) the
    canvas center shifts left by (48-360)/2 = -156px, and vice-versa. */
 /* Collapsed Gretel is now hidden entirely (0 wide), not a 48px rail. */
-.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 180px); }
-.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% + 156px); }
-.flow.chat-collapsed.brief-collapsed .flow-toolbar { left: calc(50% - 24px); }
+.flow.left-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 180px); }
+.flow.brief-collapsed:not(.left-collapsed) .flow-toolbar { left: calc(50% + 156px); }
+.flow.left-collapsed.brief-collapsed .flow-toolbar { left: calc(50% - 24px); }
 /* And keep it INSIDE the canvas, not just centered on it. The toolbar is positioned against
    .flow, not .flow-canvas, so a percentage max-width would measure the whole flow and let the
    palette row overhang under the panels. Same panel arithmetic as the offsets above, minus 24px
    of breathing room; the palette wraps to a second line rather than clipping. */
 .flow .flow-toolbar { max-width: calc(100% - 732px); }
-.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { max-width: calc(100% - 372px); }
-.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { max-width: calc(100% - 420px); }
-.flow.chat-collapsed.brief-collapsed .flow-toolbar { max-width: calc(100% - 60px); }
+.flow.left-collapsed:not(.brief-collapsed) .flow-toolbar { max-width: calc(100% - 372px); }
+.flow.brief-collapsed:not(.left-collapsed) .flow-toolbar { max-width: calc(100% - 420px); }
+.flow.left-collapsed.brief-collapsed .flow-toolbar { max-width: calc(100% - 60px); }
 /* THE SAME PILL ON THE GRID, where none of the arithmetic above applies. Gretel and the campaign
    inspector are canvas furniture — they are not rendered on this tab — but their classes still sit
    on .flow, so those four rules would go on shoving the Grid's toolbar sideways by the width of
    panels that are not on screen. Restated here rather than scoped away, because the selectors have
    to match theirs to outrank them. */
 .flow .flow-toolbar-grid,
-.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar-grid,
-.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar-grid,
-.flow.chat-collapsed.brief-collapsed .flow-toolbar-grid {
+.flow.left-collapsed:not(.brief-collapsed) .flow-toolbar-grid,
+.flow.brief-collapsed:not(.left-collapsed) .flow-toolbar-grid,
+.flow.left-collapsed.brief-collapsed .flow-toolbar-grid {
   left: 50%;
   max-width: calc(100% - 40px);
   /* The Grid's own inspector slides in over 0.16s; the toolbar re-centres with it rather than
@@ -4232,9 +4273,9 @@ button.mf-open:focus-visible,
 /* The one panel this tab DOES have: the Grid's inspector, a 360px column on the right. The sheet's
    centre moves left by half of it, so the toolbar does too. */
 .flow .flow-toolbar-grid.insp,
-.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar-grid.insp,
-.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar-grid.insp,
-.flow.chat-collapsed.brief-collapsed .flow-toolbar-grid.insp {
+.flow.left-collapsed:not(.brief-collapsed) .flow-toolbar-grid.insp,
+.flow.brief-collapsed:not(.left-collapsed) .flow-toolbar-grid.insp,
+.flow.left-collapsed.brief-collapsed .flow-toolbar-grid.insp {
   left: calc(50% - 180px);
   max-width: calc(100% - 400px);
 }
