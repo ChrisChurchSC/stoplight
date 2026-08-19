@@ -7,6 +7,13 @@
  */
 
 export type FlowCommand =
+  /**
+   * Run one of the app's own actions — the same handlers the MCP server drives from outside.
+   * `action` must be in GRETEL_ACTIONS (lib/agentBridge.ts); anything else is skipped with a
+   * reason rather than attempted. This is how Gretel reaches the parts of the app the canvas
+   * vocabulary below does not cover: reading the brand, listing assets, adding a proof point.
+   */
+  | { op: 'appAction'; action: string; args?: Record<string, unknown> }
   | { op: 'setName'; value: string }
   | { op: 'setSubject'; value: string }
   | { op: 'setBudget'; value: number }

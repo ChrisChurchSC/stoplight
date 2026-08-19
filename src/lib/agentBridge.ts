@@ -195,6 +195,45 @@ const BUSINESS_MODEL_BY_MOTION: Record<string, string> = {
 }
 
 // The whitelist of actions the bridge may run. Each maps to a real store action.
+/**
+ * THE ACTIONS GRETEL MAY CALL, and the only door onto them.
+ *
+ * The handlers below already run in the browser against the real store — MCP is just a remote
+ * control that pokes them from outside. Gretel runs in the same tab, so it can call them directly
+ * without going near the protocol. What it must not have is the whole map.
+ *
+ * This list is deliberately short. It is the reads, plus the additive brand records Gretel already
+ * creates through its own createAudience / createProof ops — the same class of change, reached a
+ * different way. Everything destructive or wide-reaching (deleteClient, fanOut, generateAssets,
+ * promoteBrand, importAssets) is absent on purpose: a model handed fifty-four app-mutating actions
+ * with no canvas context is a good way to get confidently wrong commands applied to real work.
+ *
+ * Widening it is one line. Do that deliberately, per action, not by reaching for the map.
+ */
+export const GRETEL_ACTIONS = [
+  // reads
+  'listClients', 'getBrand', 'getStrategy', 'listAssets', 'listCanvases',
+  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck',
+  // additive brand records
+  'addAudience', 'addProofPoint', 'addSubject', 'addHook', 'addCta',
+] as const
+
+export type GretelAction = (typeof GRETEL_ACTIONS)[number]
+
+/**
+ * Run one allowlisted app action. Throws rather than returning an error shape, so the caller's
+ * existing skipped-command reporting is what the user sees — a silently dropped command is the
+ * failure mode applyFlowCommands was written to end.
+ */
+export async function runAppAction(action: string, args: Record<string, unknown> = {}): Promise<unknown> {
+  if (!(GRETEL_ACTIONS as readonly string[]).includes(action)) {
+    throw new Error(`"${action}" is not an action Gretel can run`)
+  }
+  const h = handlers[action]
+  if (!h) throw new Error(`"${action}" is allowlisted but has no handler`)
+  return h(args as Args)
+}
+
 const handlers: Record<string, (a: Args) => Promise<unknown>> = {
   async listClients() {
     return { clients: useTrafficStore.getState().clientList }

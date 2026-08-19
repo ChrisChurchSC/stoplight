@@ -99,6 +99,7 @@ import { readLinkFor } from '../domain/liveLink'
 import { assetTrend, type MetricTrend } from '../domain/assetTrend'
 import { listSnapshots } from '../adapters/metrics/metricSnapshots'
 import { Sparkline } from './Sparkline'
+import { runAppAction } from '../lib/agentBridge'
 
 /**
  * Flows — the campaign home + builder. A switcher lists the brand's campaigns; picking
@@ -304,6 +305,33 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
     )}
   </span>
 )
+
+/**
+ * What each app action reads as in the approval list.
+ *
+ * Gretel's suggestions are approved one by one, so every line has to say what it will do in the
+ * user's terms. "Run appAction listAssets" describes the plumbing and hides whether the app is
+ * about to be read or written to — which is the one thing worth knowing before saying yes.
+ *
+ * An action with no label here still works; it falls back to its own name. Missing a label is a
+ * cosmetic gap, not a broken command, which is why this is a lookup and not a required map.
+ */
+const APP_ACTION_LABELS: Record<string, string> = {
+  listClients: 'Look up the client list',
+  getBrand: 'Read this brand',
+  getStrategy: 'Read the brand strategy',
+  listAssets: 'List the assets on this brand',
+  listCanvases: 'List the saved canvases',
+  listAccounts: 'List the target accounts',
+  listConditions: 'List the brand conditions',
+  getBrandBaseline: 'Read the brand baseline',
+  runCoherenceCheck: 'Run a coherence check',
+  addAudience: 'Add an audience to the brand',
+  addProofPoint: 'Add a proof point to the brand',
+  addSubject: 'Add a subject to the brand',
+  addHook: 'Add a hook to the brand',
+  addCta: 'Add a CTA to the brand',
+}
 
 // Quick-start templates offered in Gretel's blank-campaign state: one high-signal deliverable per
 // motion (email, content, social, web). Clicking one drops that node, so you can skip the AI and
@@ -7656,6 +7684,23 @@ export function FlowsView() {
      * anything — the model invents them per reply and has never seen a co_… id.
      */
     const batchRefs = new Map<string, string>()
+    /**
+     * App actions run FIRST and in both modes, because they are not canvas edits: they read the
+     * brand or add a record the canvas commands below may then tag. Running them after would mean
+     * a createAudience in the same batch could not see a proof point this batch just added.
+     *
+     * Awaited one at a time rather than in parallel: they mutate one store, and two additive
+     * writes racing on the same record list is how duplicates appear.
+     */
+    for (const c of cmds) {
+      if (c.op !== 'appAction') continue
+      try {
+        await runAppAction(c.action, c.args ?? {})
+        applied.push(describeCommand(c))
+      } catch (e) {
+        skipped.push(`${describeCommand(c)} (${e instanceof Error ? e.message : 'failed'})`)
+      }
+    }
     if (viewName !== null) {
       let vRefs = [...flowRefs]
       const createdRefs: FlowReference[] = []
@@ -7918,6 +7963,11 @@ export function FlowsView() {
       case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
       case 'createProof': return `Add a proof point "${c.text}" and tag it`
       case 'setStrategy': return `Set the strategy to ${GTM_STRATEGIES.find((s) => s.key === c.value)?.name ?? c.value}`
+      /**
+       * Named for what it does, not what it is. "Run appAction listAssets" describes the plumbing;
+       * the person approving it needs to know the app is about to be read or written to.
+       */
+      case 'appAction': return APP_ACTION_LABELS[c.action] ?? `Run "${c.action}"`
       // Only promise copy when there is a brand to write from. With none bound, the build seeds the
       // assets and copyBlockerFor refuses the writing, so promising it here sets up the same lie the
       // result card used to tell.

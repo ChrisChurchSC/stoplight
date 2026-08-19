@@ -22,7 +22,7 @@ const COMMAND_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'createProof', 'setStrategy', 'createObject', 'setDirection', 'setModel', 'connect', 'disconnect', 'build', 'regenerate'] },
+          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'createProof', 'setStrategy', 'createObject', 'setDirection', 'setModel', 'connect', 'disconnect', 'build', 'regenerate', 'appAction'] },
           value: { type: 'string' },
           weeks: { type: 'number' },
           preset: { type: 'string' },
@@ -33,6 +33,10 @@ const COMMAND_SCHEMA = {
           // Board ops: a handle you invent for a card in THIS batch, the card's kind, and the
           // instruction it carries.
           ref: { type: 'string' },
+          // appAction: the name of an app action, and its arguments. The client refuses any
+          // action outside its allowlist, so an invented one is reported as skipped, not run.
+          action: { type: 'string' },
+          args: { type: 'object', additionalProperties: true },
           kind: { type: 'string' },
           record: { type: 'string' },
           from: { type: 'string' },
@@ -90,6 +94,10 @@ Do three things:
    - disconnect {from, to}: remove a wire.
    - build: build the campaign and write copy for every asset (build mode only; do this when the user asks to build/create/generate it, after adding deliverables).
    - regenerate: rewrite the flow's asset copy (view mode only; use when the user asks to redo/refresh the copy).
+   - appAction {action, args?}: run one of the APP's own actions, for things the canvas vocabulary above does not cover. Use it to LOOK SOMETHING UP before proposing, or to add a brand record. Allowed actions, and nothing else:
+     Reads: listClients, getBrand, getStrategy, listAssets, listCanvases, listAccounts, listConditions, getBrandBaseline, runCoherenceCheck.
+     Writes (all additive, all onto the brand): addAudience {name}, addProofPoint {text}, addSubject {text}, addHook {text}, addCta {text}.
+     Any other action name is refused by the app and reported back as skipped, so do not guess at one. Prefer the canvas ops above when they can do the job: createAudience tags the new audience to THIS campaign, addAudience only adds it to the brand. Reach for appAction when the user asks about the brand rather than the campaign ("what proof points do we have?", "is this coherent?"), or asks to add something to the brand itself.
 3. Return a "nextSteps" array of 2 or 3 SHORT follow-up prompts the user could tap next, phrased as things they would say to you (e.g. "Schedule these over 4 weeks", "Add a proof point", "Make the tone warmer", "Add an email"). Pick the most useful next moves given what is now missing or unfinished on this flow. When you ask an intake question (see Rules), put 2 or 3 concrete ANSWER OPTIONS here instead so the user can tap one. Keep each under about 6 words. Omit the field if nothing is useful.
 
 Rules:
