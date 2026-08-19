@@ -11,6 +11,8 @@ import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
 import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
+import { nextStep } from '../domain/nextStep'
+import { brandPresence } from '../domain/presence'
 import { detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
 import type { MediaType, RowStatus, TrafficRow } from '../domain/types'
@@ -306,7 +308,7 @@ const BUSINESS_MODEL_BY_MOTION: Record<string, string> = {
 export const GRETEL_ACTIONS = [
   // reads
   'listClients', 'getBrand', 'getStrategy', 'listAssets', 'listCanvases',
-  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'runCampaignReview', 'getAssetFields', 'getObjectFields', 'listObjectCards',
+  'listAccounts', 'listConditions', 'getBrandBaseline', 'runCoherenceCheck', 'runCampaignReview', 'getNextStep', 'getAssetFields', 'getObjectFields', 'listObjectCards',
   // additive brand records
   'addAudience', 'addProofPoint', 'addSubject', 'addHook', 'addCta',
 ] as const
@@ -961,6 +963,51 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
           ? ` \`${IN_CREATIVE_KEY}\` is the copy written INSIDE the artwork (overlays, voiceover, page text), not the post copy around it.`
           : ` A text asset has no creative, so it renders no in-creative row.`),
     }
+  },
+
+  /**
+   * WHERE THIS WORKSPACE IS AND WHAT TO DO NEXT — the read that gives the conversation a shape.
+   *
+   * The connector is sixty-odd tools and no stated order, so a session starts wherever the person's
+   * first sentence lands and the model fills the rest in with plausible order of its own. This
+   * answers the ladder against the real workspace, so the suggestion is "this campaign's board has
+   * four cards and none of them instruct the writer" rather than a generic next step.
+   */
+  async getNextStep(a) {
+    const st = useTrafficStore.getState()
+    // An explicit brand wins; otherwise the one the app is scoped to, and 'all' is not a brand.
+    const brand = str(a.brand).trim() || (st.clientFilter !== 'all' ? st.clientFilter : '')
+    const campaign = str(a.campaign).trim()
+    const rows = campaign
+      ? st.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
+      : st.rows.filter((r) => (!brand || clientForCampaign(r.campaign) === brand) && !r.archivedAt)
+    const board = campaign ? boardFor(st.flowBoards, campaign) : null
+    const cards = board?.objects ?? []
+    const asking = cards.filter((o) => !directionCoverage(o.kind, o.direction).asksNothing)
+    const system = brand ? st.brandSystems[brand] : undefined
+    const unfinished = rows.filter((r) => !fieldCoverage(r.channel, r.assetType, r.messaging, r).complete).length
+    // Journey coverage is computed off the assets, so it is only a real answer once some exist.
+    const uncovered = rows.length
+      ? brandPresence(rows).journey.filter((j) => !j.covered).map((j) => ({ label: j.label, suggest: j.suggest }))
+      : []
+    const step = nextStep({
+      brands: st.clientList ?? [],
+      brand: brand || undefined,
+      audiences: system?.audiences?.length ?? 0,
+      proofPoints: system?.rtbs?.length ?? 0,
+      strategy: st.clientProfiles?.[brand]?.strategy,
+      campaign: campaign || undefined,
+      campaignExists: !!campaign && st.campaignList.some((c) => c.name === campaign),
+      cardsAskingDirection: asking.length,
+      cardsWithDirection: asking.filter((o) => directionCoverage(o.kind, o.direction).filled.length > 0).length,
+      assetCount: rows.length,
+      unfinishedAssets: unfinished,
+      approvedAssets: rows.filter((r) => r.status === 'approved').length,
+      uncoveredStages: uncovered,
+      reviewRun: !!st.coherenceLive,
+      reviewFindings: (st.claudeBreaks ?? []).length,
+    })
+    return { brand, campaign, ...step }
   },
 
   /**

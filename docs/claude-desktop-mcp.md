@@ -59,6 +59,39 @@ Pieces:
    - "Write Acme's messaging in Breadcrumbs: two audiences, three proof points, and a few hooks."
    - "Generate a demand-gen campaign's assets for Acme in Breadcrumbs from everything connected."
 
+## The shape of a session
+
+Sixty-odd tools with no stated order is why a session used to start wherever the first sentence
+landed — assets generated for a brand with no audiences, a campaign built before anyone said what it
+was for. Every call worked; the order nobody stated is what went wrong. Three things give it a shape.
+
+**1. Server instructions.** Sent once at connect: the order the work happens, the two things to ask
+rather than infer, and read-before-write. Nothing to configure.
+
+**2. `whats_next`** — the entry point. It reads the *real* workspace and returns which rung it is on,
+a headline about this workspace, why that rung matters, the calls that finish it, and the whole
+ladder. The rungs:
+
+> brand → who it sells to and what backs it → **the goal** → a campaign → the direction behind it →
+> assets → **channels across the journey** → every component filled → reviewed → approved
+
+The two bold rungs come back as a **question for you**, not an action. Neither the goal (which GTM
+motion) nor the channel mix is derivable from the brand, and a wrong guess is invisible: the campaign
+comes out coherent, complete and aimed at the wrong thing.
+
+**3. Prompts** — pick one from Claude Desktop's prompt menu instead of starting from a blank box:
+
+| Prompt | What it does |
+|---|---|
+| `start` | Reads the workspace and says what is worth doing next. Changes nothing. |
+| `set-up-a-brand` | Reads a brand off its site, then fills the gaps *by asking* |
+| `plan-a-campaign` | Asks the goal, asks the channels, puts direction on the board, *then* generates |
+| `review-a-campaign` | Ranked findings, applies the mechanical fixes, flags what needs you |
+| `fill-the-gaps` | Finds every half-built asset and object card, and finishes them |
+
+They ask questions and stop. A prompt that provisioned a whole brand from one click would be making
+the two decisions this server is careful never to infer.
+
 ## Tools
 
 | Tool | Args | What it does |
