@@ -117,7 +117,7 @@ function ConnectionsSection() {
   const [minted, setMinted] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'token' | 'config' | null>(null)
 
   const refresh = () => void listAgentTokens().then(setTokens)
   useEffect(refresh, [])
@@ -132,7 +132,7 @@ function ConnectionsSection() {
       return
     }
     setMinted(res.token)
-    setCopied(false)
+    setCopied(null)
     refresh()
   }
 
@@ -194,17 +194,37 @@ function ConnectionsSection() {
               Revoke it and make another.
             </div>
             <code className="acct-token-value">{minted}</code>
-            <div className="acct-token-cfg-label">Paste into your Claude Desktop config:</div>
-            <pre className="acct-token-cfg">{config}</pre>
-            <div className="acct-token-row">
+            <div className="acct-token-row acct-token-copyrow">
               <button
                 className="acct-token-mint"
                 onClick={() => {
-                  void navigator.clipboard?.writeText(config)
-                  setCopied(true)
+                  void navigator.clipboard?.writeText(minted)
+                  setCopied('token')
                 }}
               >
-                {copied ? 'Copied' : 'Copy config'}
+                {copied === 'token' ? 'Copied the token' : 'Copy the token'}
+              </button>
+            </div>
+            {/* Both buttons exist because both pastes are real, and pasting the wrong one is easy:
+                the whole block REPLACES the breadcrumbs entry, the token alone goes in the quotes
+                after BREADCRUMBS_TOKEN. Said here rather than left to be discovered — a config
+                block pasted into the token's quotes nests a document inside a string, and the only
+                symptom is Desktop failing to start the server. */}
+            <div className="acct-token-cfg-label">
+              Already have a <code>breadcrumbs</code> entry? Paste just the token above, into the quotes after
+              <code> BREADCRUMBS_TOKEN</code>. Starting from scratch? Take the whole block below instead — it
+              replaces the entry.
+            </div>
+            <pre className="acct-token-cfg">{config}</pre>
+            <div className="acct-token-row">
+              <button
+                className="acct-token-done"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(config)
+                  setCopied('config')
+                }}
+              >
+                {copied === 'config' ? 'Copied the whole block' : 'Copy the whole block'}
               </button>
               <button className="acct-token-done" onClick={() => setMinted(null)}>
                 Done
