@@ -7,6 +7,7 @@ import { clientForCampaign } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
+import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
 import type { RowStatus, TrafficRow } from '../domain/types'
@@ -79,6 +80,24 @@ function copyReport(
       `(${coverage.missing.join(', ')}) and render blank on the card. Fill them with edit_asset \`fields\`.`
   }
   return out
+}
+
+/**
+ * A loose channel value from an agent, resolved to the canonical id — or rejected.
+ *
+ * The component schema is keyed by canonical id, and an unrecognized key falls back to a generic
+ * headline / body / CTA triple. So `channel: "Instagram"` (the natural capitalization, and what the
+ * tools themselves defaulted to) silently authored against a three-field fallback instead of
+ * Instagram's single caption — and then reported the card COMPLETE, because it was complete for the
+ * schema it had wrongly resolved. Naming the channel wrong has to be an error the agent can see,
+ * not a quietly different card.
+ */
+function channelArg(value: unknown, fallback: TrafficRow['channel'] = 'instagram'): TrafficRow['channel'] {
+  const raw = str(value).trim()
+  if (!raw) return fallback
+  const id = resolveChannelId(raw)
+  if (!id) throw new Error(`unknown channel "${raw}". Use a canonical id, e.g. ${CHANNEL_LIST.slice(0, 6).map((c) => c.id).join(', ')}…`)
+  return id
 }
 
 /** The first component carrying text, in the order the card renders them, trimmed to a name. */
@@ -805,7 +824,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const row = st.rows.find((r) => r.id === id)
     if (!row) throw new Error(`asset not found: ${id}`)
     const brand = clientForCampaign(row.campaign)
-    const channel = (str(a.channel).trim() || row.channel) as TrafficRow['channel']
+    const channel = channelArg(a.channel, row.channel)
     const assetType = str(a.assetType).trim() || row.assetType || ''
     const patch: Partial<TrafficRow> = {}
     if (str(a.channel).trim()) patch.channel = channel
@@ -875,7 +894,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
   // BEFORE hand-authoring: without it an agent can only guess at the keys, and every field it
   // cannot name arrives empty on a card that reads as finished.
   async getAssetFields(a) {
-    const channel = (str(a.channel).trim() || 'instagram') as TrafficRow['channel']
+    const channel = channelArg(a.channel)
     const assetType = str(a.assetType).trim() || undefined
     const fields = describeAssetFields(channel, assetType)
     // Organic formats define no CTA component, but the card renders a CTA row regardless and reads
@@ -899,7 +918,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const brand = str(a.brand).trim()
     const campaign = str(a.campaign).trim()
     if (!brand || !campaign) throw new Error('brand and campaign are required')
-    const channel = (str(a.channel).trim() || 'Instagram') as TrafficRow['channel']
+    const channel = channelArg(a.channel)
     const assetType = str(a.assetType).trim() || undefined
     const stage = str(a.stage).trim().toLowerCase()
     const applied = applyCopyFields(channel, assetType, {}, a)
