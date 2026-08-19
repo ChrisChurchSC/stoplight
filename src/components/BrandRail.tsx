@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { can } from '../domain/access'
 import { createInvite, signOut } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -25,18 +25,28 @@ export function BrandRail({ children, iconsOnly = false }: { children?: React.Re
    * nothing to size around but the icon and its hit area. 44 with no nav at all.
    */
   const railW = children ? (iconsOnly ? 52 : 68) : 44
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
   const openInvite = useTrafficStore((s) => s.openInvite)
   const role = useTrafficStore((s) => s.role)
-  const brandRecords = useTrafficStore((s) => s.brandRecords)
-  const brandNames = brandRecords.map((b) => b.name.trim()).filter((n) => n && n !== 'New brand')
 
-  // The app is always scoped to a real brand (there's no "all" portfolio view here).
-  useEffect(() => {
-    if (clientFilter === 'all' && brandNames.length) setClientFilter(brandNames[0])
-  }, [clientFilter, brandNames, setClientFilter])
+  /**
+   * NO BRAND IS A REAL STATE, and this rail used to refuse it.
+   *
+   * An effect here forced clientFilter to brandNames[0] the instant it became 'all', which made the
+   * unscoped view unreachable rather than unavailable: every attempt to widen was reverted within a
+   * frame, including deliberate ones from the Campaigns page, the breadcrumb and the global nav,
+   * all three of which set 'all' on purpose.
+   *
+   * That contradicted the page it sat next to. FlowsHome is written for "every campaign until you
+   * pick a brand" — campaignInIndexScope takes `brandChosen` precisely so an unchosen scope shows
+   * everything — so the pin meant a workspace of 85 campaigns across 12 clients drew whichever
+   * client sorted first and reported itself as "6 campaigns" with no sign that 79 were hidden.
+   *
+   * Nothing else needs the pin. canvasBrandScope already answers '' for an unchosen scope in a
+   * multi-brand workspace, and does it on purpose — it "keeps refusing to guess between brands" —
+   * so the brand-scoped pages have always had a no-brand path. This just stops overwriting the
+   * state that reaches it.
+   */
 
   // The account/settings dropdown anchored to the "C" avatar at the foot.
   const [acctOpen, setAcctOpen] = useState(false)
