@@ -42,6 +42,38 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('a board written before the workspace has loaded', () => {
+  /**
+   * THE ONE THAT ACTUALLY HAPPENED, and the one the first version of this check could not see.
+   *
+   * saveFlowBoard withholds the write while `boardsHydrated` is false — correctly, since it
+   * persists every board under one key and an early write would push this tab's stale copy over
+   * the workspace's. The in-memory slice is still updated, so the card is in the store,
+   * list_object_cards confirms it, and nothing was written. Signed in, that flag starts false, so
+   * it is the OPENING of a session that silently drops work — exactly where a connector does its
+   * setting up. A deployed session added 22 cards to a campaign and 2 survived.
+   */
+  it('refuses rather than reporting a card the store is about to drop', async () => {
+    const { useTrafficStore } = await import('../../store/useTrafficStore')
+    const was = useTrafficStore.getState().boardsHydrated
+    useTrafficStore.setState({ boardsHydrated: false })
+    try {
+      const res = await runAgentAction('addObjectCard', { campaign: freshBoard(), kind: 'audience', name: 'The Trade' })
+      expect(res.result).toBeUndefined()
+      expect(res.error).toMatch(/not finished loading|try again/i)
+    } finally {
+      useTrafficStore.setState({ boardsHydrated: was })
+    }
+  })
+
+  it('lets the same write through once the workspace has landed', async () => {
+    const { useTrafficStore } = await import('../../store/useTrafficStore')
+    useTrafficStore.setState({ boardsHydrated: true })
+    const res = await runAgentAction('addObjectCard', { campaign: freshBoard(), kind: 'audience', name: 'The Trade' })
+    expect(res.error).toBeUndefined()
+  })
+})
+
 describe('an object card the browser could not store', () => {
   it('is reported as an error, not as a card with an id', async () => {
     const campaign = freshBoard()
