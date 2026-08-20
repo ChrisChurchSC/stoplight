@@ -105,6 +105,8 @@ describe('what the handoff costs the asset at this end of it', () => {
   /** The type beats the channel where the type changes what this end owes. */
   it('lets the asset type override its channel', () => {
     expect(ctaForHandoff(row('r', 'Sign in', 'website', { assetType: 'login' })).kind).toBe('account')
+    // The one website page that is filled in rather than read, so it owes a form like any other.
+    expect(ctaForHandoff(row('r', 'Contact us', 'website', { assetType: 'contact' })).kind).toBe('form')
     expect(ctaForHandoff(row('r', 'Refer a friend', 'post-purchase', { assetType: 'referral' })).kind).toBe('share')
     expect(ctaForHandoff(row('r', 'Web page', 'website', { assetType: 'page' })).kind).toBe('button')
   })

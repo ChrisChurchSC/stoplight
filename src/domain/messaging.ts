@@ -214,6 +214,22 @@ const OVERRIDES: Record<string, MessagingField[]> = {
     f('error', 'Failed sign-in message', undefined, 120, true),
     f('support', 'Help / contact line', undefined, 90, true),
   ],
+  // A contact page is a form and a promise, not a pitch. The website base would brief it to write
+  // social proof and objection handling for someone who has already decided to get in touch — the
+  // persuading happened on the page before this one. What it owes instead is the two things that
+  // actually lose the enquiry: not knowing which route is theirs (sales, support, press), and not
+  // knowing whether anyone will reply. Hence the routes, the response promise, and a confirmation
+  // that is written rather than left to whatever the form tool says by default.
+  'website:contact': [
+    f('headline', 'Page title', undefined, 60),
+    f('subhead', 'Supporting line', undefined, 120, true),
+    f('routes', 'Who to contact for what', undefined, 240, true),
+    f('form-intro', 'What to tell us / form intro', undefined, 200, true),
+    f('cta', 'Submit button', undefined, 20),
+    f('response', 'Response-time promise', undefined, 90),
+    f('alternatives', 'Other ways to reach us', undefined, 160, true),
+    f('confirmation', 'Confirmation / what happens next', undefined, 200, true),
+  ],
   // Email
   'email:newsletter': [subject(), preview(), body(), cta(30)],
   'email:promotional': [subject(), preview(), f('headline', 'Hero headline', undefined, 60), body(), cta(30)],

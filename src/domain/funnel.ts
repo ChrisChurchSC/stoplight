@@ -81,8 +81,10 @@ export const funnelStageFor = (channel: ChannelId, assetType?: string): FunnelSt
       assetType === 'break-up'
       ? 'consideration'
       : 'awareness'
-  // A pricing page is a decision surface, not education.
-  if (channel === 'website' && (assetType === 'pricing' || assetType === 'comparison')) return 'conversion'
+  // A pricing page is a decision surface, not education. A contact page is the same call one step
+  // further on: nobody fills in a contact form to learn something, so it closes rather than educates.
+  if (channel === 'website' && (assetType === 'pricing' || assetType === 'comparison' || assetType === 'contact'))
+    return 'conversion'
   // Events span the funnel far more widely than one channel default can hold. A premiere, a booth
   // and a conference talk all put you in front of a room that was never your list, so they reach
   // rather than educate. A private dinner is eight people who came to decide, which is a close.
