@@ -165,6 +165,18 @@ TWO CALLS DO NOT UNDO: delete_client deletes a brand and its assets permanently,
 reset_brand_messaging clears authored audiences, proof, hooks and CTAs. Ask first. Everything else
 soft-deletes and can be restored.
 
+ASK AT EACH DECISION, NOT ONLY AT THE START. The two above are the ones that decide a whole
+campaign, but the same test applies all the way through analysing, refining and developing one: if
+the answer is not in what the workspace just handed you, and getting it wrong would be INVISIBLE in
+the output, ask before you write. Inventing an audience's pain, a claim, a number, an objection, or
+a reason a CTA pointed nowhere all read as confident work — nobody can tell by looking which ones
+came from the brand and which from you. review_campaign separates these for you: everything in its
+\`decisions\` is a question to put to the person, not a task to close.
+
+Ask about those, and only those. Anything the workspace already answers — which components a format
+renders, which motion is set, what a card's fields are called — is a read, not a question, and
+asking about it teaches the person to skim the ones that matter.
+
 READ BEFORE YOU WRITE. get_brand before writing to a brand, get_asset_fields before authoring an
 asset, get_object_fields before adding an object card. The field sets are per format and per kind
 and are not guessable; anything you do not write renders blank.
@@ -243,9 +255,9 @@ server.registerPrompt(
         `Work in this order and do not skip ahead:\n` +
         `1. Ask me what the goal is — what success looks like — and set the GTM motion from my answer. Do not pick one for me.\n` +
         `2. Ask me which channels this should live on.\n` +
-        `3. Put the DIRECTION on the board before generating anything: call get_object_fields, then add_object_card for the audience, the message and the proof — a campaign generated with no direction is written from the brief alone.\n` +
+        `3. Put the DIRECTION on the board before generating anything: call get_object_fields, then add_object_card for the audience, the message and the proof — a campaign generated with no direction is written from the brief alone. Ask me for the pain, the objection and the claim rather than writing plausible ones; that is what the copy will argue from, and an invented one is invisible once it is on the card.\n` +
         `4. Only then generate_assets.\n` +
-        `5. Finish with review_campaign and tell me what it found.`,
+        `5. Finish with review_campaign, tell me what it found, and put its \`decisions\` to me before closing any of them.`,
     ),
 )
 
@@ -259,8 +271,11 @@ server.registerPrompt(
   ({ campaign }) =>
     prompt(
       `Review ${campaign ? `the campaign "${campaign}"` : 'a campaign in Breadcrumbs — ask me which one'} with review_campaign.\n\n` +
-        `Show me the findings worst-first, grouped by what kind of problem they are, and for each one tell me what it costs. ` +
-        `Then apply the mechanical fixes (apply_fix) and tell me which findings need a real decision from me instead. ` +
+        `Show me the findings worst-first, grouped by what kind of problem they are, and for each one tell me what it costs.\n\n` +
+        `Split them the way the result does. Apply the mechanical fixes (apply_fix) and tell me what you did. ` +
+        `Everything in \`decisions\` is mine to answer — a dangling CTA can be repointed, removed, or have its target built, ` +
+        `and the copy reads the same whichever was wrong, so do not pick for me. Put those questions to me together, ` +
+        `with what each one is about, and wait for the answers before acting on them. ` +
         `Do not approve anything without asking.`,
     ),
 )
@@ -275,10 +290,16 @@ server.registerPrompt(
   ({ campaign }) =>
     prompt(
       `Find everything half-built on ${campaign ? `"${campaign}"` : 'a campaign in Breadcrumbs — ask me which one'} and finish it.\n\n` +
-        `Call review_campaign with includeCopyCheck: false for the fast structural pass. ` +
-        `For each asset with blank components, call get_asset_fields for its channel and type, then edit_asset with EVERY key it lists — ` +
-        `a component you leave out renders blank on the card. Do the same for object cards carrying no direction. ` +
-        `Write in the brand's voice using what get_brand returns, and show me what you wrote before moving on.`,
+        `Call review_campaign with includeCopyCheck: false for the fast structural pass.\n\n` +
+        `Before you write anything, put its \`decisions\` to me — those are the gaps whose answer is not in the ` +
+        `workspace, and a card asking for an audience's pain or an objection is asking about real people. ` +
+        `Invent one and it reads exactly like the real thing, and everything written afterwards argues from it. ` +
+        `Ask me, in a batch, and wait.\n\n` +
+        `Then fill the rest, which IS just work: for each asset with blank components, call get_asset_fields for its ` +
+        `channel and type, then edit_asset with EVERY key it lists — a component you leave out renders blank on the card. ` +
+        `Write in the brand's voice using what get_brand returns, and ground every claim in a proof point it actually has. ` +
+        `If a component needs a number or a claim the brand has not given you, that is another question for me, not a gap to fill. ` +
+        `Show me what you wrote before moving on to the next asset.`,
     ),
 )
 
@@ -828,7 +849,7 @@ server.registerTool(
   {
     title: 'Review a whole campaign and say what to do',
     description:
-      "One read of an entire campaign — its copy, its completeness and its wiring — returned as a ranked list of findings, each carrying the exact call that fixes it. Runs the Claude coherence check (claims with no proof, weak CTAs, assets repeating each other) AND the passes it cannot see: asset cards with components still blank, object cards carrying no direction, CTAs pointed at assets that are gone, handoffs no button covers. Use this as the standing 'how is this campaign doing' call; use run_coherence_check when you only want the copy breaks.",
+      "One read of an entire campaign — its copy, its completeness and its wiring — returned as a ranked list of findings, each carrying the exact call that fixes it. Runs the Claude coherence check (claims with no proof, weak CTAs, assets repeating each other) AND the passes it cannot see: asset cards with components still blank, object cards carrying no direction, CTAs pointed at assets that are gone, handoffs no button covers. Use this as the standing 'how is this campaign doing' call; use run_coherence_check when you only want the copy breaks. The reply splits what you can close from what you cannot: `decisions` holds the findings whose fix is not derivable from the workspace — which of three repairs a dangling CTA wants, what an audience card's pain actually is — and each is a QUESTION to put to the person, not a task to work through. Answering one yourself produces a campaign that reviews clean and argues from something nobody said.",
     inputSchema: {
       campaign: z.string().describe('The campaign to review'),
       includeCopyCheck: z

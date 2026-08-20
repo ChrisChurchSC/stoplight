@@ -1182,6 +1182,18 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     }
 
     const suggestions = rankSuggestions([...review.suggestions, ...breaks])
+    /**
+     * THE FINDINGS THAT ARE NOT THE MODEL'S TO CLOSE, pulled out of the ranked list.
+     *
+     * Left in among thirty findings each carrying a `fix`, a question reads as one more task, and
+     * the fastest way through a task list is to do it. That is how a review of a campaign ends with
+     * an invented pain on an audience card and an invented reason a CTA pointed nowhere — every
+     * finding closed, the report clean, and nobody asked. Separating them makes the difference
+     * structural rather than a matter of noticing.
+     */
+    const decisions = suggestions
+      .filter((s) => s.ask)
+      .map((s) => ({ ask: s.ask as string, about: s.what, where: s.where, ifAnswered: s.fix }))
     return {
       campaign,
       brand,
@@ -1189,10 +1201,14 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       objectCardCount: review.objectCardCount,
       copyCheckRun: checked,
       total: suggestions.length,
+      decisions,
       suggestions,
       fixable,
       note: suggestions.length
-        ? `${suggestions.length} finding(s), highest severity first. Each carries the call that fixes it.`
+        ? `${suggestions.length} finding(s), highest severity first. Each carries the call that fixes it.` +
+          (decisions.length
+            ? ` ${decisions.length} of them are in \`decisions\`: those are not yours to close — put each question to the person and act on the answer.`
+            : '')
         : `Nothing to raise: every asset's components are filled, every card carries direction, and the copy check found no breaks.`,
     }
   },
