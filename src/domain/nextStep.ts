@@ -196,7 +196,7 @@ export function nextStep(s: WorkspaceSnapshot): NextStep {
       // A guess holds the rung open until a person says yes to it.
       if (s.strategy && s.strategyInferred) {
         return step({
-          headline: `${brand}'s motion is set to "${s.strategy}", but setup inferred it — nobody has confirmed it.`,
+          headline: `The motion on ${brand} is set to "${s.strategy}", but setup inferred it — nobody has confirmed it.`,
           why: 'The motion decides the funnel, the KPIs and which deliverables get seeded. An inferred one reads exactly like a decision, and everything generated after it inherits the guess.',
           ask: `Setup read ${brand} as "${s.strategy}". Is that the goal here, or is this campaign for something else?`,
           actions: [
