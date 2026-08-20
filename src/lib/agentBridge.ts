@@ -2000,7 +2000,17 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
           }
         : null,
       campaigns: st.campaignList.filter((c) => c.client === brand && !c.archivedAt).map((c) => c.name),
-      assets: st.rows.filter((r) => clientForCampaign(r.campaign) === brand).length,
+      /**
+       * LIVE assets, and the archived ones counted separately rather than folded in.
+       *
+       * This used to count every row the brand had, archived included, while list_assets excludes
+       * archived by default. A brand whose assets had all been deleted therefore reported 582 here
+       * and 0 there, and two separate sessions read that pair as proof they were talking to two
+       * different databases — one of them offering to rebuild the work somewhere else. Both numbers
+       * were right; they were answering different questions, and only one of them said so.
+       */
+      assets: st.rows.filter((r) => clientForCampaign(r.campaign) === brand && !r.archivedAt).length,
+      archivedAssets: st.rows.filter((r) => clientForCampaign(r.campaign) === brand && !!r.archivedAt).length,
     }
   },
 }
