@@ -412,7 +412,7 @@ server.registerTool(
   {
     title: 'Read what is connected for a brand',
     description:
-      "Read back everything connected for a brand in Breadcrumbs: its About profile, its messaging system (audiences, proof points, subjects, hooks, CTAs), its campaigns, and asset count. Call this FIRST so you can see what already exists before you populate or write more.",
+      "Read back everything connected for a brand in Breadcrumbs: its About profile, its messaging system (audiences, proof points, subjects, hooks, CTAs), its campaigns, and its asset counts. Call this FIRST so you can see what already exists before you populate or write more. `assets` counts LIVE assets and `archivedAssets` the soft-deleted ones, counted apart on purpose: a brand whose work has all been archived reads as empty in list_assets and full here, and that pair looks exactly like two databases disagreeing when it is one answering two questions.",
     inputSchema: { brand: z.string().describe('The brand / client name') },
   },
   async ({ brand }) => text(await dispatch('getBrand', { brand })),
