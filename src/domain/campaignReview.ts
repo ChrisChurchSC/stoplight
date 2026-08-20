@@ -32,6 +32,8 @@ export type SuggestionKind =
   | 'uncovered-handoff'
   | 'no-direction'
   | 'unnamed-object-card'
+  | 'unwired-object-card'
+  | 'no-journey'
 
 export interface Suggestion {
   kind: SuggestionKind
@@ -53,7 +55,8 @@ const RANK: Record<ReviewSeverity, number> = { high: 0, medium: 1, low: 2 }
  * twice reads the same way round — an unstable review looks like the campaign changed.
  */
 const KIND_ORDER: SuggestionKind[] = [
-  'empty-campaign', 'no-direction', 'unfinished-asset', 'dangling-cta', 'uncovered-handoff', 'unnamed-object-card', 'silent-object-card',
+  'empty-campaign', 'unwired-object-card', 'no-direction', 'no-journey', 'unfinished-asset', 'dangling-cta',
+  'uncovered-handoff', 'unnamed-object-card', 'silent-object-card',
 ]
 
 export function rankSuggestions(list: Suggestion[]): Suggestion[] {
@@ -71,6 +74,8 @@ export interface CampaignReviewInput {
   rows: TrafficRow[]
   /** The object cards on its flow board. */
   objects: CanvasObject[]
+  /** The board's wires. What a card contributes reaches the copy only along these. */
+  connectors?: { from: string; to: string }[]
 }
 
 export interface CampaignReview {
@@ -85,7 +90,7 @@ export interface CampaignReview {
 const severityForGaps = (missing: number, total: number): ReviewSeverity =>
   missing === total ? 'high' : missing * 2 >= total ? 'medium' : 'low'
 
-export function reviewCampaign({ campaign, rows, objects }: CampaignReviewInput): CampaignReview {
+export function reviewCampaign({ campaign, rows, objects, connectors = [] }: CampaignReviewInput): CampaignReview {
   const out: Suggestion[] = []
 
   if (!rows.length) {
@@ -155,6 +160,39 @@ export function reviewCampaign({ campaign, rows, objects }: CampaignReviewInput)
       where: { objectId: o.id },
       fix: `edit_object_card(objectId: "${o.id}", ${id.missing.map((m) => (m === 'name' ? 'name: …' : 'description: …')).join(', ')})`,
     })
+  }
+
+  // A card that reaches nothing. THE quiet failure of a generated board: it is named, it is
+  // described, it carries direction, and none of it travels — everything a card contributes is
+  // gated by a connector, so one with no wire out is decorative.
+  const wired = new Set(connectors.map((c) => c.from))
+  for (const o of objects) {
+    if (wired.has(o.id)) continue
+    out.push({
+      kind: 'unwired-object-card',
+      severity: 'high',
+      what: `The ${o.kind} card ${o.name ? `"${o.name}"` : '(unnamed)'} is wired to nothing.`,
+      why: 'A card reaches the copy only through a connector. Everything this one carries — its direction, its records, its description — currently reaches nothing.',
+      where: { objectId: o.id },
+      fix: `connect_cards(campaign: "${campaign}", from: "${o.id}") to wire it to the brief.`,
+    })
+  }
+
+  // Assets that hand off to nobody. A campaign whose assets never lead to each other is a set of
+  // posts rather than a journey — one layer deep, by construction.
+  if (rows.length > 1) {
+    const linked = new Set<string>()
+    for (const r of rows) for (const c of r.ctas ?? []) if (c.target) { linked.add(r.assetName); linked.add(c.target) }
+    if (!linked.size) {
+      out.push({
+        kind: 'no-journey',
+        severity: 'medium',
+        what: `None of the ${rows.length} assets on "${campaign}" lead to another.`,
+        why: 'Every asset is a dead end, so the campaign is a set of posts rather than a funnel the reader can travel.',
+        where: {},
+        fix: `link_assets(fromAssetId: …, toAssetId: …) to hand one off to the next.`,
+      })
+    }
   }
 
   // A card on the board instructing the writer to do nothing. It still LOOKS like context.

@@ -8,10 +8,11 @@ import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
 import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
-import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
+import { boardFor, deliverableKeyFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, identityCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
 import { makeObjectReference, titleFromDoc } from '../domain/objectReference'
 import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
+import { ctaForHandoff, freshCtaId } from '../domain/assetCtas'
 import { nextStep } from '../domain/nextStep'
 import { brandPresence } from '../domain/presence'
 import { detectBreaks } from '../domain/breaks'
@@ -152,6 +153,43 @@ function cardNameArg(a: Args, kind: CanvasObjectKind): string {
   if (!text) return ''
   return titleFromDoc(str(a.documentName).trim() || 'Pasted text', text, `Untitled ${kind}`)
 }
+
+/**
+ * WIRE A CARD TO SOMETHING, because an unwired card reaches nothing.
+ *
+ * Everything a card contributes — its records, its direction, its document — is gated by
+ * upstreamCardIds, which walks board.connectors and nothing else. A card with no wire out of it is
+ * never in that walk's frontier, so it sits on the board looking exactly like context and reaches
+ * the copy not at all.
+ *
+ * That is why cards created over MCP produced campaigns one layer deep: they were created, they
+ * were named, they carried direction, and none of it travelled.
+ *
+ * An endpoint is one of three things, all plain strings in the connector:
+ *   'campaign'          the brief — everything wired here reaches every asset in the campaign
+ *   '<channel>|<type>'  one deliverable, so the direction reaches only that group
+ *   'co_…'              another card, chaining one card's context through another
+ */
+function connectorTarget(value: unknown, rows: TrafficRow[]): string {
+  const raw = str(value).trim()
+  if (!raw || raw.toLowerCase() === 'campaign') return 'campaign'
+  if (raw.startsWith('co_') || raw.includes('|')) return raw
+  // A channel name is the useful shorthand: an agent knows it wants the emails, not the composite
+  // key that identifies them. Resolved against the campaign's real deliverables so a wire is never
+  // drawn to an endpoint the board does not have.
+  const id = resolveChannelId(raw)
+  const match = rows.find((r) => r.channel === id)
+  if (!match) {
+    throw new Error(
+      `cannot wire to "${raw}". Use 'campaign' (reaches every asset), a card id, or a channel this campaign has assets on.`,
+    )
+  }
+  return deliverableKeyFor(match)
+}
+
+/** This campaign's live assets, for resolving a channel name to the deliverable it stands for. */
+const rowsFor = (campaign: string): TrafficRow[] =>
+  useTrafficStore.getState().rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
 
 /** A free-ish spot for a new card, so a board written over MCP is readable rather than a pile. */
 function nextSlot(pos: Record<string, { x: number; y: number }>): { x: number; y: number } {
@@ -1073,7 +1111,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const rows = st0.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
     const brand = clientForCampaign(campaign)
     const board = boardFor(st0.flowBoards, campaign)
-    const review = reviewCampaign({ campaign, rows, objects: board.objects })
+    const review = reviewCampaign({ campaign, rows, objects: board.objects, connectors: board.connectors })
 
     // The copy check, unless the caller only wants the structural pass (it calls the model, so it
     // is the slow half and worth being able to skip).
@@ -1176,8 +1214,14 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       ...(direction.length ? { direction } : {}),
     }
     const board = boardFor(useTrafficStore.getState().flowBoards, campaign)
+    // WIRED ON CREATION, defaulting to the brief. A card reaches the copy only through a connector
+    // (upstreamCardIds walks nothing else), so leaving this to a second call means every agent that
+    // forgets it builds a board that looks like context and contributes none. Pass connectTo: "none"
+    // to place a card deliberately unwired.
+    const wireTo = str(a.connectTo).trim().toLowerCase() === "none" ? null : connectorTarget(a.connectTo, rowsFor(campaign))
     useTrafficStore.getState().saveFlowBoard({
       ...board,
+      connectors: wireTo ? [...board.connectors, { from: made.id, to: wireTo }] : board.connectors,
       objects: [...board.objects, made],
       // Laid out rather than stacked at the origin: a board of cards all at 0,0 is one card as far
       // as anyone looking at it is concerned.
@@ -1188,7 +1232,79 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       campaign,
       kind,
       name: made.name ?? '',
+      wiredTo: wireTo,
       ...objectCardReport(kind, direction, clamped, made),
+    }
+  },
+
+  /**
+   * Wire one thing to another, or cut the wire. An arrow from A to B means "A helps write B", so
+   * everything A carries travels to B and to everything B feeds in turn.
+   */
+  async connectCards(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const st = useTrafficStore.getState()
+    const rows = st.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
+    const board = boardFor(st.flowBoards, campaign)
+    const from = str(a.from).trim()
+    if (!from) throw new Error('from is required (a card id from list_object_cards)')
+    if (!board.objects.some((o) => o.id === from)) throw new Error(`no card ${from} on "${campaign}"`)
+    const to = connectorTarget(a.to, rows)
+    const disconnect = a.disconnect === true
+    const has = board.connectors.some((c) => c.from === from && c.to === to)
+    const connectors = disconnect
+      ? board.connectors.filter((c) => !(c.from === from && c.to === to))
+      : has
+        ? board.connectors
+        : [...board.connectors, { from, to }]
+    useTrafficStore.getState().saveFlowBoard({ ...board, connectors })
+    return {
+      campaign,
+      from,
+      to,
+      connected: !disconnect,
+      note: disconnect
+        ? 'Cut. Whatever this card carried no longer reaches that target.'
+        : `Wired. Everything this card carries now reaches ${to === 'campaign' ? 'every asset in the campaign' : to}.`,
+    }
+  },
+
+  /**
+   * Hand one asset off to another: the journey the reader actually travels.
+   *
+   * Distinct from wiring cards, which is about what reaches the WRITER. This is about what reaches
+   * the READER — the ad that leads to the landing page that leads to the email. Stored as a CTA on
+   * the source asset targeting the destination by name, which is the same shape the canvas draws
+   * its lines from and uncoveredHandoffs measures against.
+   */
+  async linkAssets(a) {
+    const st = useTrafficStore.getState()
+    const fromId = str(a.fromAssetId).trim()
+    const toId = str(a.toAssetId).trim()
+    if (!fromId || !toId) throw new Error('fromAssetId and toAssetId are required (ids from list_assets)')
+    if (fromId === toId) throw new Error('an asset cannot hand off to itself')
+    const from = st.rows.find((r) => r.id === fromId)
+    const to = st.rows.find((r) => r.id === toId)
+    if (!from) throw new Error(`asset not found: ${fromId}`)
+    if (!to) throw new Error(`asset not found: ${toId}`)
+    const kind = str(a.kind).trim() || ctaForHandoff(to).kind
+    const label = str(a.label).trim() || ctaForHandoff(to).label
+    const existing = from.ctas ?? []
+    // Targeted BY NAME, because that is what the journey reads and what survives a row being
+    // re-seeded. Re-linking the same pair updates the label instead of adding a second button.
+    const already = existing.find((c) => c.target === to.assetName)
+    const ctas = already
+      ? existing.map((c) => (c.target === to.assetName ? { ...c, kind: kind as never, label } : c))
+      : [...existing, { id: freshCtaId(), kind: kind as never, label, target: to.assetName, note: str(a.note).trim() || undefined }]
+    await useTrafficStore.getState().updateRow(fromId, { ctas })
+    return {
+      from: { id: from.id, assetName: from.assetName },
+      to: { id: to.id, assetName: to.assetName },
+      label,
+      kind,
+      updated: !!already,
+      note: 'The reader can now travel from one to the other. run review_campaign to see what handoffs are still uncovered.',
     }
   },
 

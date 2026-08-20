@@ -51,6 +51,7 @@ describe('a campaign with nothing wrong', () => {
       campaign: 'Q4 launch',
       rows: [row()],
       objects: [wholeCard()],
+      connectors: [{ from: 'co_1', to: 'campaign' }],
     })
     expect(review.suggestions).toEqual([])
     expect(review.assetCount).toBe(1)
@@ -200,5 +201,62 @@ describe('a card nobody can identify', () => {
   it('raises nothing for a card that is named and described', () => {
     const review = reviewCampaign({ campaign: 'c', rows: [row()], objects: [wholeCard()] })
     expect(review.suggestions.filter((s) => s.kind === 'unnamed-object-card')).toEqual([])
+  })
+})
+
+
+/**
+ * WHY A GENERATED CAMPAIGN CAME OUT ONE LAYER DEEP.
+ *
+ * Two different things were missing and they look the same from outside. A card reaches the copy
+ * only along a CONNECTOR — upstreamCardIds walks nothing else — so a card created without one is
+ * named, described, carrying direction, and contributing none of it. And an asset leads to another
+ * only through a CTA, so a campaign with none is a set of posts rather than a funnel.
+ */
+describe('a board that reaches nothing', () => {
+  const wired = [{ from: 'co_1', to: 'campaign' }]
+
+  it('raises a card that is wired to nothing, above almost everything else', () => {
+    const review = reviewCampaign({ campaign: 'Q4', rows: [row()], objects: [wholeCard()], connectors: [] })
+    const found = review.suggestions.find((s) => s.kind === 'unwired-object-card')!
+    expect(found.severity).toBe('high')
+    expect(found.what).toContain('wired to nothing')
+    expect(found.fix).toContain('connect_cards(campaign: "Q4", from: "co_1")')
+  })
+
+  it('says nothing about a card that is wired', () => {
+    const review = reviewCampaign({ campaign: 'Q4', rows: [row()], objects: [wholeCard()], connectors: wired })
+    expect(review.suggestions.filter((s) => s.kind === 'unwired-object-card')).toEqual([])
+  })
+
+  it('raises a campaign whose assets never lead to one another', () => {
+    const review = reviewCampaign({
+      campaign: 'Q4',
+      rows: [row({ id: 'r1', assetName: 'Launch post' }), row({ id: 'r2', assetName: 'Landing page' })],
+      objects: [wholeCard()],
+      connectors: wired,
+    })
+    const found = review.suggestions.find((s) => s.kind === 'no-journey')!
+    expect(found.what).toContain('None of the 2 assets')
+    expect(found.fix).toContain('link_assets')
+  })
+
+  it('says nothing once one asset hands off to another', () => {
+    const review = reviewCampaign({
+      campaign: 'Q4',
+      rows: [
+        row({ id: 'r1', assetName: 'Launch post', ctas: [{ id: 'c1', kind: 'button', label: 'Read more', target: 'Landing page' }] } as never),
+        row({ id: 'r2', assetName: 'Landing page' }),
+      ],
+      objects: [wholeCard()],
+      connectors: wired,
+    })
+    expect(review.suggestions.filter((s) => s.kind === 'no-journey')).toEqual([])
+  })
+
+  it('does not ask a one-asset campaign for a journey', () => {
+    // Nothing to hand off to. Reporting it would be asking for a link that cannot exist.
+    const review = reviewCampaign({ campaign: 'Q4', rows: [row()], objects: [wholeCard()], connectors: wired })
+    expect(review.suggestions.filter((s) => s.kind === 'no-journey')).toEqual([])
   })
 })

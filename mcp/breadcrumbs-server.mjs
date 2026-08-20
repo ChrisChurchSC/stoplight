@@ -849,6 +849,44 @@ server.registerTool(
 )
 
 server.registerTool(
+  'connect_cards',
+  {
+    title: 'Wire a card to what it should inform',
+    description:
+      "Wire an object card to what it should help write. An arrow from A to B means \"A helps write B\", and it is the ONLY way a card's direction, records and description reach the copy — an unwired card sits on the board looking like context and contributes nothing. New cards are wired to the campaign automatically; use this to aim one at a single channel instead, to chain a card through another, or to cut a wire (disconnect: true).",
+    inputSchema: {
+      campaign: z.string().describe('The campaign whose board to wire'),
+      from: z.string().describe('The card id doing the informing (from list_object_cards)'),
+      to: z
+        .string()
+        .optional()
+        .describe(
+          "What it informs: 'campaign' (default — reaches every asset), a channel name like \"email\" (reaches only that deliverable), or another card id to chain through.",
+        ),
+      disconnect: z.boolean().optional().describe('Cut this wire instead of drawing it'),
+    },
+  },
+  async (a) => text(await dispatch('connectCards', a)),
+)
+
+server.registerTool(
+  'link_assets',
+  {
+    title: 'Hand one asset off to another',
+    description:
+      "Make one asset lead to another — the journey the READER travels (the ad that leads to the landing page that leads to the email), as opposed to connect_cards which is about what reaches the WRITER. Stored as a CTA on the source asset pointing at the destination, so the canvas draws the line and review_campaign stops reporting the handoff as uncovered. Without these, a generated campaign is a set of unrelated posts rather than a funnel.",
+    inputSchema: {
+      fromAssetId: z.string().describe('The asset the reader starts on (id from list_assets)'),
+      toAssetId: z.string().describe('The asset it hands off to'),
+      label: z.string().optional().describe('The words on the button. Defaults to a sensible one for the destination.'),
+      kind: z.string().optional().describe('button, form, input, download, booking, payment, account, share, other'),
+      note: z.string().optional().describe('What has to be built for this to work'),
+    },
+  },
+  async (a) => text(await dispatch('linkAssets', a)),
+)
+
+server.registerTool(
   'add_object_card',
   {
     title: 'Put an object card on a campaign’s board',
@@ -866,6 +904,12 @@ server.registerTool(
         .optional()
         .describe('The card’s direction by key → answer, from get_object_fields. e.g. { pain, objection } on an audience card.'),
       refId: z.string().optional().describe('Id of the record this card points at, when you have one'),
+      connectTo: z
+        .string()
+        .optional()
+        .describe(
+          "What this card should help write. Defaults to 'campaign', which reaches every asset — a card is wired on creation because an unwired one contributes nothing at all. Name a channel to aim it at one deliverable, or pass 'none' to place it deliberately unwired.",
+        ),
     },
   },
   async (a) => text(await dispatch('addObjectCard', a)),
