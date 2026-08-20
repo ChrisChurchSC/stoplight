@@ -73,9 +73,18 @@ export interface WorkspaceSnapshot {
   proofPoints: number
   /** The GTM motion, once somebody has said what this is for. */
   strategy?: string
+  /**
+   * True when that motion was INFERRED off the brand's site rather than answered by a person.
+   * Setup writes its guess into the same field a decision goes in, and once written the two are
+   * indistinguishable — so the one question this ladder exists to force goes unasked, because
+   * something is already sitting where the answer would have gone.
+   */
+  strategyInferred?: boolean
   /** The campaign in question, and whether it exists. */
   campaign?: string
   campaignExists: boolean
+  /** Campaigns the brand already has — the difference between "make one" and "which one?". */
+  campaignCount: number
   /** Object cards on the campaign's board: how many ask for direction, and how many carry any. */
   cardsAskingDirection: number
   cardsWithDirection: number
@@ -86,9 +95,14 @@ export interface WorkspaceSnapshot {
   approvedAssets: number
   /** Funnel stages with no channel yet, and what would fill them. */
   uncoveredStages: { label: string; suggest: string[] }[]
-  /** Whether a review has been run since the assets were written, and what it found. */
+  /**
+   * Whether a review has been run FOR THIS SCOPE, and what it found. A run against a different
+   * campaign says nothing about this one.
+   */
   reviewRun: boolean
   reviewFindings: number
+  /** It ran, but the copy has been edited since — its findings describe an older campaign. */
+  reviewStale?: boolean
 }
 
 const LABELS: Record<StageKey, string> = {
@@ -110,7 +124,9 @@ function rungsFor(s: WorkspaceSnapshot): Rung[] {
   return [
     { key: 'brand', label: LABELS.brand, done: hasBrand },
     { key: 'profile', label: LABELS.profile, done: s.audiences > 0 && s.proofPoints > 0 },
-    { key: 'goal', label: LABELS.goal, done: !!s.strategy },
+    // An inferred motion does not close this rung. Something is in the field, but nobody has said
+    // what the campaign is for, and that is what the rung is asking.
+    { key: 'goal', label: LABELS.goal, done: !!s.strategy && !s.strategyInferred },
     { key: 'campaign', label: LABELS.campaign, done: s.campaignExists },
     // A board of cards that all ask for direction and none carry it is the failure worth catching;
     // a board whose cards ask for none (a Voice, a Concept) is not unfinished.
@@ -118,7 +134,7 @@ function rungsFor(s: WorkspaceSnapshot): Rung[] {
     { key: 'assets', label: LABELS.assets, done: s.assetCount > 0 },
     { key: 'journey', label: LABELS.journey, done: s.uncoveredStages.length === 0 },
     { key: 'finish', label: LABELS.finish, done: s.assetCount > 0 && s.unfinishedAssets === 0 },
-    { key: 'review', label: LABELS.review, done: s.reviewRun && s.reviewFindings === 0 },
+    { key: 'review', label: LABELS.review, done: s.reviewRun && !s.reviewStale && s.reviewFindings === 0 },
     { key: 'approve', label: LABELS.approve, done: s.assetCount > 0 && s.approvedAssets >= s.assetCount },
   ]
 }
@@ -174,6 +190,21 @@ export function nextStep(s: WorkspaceSnapshot): NextStep {
       })
 
     case 'goal':
+      // A motion setup guessed is the harder half of this rung. setup_client reads one off the
+      // site and stores it, so the field is full and the rung would read as answered — and the
+      // question the connector is careful never to infer would be the one thing nobody asks.
+      // A guess holds the rung open until a person says yes to it.
+      if (s.strategy && s.strategyInferred) {
+        return step({
+          headline: `${brand}'s motion is set to "${s.strategy}", but setup inferred it — nobody has confirmed it.`,
+          why: 'The motion decides the funnel, the KPIs and which deliverables get seeded. An inferred one reads exactly like a decision, and everything generated after it inherits the guess.',
+          ask: `Setup read ${brand} as "${s.strategy}". Is that the goal here, or is this campaign for something else?`,
+          actions: [
+            { call: `get_strategy(brand: ${brand})`, what: 'Read the rationale and the signals it was inferred from, so the question is a real one' },
+            { call: `set_strategy(brand: ${brand}, strategy: …)`, what: 'Record their answer — the same motion still counts, confirming is what marks it decided' },
+          ],
+        })
+      }
       return step({
         headline: `${brand} has no stated GTM motion.`,
         why: 'The motion decides the funnel, the KPIs and which deliverables get seeded — it cannot be inferred from the brand, and guessing it produces a campaign aimed at nothing.',
@@ -181,13 +212,31 @@ export function nextStep(s: WorkspaceSnapshot): NextStep {
         actions: [{ call: `set_strategy(brand: ${brand}, strategy: …)`, what: 'Set the motion once the person has said what they want' }],
       })
 
-    case 'campaign':
+    case 'campaign': {
+      // THE ENTRY-POINT CASE. The instructions say to call this first in a session, and at that
+      // point nobody has named a campaign yet — so the honest answer is a question. Saying "no
+      // campaign called the campaign" and offering new_campaign is how a brand with four campaigns
+      // gets a fifth: the model reads a missing argument as a missing campaign.
+      const named = !!s.campaign?.trim()
+      if (!named && s.campaignCount > 0) {
+        return step({
+          headline: `${brand} has ${s.campaignCount} campaign(s), and this answer is about the brand as a whole.`,
+          why: 'Direction, assets, the review and the approval are all per-campaign — none of the rungs below can be answered until you say which one.',
+          ask: 'Which campaign are we working on — or is this a new one?',
+          actions: [
+            { call: `whats_next(brand: ${brand}, campaign: …)`, what: 'Ask again about one campaign to get the rest of the ladder' },
+            { call: `get_brand(brand: ${brand})`, what: 'Read the campaigns it already has, to ask with the names in hand' },
+            { call: `new_campaign(brand: ${brand}, name: …)`, what: 'Start a new one instead, once they have said so' },
+          ],
+        })
+      }
       return step({
-        headline: `${brand} has no campaign called ${campaign} yet.`,
+        headline: named ? `${brand} has no campaign called ${campaign} yet.` : `${brand} has no campaigns yet.`,
         why: 'Assets, boards and reviews all hang off a campaign.',
         ask: 'What should this campaign be called, and what is it announcing?',
         actions: [{ call: `new_campaign(brand: ${brand}, name: …)`, what: 'Create it' }],
       })
+    }
 
     case 'direction':
       return step({
@@ -236,9 +285,11 @@ export function nextStep(s: WorkspaceSnapshot): NextStep {
 
     case 'review':
       return step({
-        headline: s.reviewRun
-          ? `The last review of ${campaign} left ${s.reviewFindings} finding(s) open.`
-          : `${campaign} has not been reviewed.`,
+        headline: s.reviewStale
+          ? `${campaign} was reviewed, but its copy has been edited since — those findings describe an older campaign.`
+          : s.reviewRun
+            ? `The last review of ${campaign} left ${s.reviewFindings} finding(s) open.`
+            : `${campaign} has not been reviewed.`,
         why: 'The review is where a claim with no proof, a dead CTA and a half-built card get caught before anyone sees them.',
         actions: [
           { call: `review_campaign(campaign: ${campaign})`, what: 'Everything worth doing, ranked, each with its fix' },

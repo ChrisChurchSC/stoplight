@@ -153,7 +153,17 @@ Skipping a rung does not fail, it just produces confident work aimed at nothing.
 ASK, DO NOT INFER, on two things. The GOAL (which GTM motion this campaign is for) and WHICH
 CHANNELS it should live on. Neither is derivable from the brand, and a wrong guess is invisible:
 the campaign comes out coherent, complete and aimed at the wrong thing. whats_next will tell you
-when one of these is outstanding, and phrase the question.
+when one of these is outstanding, and phrase the question. A motion setup_client INFERRED counts as
+outstanding — it is a guess sitting in the field an answer goes in. Put it to the person and record
+what they say with set_strategy, even if they pick the same one.
+
+NAMES CREATE. set_brand_info, new_campaign and generate_assets all create the brand when the name
+matches nothing, so a misspelling makes a second brand instead of an error. Call list_clients once
+and use the name it returns.
+
+TWO CALLS DO NOT UNDO: delete_client deletes a brand and its assets permanently, and
+reset_brand_messaging clears authored audiences, proof, hooks and CTAs. Ask first. Everything else
+soft-deletes and can be restored.
 
 READ BEFORE YOU WRITE. get_brand before writing to a brand, get_asset_fields before authoring an
 asset, get_object_fields before adding an object card. The field sets are per format and per kind
@@ -214,6 +224,8 @@ server.registerPrompt(
         `\n\nThen show me what came back and what is still thin, and fill the gaps WITH me: ` +
         `add_audience for who it sells to, add_proof_point for what backs the claims. ` +
         `Ask me before inventing an audience or a claim — a plausible invented proof point is worse than a missing one. ` +
+        `If setup inferred a GTM motion, tell me which one and what it read to get there, and ask whether that is actually the goal — ` +
+        `then call set_strategy with my answer. Do not leave a guess standing as the decision. ` +
         `Finish by calling whats_next so I can see what is left.`,
     ),
 )
@@ -275,7 +287,7 @@ server.registerTool(
   {
     title: 'Where this workspace is, and what to do next',
     description:
-      "THE ENTRY POINT — call this first in a session, and again whenever you finish something or are unsure what to do. Reads the real workspace and returns: which rung of the work it is on (brand -> audiences and proof -> goal -> campaign -> direction -> assets -> channels -> filled components -> review -> approval), a one-line headline about THIS workspace, why that rung matters, the exact calls that would finish it, and the whole ladder with each rung's state. When the rung needs an answer only the person can give — what the goal is, which channels to run — it returns the question to ask them rather than an action to take. Pass a campaign to ask about one campaign.",
+      "THE ENTRY POINT — call this first in a session, and again whenever you finish something or are unsure what to do. Reads the real workspace and returns: which rung of the work it is on (brand -> audiences and proof -> goal -> campaign -> direction -> assets -> channels -> filled components -> review -> approval), a one-line headline about THIS workspace, why that rung matters, the exact calls that would finish it, and the whole ladder with each rung's state. When the rung needs an answer only the person can give — what the goal is, which channels to run, a motion setup only guessed — it returns the question to ask them rather than an action to take. WITHOUT a campaign the answer is about the brand as a whole and stops at 'which campaign'; pass one to get the rungs below it (direction, assets, review, approval), which are all per-campaign.",
     inputSchema: {
       brand: z.string().optional().describe('The brand to ask about (defaults to the one the app is scoped to)'),
       campaign: z.string().optional().describe('The campaign to ask about. Without it, the answer is about the brand as a whole.'),
@@ -288,7 +300,8 @@ server.registerTool(
   'list_clients',
   {
     title: 'List clients',
-    description: 'List the clients currently in the Breadcrumbs workspace.',
+    description:
+      'List the clients (brands) currently in the Breadcrumbs workspace. Every tool that takes a `brand` matches on this exact name, and the write tools CREATE a brand when the name matches nothing — so read this once before writing, rather than typing a name from memory.',
     inputSchema: {},
   },
   async () => text(await dispatch('listClients', {})),
@@ -309,7 +322,7 @@ server.registerTool(
   {
     title: 'Set up client with Claude',
     description:
-      "Onboard a client from their website URL. Claude crawls their site (and any connected accounts) and proposes brand, ICP, proof points, channel mix, and a first campaign. It INFERS the best-fit GTM motion (PLG / demand-gen / sales-led / ABM / community) from business-model signals and returns it as recommendedStrategy with a rationale, confidence, and signalsUsed. The motion is stored on the brand and pre-selected for generation (override with set_strategy). Use this to set up a new client end to end.",
+      "Onboard a client from their website URL. Claude crawls their site (and any connected accounts) and proposes brand, ICP, proof points, channel mix, and a first campaign. It INFERS the best-fit GTM motion (PLG / demand-gen / sales-led / ABM / community) from business-model signals and returns it as recommendedStrategy with a rationale, confidence, and signalsUsed. The motion is stored on the brand and pre-selected for generation, but it is a PROPOSAL, not an answer: show the person what it inferred and why, and call set_strategy to record what they say (the same motion still counts — confirming is what marks it decided). Until then whats_next keeps the goal rung open. Use this to set up a new client end to end.",
     inputSchema: {
       url: z.string().describe("The client's website URL or domain, e.g. acme.com"),
       notes: z.string().optional().describe('Optional notes to steer the setup (e.g. "free consumer app")'),
@@ -337,7 +350,7 @@ server.registerTool(
   {
     title: 'Run coherence check',
     description:
-      'Run the Claude coherence check on a client (optionally one campaign) and return the breaks found in the campaign thread.',
+      "Run the Claude coherence check on a client (optionally one campaign) and return the breaks found in the campaign thread. This reads the COPY only. review_campaign is the standing 'how is this campaign doing' call — it runs this check AND the passes it cannot see (blank components, cards carrying no direction, dead CTAs); reach for this one when you only want the copy breaks. A check is recorded against the exact scope you pass, so a brand-wide run does not count as having reviewed one campaign.",
     inputSchema: {
       client: z.string().describe('The client name to check'),
       campaign: z.string().optional().describe('A specific campaign name, or omit for all campaigns'),
@@ -364,7 +377,7 @@ server.registerTool(
   {
     title: 'Populate brand About info',
     description:
-      "Populate (or update) a brand's About profile — the standing context its canvases and messaging draw from. Creates the brand if it does not exist. Only the fields you pass are written; omit the rest. List fields accept an array or a comma/newline-separated string.",
+      "Populate (or update) a brand's About profile — the standing context its canvases and messaging draw from. Creates the brand if the name matches nothing, so pass one from list_clients: a misspelling makes a second brand rather than an error. Only the fields you pass are written; omit the rest. List fields accept an array or a comma/newline-separated string.",
     inputSchema: {
       brand: z.string().describe('The brand / client name'),
       oneLiner: z.string().optional().describe('What the brand does, in one line'),
@@ -401,7 +414,7 @@ server.registerTool(
   {
     title: 'Override a brand’s GTM motion',
     description:
-      "Override the brand's GTM motion. The value persists on the brand and is honored by generate_assets (which seeds the deliverable set for the chosen motion). Pick a key from: plg, demand-gen, sales-led, lifecycle, aarrr, bowtie, abm, content-seo, outbound, community, local-takeover (names also accepted).",
+      "Record the brand's GTM motion — the call that turns a guess into a decision. Use it to override an inferred motion AND to confirm one (passing the motion setup already inferred is not a no-op: it marks the question answered, which is what closes the goal rung). The value persists on the brand and is honored by generate_assets (which seeds the deliverable set for the chosen motion). Only call it once the person has actually said what the goal is. Pick a key from: plg, demand-gen, sales-led, lifecycle, aarrr, bowtie, abm, content-seo, outbound, community, local-takeover (names also accepted).",
     inputSchema: {
       brand: z.string().describe('The brand / client name'),
       strategy: z.string().describe('The motion key or name, e.g. plg or "PLG Flywheel"'),
@@ -431,7 +444,7 @@ server.registerTool(
   {
     title: 'Reset a brand’s messaging system',
     description:
-      "Clear a brand's authored messaging components (audiences, proof points, subjects, hooks, CTAs) so you can rebuild them clean. Keeps the standard GTM strategies. Use this if the messaging list got polluted with stray or duplicate entries.",
+      "Clear a brand's authored messaging components (audiences, proof points, subjects, hooks, CTAs) so you can rebuild them clean. Keeps the standard GTM strategies. Use this if the messaging list got polluted with stray or duplicate entries. IT DOES NOT UNDO, and it discards work a person may have written by hand — ask before calling it, and say what get_brand shows is about to go.",
     inputSchema: { brand: z.string().describe('The brand / client name') },
   },
   async ({ brand }) => text(await dispatch('resetBrandMessaging', { brand })),
@@ -525,7 +538,8 @@ server.registerTool(
   'new_campaign',
   {
     title: 'Create a campaign',
-    description: 'Create an empty campaign for a brand. Creates the brand if it does not exist.',
+    description:
+      'Create an empty campaign for a brand. Creates the brand too if the name matches nothing — so a misspelled brand yields a second brand rather than an error. Use a name from list_clients.',
     inputSchema: {
       brand: z.string().describe('The brand / client name'),
       name: z.string().describe('The campaign name'),
@@ -540,7 +554,7 @@ server.registerTool(
   {
     title: 'Generate assets from everything connected',
     description:
-      "Generate draft assets for a campaign from everything connected — the brand's About profile, audiences, and proof points. Each asset is composed uniquely from its funnel stage, audience, CTA, and proof point (no two share a headline / primary text / CTA). Seeds the deliverable set for the chosen GTM strategy, then writes the copy. Creates the brand and campaign if needed. Drafts land for a human to review.",
+      "Generate draft assets for a campaign from everything connected — the brand's About profile, audiences, and proof points. Each asset is composed uniquely from its funnel stage, audience, CTA, and proof point (no two share a headline / primary text / CTA). Seeds the deliverable set for the chosen GTM strategy, then writes the copy. PUT THE DIRECTION ON THE BOARD FIRST — add_object_card for the audience, the message and the proof — because generation reads the board, and a campaign with an empty board is written from the brief alone while the board still looks like context. Creates the brand and campaign if the names match nothing, so pass a name from list_clients rather than a guess. Drafts land for a human to review.",
     inputSchema: {
       brand: z.string().describe('The brand / client name'),
       campaign: z.string().describe('The campaign to generate into'),
@@ -1045,7 +1059,8 @@ server.registerTool(
   'delete_client',
   {
     title: 'Delete a client / brand (permanent)',
-    description: 'Permanently delete a client/brand and all its assets. HARD delete (not recoverable) — use it to clear setup-failure junk brands like "Just a moment...".',
+    description:
+      'Permanently delete a client/brand and all its assets. HARD delete — there is no restore_client, and delete_campaign / delete_asset are the recoverable ones. It exists to clear setup-failure junk brands like "Just a moment...". ASK BEFORE CALLING IT on anything else, and confirm the exact name against list_clients first: a near-miss here deletes a real brand.',
     inputSchema: { name: z.string().describe('The client / brand name') },
   },
   async (a) => text(await dispatch('deleteClient', a)),
