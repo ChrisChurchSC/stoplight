@@ -1,5 +1,6 @@
 import { DIRECTION_FIELD, DIRECTION_KEYS, RETIRED_DIRECTION, capFor, type DirectionKey } from './direction'
 import { CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, type CanvasObject, type CanvasObjectKind } from './flowBoard'
+import { pickReference, type ObjectReference } from './objectReference'
 
 /**
  * WHAT AN OBJECT CARD ASKS FOR, AND WHETHER AN AGENT ANSWERED ALL OF IT.
@@ -123,8 +124,41 @@ export function directionCoverage(
   return { filled, missing, complete: missing.length === 0, asksNothing: asks.length === 0 }
 }
 
+/**
+ * IS THIS CARD IDENTIFIABLE, AND DOES IT SAY WHAT IT IS?
+ *
+ * Direction is what a card contributes to the COPY. These two are what it contributes to everyone
+ * LOOKING at it, and a generated board fails on them first: three Audience cards that all read
+ * "Audience" in the Layers panel and in every "what feeds this asset" answer, none of them saying
+ * who the audience is.
+ *
+ *  - A NAME is the card's own, and survives changing the record under it. Without one a card is
+ *    named by whatever it happens to point at, which for a freshly generated card is nothing.
+ *  - A DESCRIPTION is the document standing as "here is what this thing is, in the words of the
+ *    person who knows". It reaches the writer; the team note deliberately does not.
+ *
+ * Reported separately from direction rather than folded in, because they fail for different reasons
+ * and are fixed by different calls — and because a kind that asks for no direction still owes both.
+ */
+export function identityCoverage(o: Pick<CanvasObject, 'name' | 'reference' | 'refId'>, recordHasDoc = false): {
+  named: boolean
+  described: boolean
+  missing: ('name' | 'description')[]
+} {
+  const named = !!(o.name ?? '').trim()
+  // The card's own document, or the record's — pickReference's precedence, so this agrees with what
+  // the inspector shows and what the writer is actually sent.
+  const described = !!(o.reference?.text ?? '').trim() || recordHasDoc
+  const missing: ('name' | 'description')[] = []
+  if (!named) missing.push('name')
+  if (!described) missing.push('description')
+  return { named, described, missing }
+}
+
 /** A card as an agent reads it back: what it is, what it points at, and what it still owes. */
-export function objectCardView(o: CanvasObject) {
+export function objectCardView(o: CanvasObject, recordDocs?: Map<string, ObjectReference>) {
+  const recordDoc = o.refId ? recordDocs?.get(o.refId) : undefined
+  const shown = pickReference(o.reference, recordDoc)
   return {
     id: o.id,
     kind: o.kind,
@@ -132,7 +166,11 @@ export function objectCardView(o: CanvasObject) {
     note: o.text ?? '',
     refId: o.refId ?? '',
     smartObjectId: o.smartObjectId ?? '',
+    /** The document this card is read from, and which slot it came from. */
+    description: shown?.ref.text ?? '',
+    descriptionFrom: shown?.from ?? null,
     direction: Object.fromEntries((o.direction ?? []).map((e) => [e.key, e.value])),
     fields: directionCoverage(o.kind, o.direction),
+    identity: identityCoverage(o, !!(recordDoc?.text ?? '').trim()),
   }
 }

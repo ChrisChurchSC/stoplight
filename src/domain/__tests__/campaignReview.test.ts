@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { rankSuggestions, reviewCampaign, type Suggestion } from '../campaignReview'
 import type { CanvasObject } from '../flowBoard'
+import { makeObjectReference } from '../objectReference'
 import type { ChannelId, TrafficRow } from '../types'
 
 /**
@@ -32,12 +33,24 @@ const row = (over: Partial<TrafficRow> = {}): TrafficRow =>
 
 const card = (over: Partial<CanvasObject> = {}): CanvasObject => ({ id: 'co_1', kind: 'audience', text: '', ...over })
 
+/** A card with nothing wrong with it: named, described, and carrying its direction. */
+const wholeCard = (over: Partial<CanvasObject> = {}): CanvasObject =>
+  card({
+    name: 'Enterprise, renewal',
+    reference: makeObjectReference('persona.md', 'They own the renewal and are measured on retention.', 0),
+    direction: [
+      { key: 'pain', value: 'Manual handoff' },
+      { key: 'objection', value: 'Too small' },
+    ],
+    ...over,
+  })
+
 describe('a campaign with nothing wrong', () => {
   it('raises nothing when every component is filled and every card carries direction', () => {
     const review = reviewCampaign({
       campaign: 'Q4 launch',
       rows: [row()],
-      objects: [card({ direction: [{ key: 'pain', value: 'Manual handoff' }, { key: 'objection', value: 'Too small' }] })],
+      objects: [wholeCard()],
     })
     expect(review.suggestions).toEqual([])
     expect(review.assetCount).toBe(1)
@@ -157,5 +170,35 @@ describe('the order it is read in', () => {
       expect(x.why, `${x.kind} has no reason`).not.toBe('')
       expect(x.fix, `${x.kind} has no fix`).not.toBe('')
     }
+  })
+})
+
+
+describe('a card nobody can identify', () => {
+  it('is raised even when its direction is perfect', () => {
+    // Distinct from a silent card: this one instructs the writer fine and still leaves a board
+    // nobody can read.
+    const review = reviewCampaign({
+      campaign: 'c',
+      rows: [row()],
+      objects: [wholeCard({ name: undefined, reference: undefined })],
+    })
+    const found = review.suggestions.find((s) => s.kind === 'unnamed-object-card')!
+    expect(found.what).toContain('no name and no description')
+    expect(found.fix).toContain('edit_object_card(objectId: "co_1", name: …, description: …)')
+    expect(review.suggestions.find((s) => s.kind === 'silent-object-card')).toBeUndefined()
+  })
+
+  it('calls a missing name worse than a missing description', () => {
+    const noName = reviewCampaign({ campaign: 'c', rows: [row()], objects: [wholeCard({ name: undefined })] })
+    expect(noName.suggestions.find((s) => s.kind === 'unnamed-object-card')!.severity).toBe('medium')
+
+    const noDoc = reviewCampaign({ campaign: 'c', rows: [row()], objects: [wholeCard({ reference: undefined })] })
+    expect(noDoc.suggestions.find((s) => s.kind === 'unnamed-object-card')!.severity).toBe('low')
+  })
+
+  it('raises nothing for a card that is named and described', () => {
+    const review = reviewCampaign({ campaign: 'c', rows: [row()], objects: [wholeCard()] })
+    expect(review.suggestions.filter((s) => s.kind === 'unnamed-object-card')).toEqual([])
   })
 })
