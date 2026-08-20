@@ -163,6 +163,12 @@ when one of these is outstanding, and phrase the question. A motion setup_client
 outstanding — it is a guess sitting in the field an answer goes in. Put it to the person and record
 what they say with set_strategy, even if they pick the same one.
 
+A NAME YOU CANNOT FIND IS NOT A NAME THAT IS MISSING. list_clients lists BRANDS. Campaigns live in
+list_campaigns, and a campaign made as a blank canvas belongs to the Drafts space rather than to any
+brand — so it is in no brand's list and Drafts is not in list_clients. Look with list_campaigns
+before you tell somebody their work is not there; concluding it from the wrong listing has already
+sent a session off to rebuild a campaign that existed, with its assets, the whole time.
+
 NAMES CREATE. set_brand_info, new_campaign and generate_assets all create the brand when the name
 matches nothing, so a misspelling makes a second brand instead of an error. Call list_clients once
 and use the name it returns.
@@ -328,10 +334,23 @@ server.registerTool(
   {
     title: 'List clients',
     description:
-      'List the clients (brands) currently in the Breadcrumbs workspace. Every tool that takes a `brand` matches on this exact name, and the write tools CREATE a brand when the name matches nothing — so read this once before writing, rather than typing a name from memory.',
+      "List the clients (BRANDS) in the Breadcrumbs workspace. Every tool that takes a `brand` matches on this exact name, and the write tools CREATE a brand when the name matches nothing — so read this once before writing, rather than typing a name from memory. It lists brands and nothing else: a campaign is not here, and a campaign in Drafts belongs to no brand at all, so its name appearing nowhere in this list means nothing about whether it exists. Use list_campaigns to look for a campaign, and never conclude from this list alone that something is missing.",
     inputSchema: {},
   },
   async () => text(await dispatch('listClients', {})),
+)
+
+server.registerTool(
+  'list_campaigns',
+  {
+    title: 'List campaigns, including the ones no brand owns',
+    description:
+      "Every campaign in the workspace with the brand that owns it, its asset count, its strategy and subject. THE ONLY WAY TO FIND A CAMPAIGN BY NAME. Campaigns created as a blank canvas belong to the Drafts space rather than to a brand, and Drafts is deliberately absent from list_clients — so those campaigns appear in no other listing, and a session that checked list_clients and did not find a name has learned nothing about whether it exists. Call this before telling anyone a campaign is missing.",
+    inputSchema: {
+      brand: z.string().optional().describe('Limit to one brand. Pass "Drafts" for the ones that belong to no brand. Omit for all.'),
+    },
+  },
+  async (a) => text(await dispatch('listCampaigns', a)),
 )
 
 server.registerTool(
