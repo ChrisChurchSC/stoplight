@@ -58,6 +58,28 @@ describe('finding a campaign by name', () => {
     expect(brands.result.note).toMatch(/list_campaigns/)
   })
 
+  it('lists a campaign that exists only as the name its assets carry', async () => {
+    // The other way a campaign is real: nothing registered it, a live asset just names it. Ingested
+    // assets arrive this way, and a listing built from the register alone would answer "no such
+    // campaign" about one with work in it.
+    const { useTrafficStore } = await import('../../store/useTrafficStore')
+    const campaign = fresh()
+    const rows = useTrafficStore.getState().rows
+    await useTrafficStore.getState().applyRowsSnapshot([
+      ...rows,
+      { ...rows[0], id: `unregistered_${campaign}`, assetName: `${campaign} asset`, campaign },
+    ])
+
+    const res = (await runAgentAction('listCampaigns', {})) as {
+      result: { campaigns: { name: string; registered: boolean; assets: number }[]; note: string }
+    }
+    const found = res.result.campaigns.find((c) => c.name === campaign)
+    expect(found, 'a campaign carried only by a row must still be listed').toBeTruthy()
+    expect(found!.registered).toBe(false)
+    expect(found!.assets).toBe(1)
+    expect(res.result.note).toMatch(/only as the name their assets carry/)
+  })
+
   it('scopes to one brand when asked, Drafts included', async () => {
     const { useTrafficStore } = await import('../../store/useTrafficStore')
     const drafted = fresh()
