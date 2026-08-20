@@ -557,6 +557,57 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
   },
 
   /**
+   * MOVE A CAMPAIGN TO A BRAND — the act that was missing, and whose absence looked like a bug.
+   *
+   * Filing a campaign into a FOLDER does not do this and was never meant to: a folder is a path
+   * inside a brand, so setCampaignFolder writes `folder` and leaves `client` alone. Because a folder
+   * can be named anything, a campaign filed in one called "World Within" heads its group WORLD
+   * WITHIN in the gallery while its record still says Drafts — and every brand-scoped read, which
+   * filters on `client`, correctly says it is not that brand's. Two axes, one of them named after
+   * the other, and no way from here to set the one that counts.
+   *
+   * bindCampaignBrand is the right write and the safe one: it PATCHES the existing record rather
+   * than adding a second campaign under the target brand, which is what the create-if-missing tools
+   * would have done to a campaign whose name they did not find.
+   */
+  async setCampaignBrand(a) {
+    const campaign = str(a.campaign).trim()
+    const brand = str(a.brand).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const st = useTrafficStore.getState()
+    const known = liveCampaignNames(st.rows, st.campaignList)
+    if (!known.has(campaign)) {
+      throw new Error(`No campaign "${campaign}". list_campaigns returns the names, including the ones no brand owns.`)
+    }
+    // An unknown brand here would file the campaign somewhere that does not exist, and the near
+    // misses in a real workspace are close enough to matter — "World Within" beside "World Within —
+    // Network Strategy", "Super-Conscious" beside "Super Conscious Studio". Exact match or refuse.
+    if (brand && brand !== DRAFTS_SPACE) {
+      const match = st.clientList.find((c) => c === brand)
+      if (!match) {
+        const near = st.clientList.filter((c) => c.toLowerCase().includes(brand.toLowerCase()) || brand.toLowerCase().includes(c.toLowerCase()))
+        throw new Error(
+          `No brand "${brand}".` +
+            (near.length ? ` Did you mean: ${near.map((n) => `"${n}"`).join(', ')}? Names must match exactly.` : ' Call list_clients for the exact names.'),
+        )
+      }
+    }
+    const before = brandForCampaignName(campaign)
+    // An empty brand puts it back in the brand-less space rather than leaving it pointed at nothing.
+    useTrafficStore.getState().bindCampaignBrand(campaign, brand || DRAFTS_SPACE)
+    const after = brandForCampaignName(campaign)
+    return {
+      campaign,
+      brand: after,
+      previousBrand: before,
+      changed: before !== after,
+      note:
+        `"${campaign}" now belongs to ${after}. This is the campaign RECORD, which is what every ` +
+        `brand-scoped read filters on — separate from its folder, which is only where it sits in the gallery.`,
+    }
+  },
+
+  /**
    * EVERY CAMPAIGN, INCLUDING THE ONES NO BRAND OWNS.
    *
    * clientList deliberately excludes the Drafts space, and until now nothing here listed campaigns
@@ -591,7 +642,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
      */
     const byName = new Map<
       string,
-      { name: string; brand: string; registered: boolean; strategy: string; subject: string; parent: string }
+      { name: string; brand: string; folder: string; registered: boolean; strategy: string; subject: string; parent: string }
     >()
     for (const c of st.campaignList) {
       if (c.archivedAt) continue
@@ -599,6 +650,15 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         name: c.name,
         // The board, when the record has not caught up with it — see brandForCampaignName.
         brand: brandForCampaignName(c.name),
+        /**
+         * A DIFFERENT AXIS FROM THE BRAND, and returned because the two are told apart by nothing
+         * else. A folder is a path INSIDE a brand, so a folder can be named after a brand and the
+         * gallery will head its group with that name — a campaign filed in a folder called "World
+         * Within" while its record says Drafts renders under a heading reading WORLD WITHIN and is
+         * not that brand's at all. Worse, the no-folder bucket is displayed as "Drafts" too, which
+         * is the same word DRAFTS_SPACE uses for the brand-less space and a different thing.
+         */
+        folder: c.folder ?? '',
         registered: true,
         strategy: c.strategy ?? '',
         subject: c.subject ?? '',
@@ -609,7 +669,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       if (byName.has(name)) continue
       // Nothing registers it, so the only brand available is whatever the campaign→client map says,
       // and that map answers "Unassigned" when it has never heard of the campaign either.
-      byName.set(name, { name, brand: brandForCampaignName(name), registered: false, strategy: '', subject: '', parent: '' })
+      byName.set(name, { name, brand: brandForCampaignName(name), folder: '', registered: false, strategy: '', subject: '', parent: '' })
     }
     const campaigns = [...byName.values()]
       .filter((c) => !brand || c.brand.toLowerCase() === brand.toLowerCase())
