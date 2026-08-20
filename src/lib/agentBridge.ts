@@ -9,6 +9,7 @@ import { newAudience } from '../domain/audiences'
 import { newDescriptor } from '../domain/descriptors'
 import { newLibraryCta } from '../domain/library'
 import { DRAFTS_SPACE, UNASSIGNED, clientForCampaign, liveCampaignNames } from '../domain/clients'
+import { brandFromBoard, isBrandless } from '../domain/brand'
 import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
@@ -336,6 +337,37 @@ function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { 
   }
 }
 /** Rows for a brand matching a filter, sorted, with limit/cursor paging. */
+/**
+ * WHOSE CAMPAIGN IS THIS — answered the way the app answers it, not the way the record does.
+ *
+ * A campaign can carry its brand on the BOARD and nowhere else. bindCampaignBrand writes the
+ * record only when a Brand card is wired into the brief, so every campaign built before that
+ * wiring, imported, or holding a card nobody has attached yet has a Brand card naming a brand —
+ * shaping the copy, filling the pickers, shown under the brand in the app — while the record still
+ * says nobody. Reading the record alone calls those brandless, which is a fact about where you
+ * looked and not about the campaign.
+ *
+ * The connector read the record alone. So a campaign the person could see filed under World Within
+ * came back as Drafts, get_brand reported World Within as having no campaigns at all, and a session
+ * reading that pair concluded the connector and the app were on different databases and offered to
+ * rebuild the work. One store, one campaign, two places its brand is written, and only one of them
+ * was ever consulted.
+ *
+ * READ-ONLY on purpose. The store's healCampaignBrand resolves the same way and writes the record
+ * back, which is right when a person opens the campaign and wrong as a side effect of listing.
+ */
+function brandForCampaignName(name: string): string {
+  const st = useTrafficStore.getState()
+  const recorded = st.campaignList.find((c) => c.name === name)?.client?.trim() || clientForCampaign(name)
+  const filed = !isBrandless(recorded) && recorded !== DRAFTS_SPACE ? recorded : ''
+  if (filed) return filed
+  const board = st.flowBoards.find((b) => b.key === name)
+  const fromBoard = brandFromBoard(board, (refId) => st.brandObjects.find((o) => o.id === refId)?.name)
+  // Falling back to the record keeps DRAFTS_SPACE meaning "deliberately nobody's" rather than
+  // flattening it into UNASSIGNED, which means "nothing knows".
+  return fromBoard || recorded || UNASSIGNED
+}
+
 function resolveBrandAssets(brand: string, filter: AssetFilter, opts: { sort?: string; limit?: number; cursor?: number } = {}) {
   const st = useTrafficStore.getState()
   const proofLabel = new Map<string, string>()
@@ -544,7 +576,8 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       if (c.archivedAt) continue
       byName.set(c.name, {
         name: c.name,
-        brand: (c.client ?? '').trim() || DRAFTS_SPACE,
+        // The board, when the record has not caught up with it — see brandForCampaignName.
+        brand: brandForCampaignName(c.name),
         registered: true,
         strategy: c.strategy ?? '',
         subject: c.subject ?? '',
@@ -555,7 +588,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       if (byName.has(name)) continue
       // Nothing registers it, so the only brand available is whatever the campaign→client map says,
       // and that map answers "Unassigned" when it has never heard of the campaign either.
-      byName.set(name, { name, brand: clientForCampaign(name), registered: false, strategy: '', subject: '', parent: '' })
+      byName.set(name, { name, brand: brandForCampaignName(name), registered: false, strategy: '', subject: '', parent: '' })
     }
     const campaigns = [...byName.values()]
       .filter((c) => !brand || c.brand.toLowerCase() === brand.toLowerCase())
@@ -1389,7 +1422,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!campaign) throw new Error('campaign is required')
     const st0 = useTrafficStore.getState()
     const rows = st0.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
-    const brand = clientForCampaign(campaign)
+    const brand = brandForCampaignName(campaign)
     const board = boardFor(st0.flowBoards, campaign)
     const review = reviewCampaign({ campaign, rows, objects: board.objects })
 
@@ -2028,7 +2061,15 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
             ctas: sys.ctas.map((x) => x.label),
           }
         : null,
-      campaigns: st.campaignList.filter((c) => c.client === brand && !c.archivedAt).map((c) => c.name),
+      /**
+       * Every campaign that resolves to this brand, not only the ones whose RECORD names it. A
+       * campaign carrying its brand on the board and nowhere else belongs here — the person can see
+       * it filed under this brand, and reporting "no campaigns" about a brand they are looking at a
+       * campaign inside of is how this connector got accused of being a different database.
+       */
+      campaigns: [...liveCampaignNames(st.rows, st.campaignList)]
+        .filter((name) => brandForCampaignName(name) === brand)
+        .sort(),
       /**
        * LIVE assets, and the archived ones counted separately rather than folded in.
        *

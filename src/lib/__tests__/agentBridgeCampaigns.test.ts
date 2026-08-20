@@ -80,6 +80,42 @@ describe('finding a campaign by name', () => {
     expect(res.result.note).toMatch(/only as the name their assets carry/)
   })
 
+  it('reads the brand off the BOARD when the record has not caught up', async () => {
+    /**
+     * THE ONE THAT COST THE MOST. bindCampaignBrand writes the campaign record only when a Brand
+     * card is wired into the brief, so a campaign can name its brand on the board and nowhere else
+     * — visible to the person under that brand, brandless to anything reading the record. Asked
+     * about such a campaign the connector answered "Drafts", get_brand said the brand had no
+     * campaigns at all, and a session reading that pair concluded this was a different database and
+     * offered to rebuild the work.
+     */
+    const { useTrafficStore } = await import('../../store/useTrafficStore')
+    const campaign = fresh()
+    const st = useTrafficStore.getState()
+    st.addClient('World Within')
+    // A campaign filed nowhere...
+    st.addCampaign({ name: campaign, client: 'Drafts', strategy: 'Demand Gen' })
+    // ...whose board carries a Brand card wired into the brief.
+    const brandObj = { id: `br_${campaign}`, name: 'World Within' }
+    useTrafficStore.setState({ brandObjects: [...st.brandObjects, brandObj] as never })
+    useTrafficStore.getState().saveFlowBoard({
+      key: campaign,
+      objects: [{ id: 'n1', kind: 'brand', refId: brandObj.id, text: '' }] as never,
+      placements: [],
+      pos: {},
+      connectors: [{ from: 'n1', to: 'campaign' }] as never,
+    })
+
+    const res = (await runAgentAction('listCampaigns', {})) as {
+      result: { campaigns: { name: string; brand: string }[] }
+    }
+    expect(res.result.campaigns.find((c) => c.name === campaign)!.brand).toBe('World Within')
+
+    // And the brand stops claiming it has no campaigns.
+    const brand = (await runAgentAction('getBrand', { brand: 'World Within' })) as { result: { campaigns: string[] } }
+    expect(brand.result.campaigns).toContain(campaign)
+  })
+
   it('scopes to one brand when asked, Drafts included', async () => {
     const { useTrafficStore } = await import('../../store/useTrafficStore')
     const drafted = fresh()
