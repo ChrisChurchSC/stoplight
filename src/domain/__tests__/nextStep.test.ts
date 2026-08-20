@@ -22,6 +22,7 @@ const snap = (over: Partial<WorkspaceSnapshot> = {}): WorkspaceSnapshot => ({
   strategy: 'demand-gen',
   campaign: 'Q4 launch',
   campaignExists: true,
+  campaignCount: 1,
   cardsAskingDirection: 2,
   cardsWithDirection: 2,
   assetCount: 6,
@@ -95,6 +96,74 @@ describe('what it asks rather than decides', () => {
   it('does not ask on rungs that are simply work', () => {
     expect(nextStep(snap({ assetCount: 0 })).ask).toBeUndefined()
     expect(nextStep(snap({ unfinishedAssets: 2 })).ask).toBeUndefined()
+  })
+})
+
+describe('a guess is not an answer', () => {
+  /**
+   * setup_client reads a GTM motion off the brand's site and stores it in the same field a decided
+   * one goes in. The rung used to test only that the field was full, so the single question this
+   * ladder exists to force — what is this campaign FOR — went unasked precisely in the flow the
+   * connector recommends people start with.
+   */
+  it('holds the goal rung open while the motion is only inferred', () => {
+    const step = nextStep(snap({ strategy: 'demand-gen', strategyInferred: true }))
+    expect(step.stage).toBe('goal')
+    expect(step.ladder.find((r) => r.key === 'goal')!.done).toBe(false)
+    expect(step.ask).toMatch(/demand-gen/)
+    expect(step.headline).toMatch(/inferred|confirm/i)
+  })
+
+  it('closes it once a person has answered', () => {
+    expect(nextStep(snap({ strategy: 'demand-gen', strategyInferred: false })).stage).not.toBe('goal')
+  })
+
+  it('still asks plainly when there is no motion at all', () => {
+    const step = nextStep(snap({ strategy: undefined }))
+    expect(step.stage).toBe('goal')
+    expect(step.headline).toContain('no stated GTM motion')
+  })
+})
+
+describe('asked about the brand, with no campaign named', () => {
+  /**
+   * The documented way to open a session is whats_next with no campaign. That used to read as
+   * "there is no campaign" and answer with new_campaign — so the entry point's advice to a brand
+   * with four campaigns was to make a fifth.
+   */
+  it('asks which campaign instead of telling the model to create one', () => {
+    const step = nextStep(snap({ campaign: undefined, campaignExists: false, campaignCount: 4 }))
+    expect(step.stage).toBe('campaign')
+    expect(step.ask).toMatch(/which campaign/i)
+    expect(step.headline).toContain('4 campaign(s)')
+    expect(step.headline).not.toContain('no campaign called')
+    // new_campaign stays available, but never as the first thing offered.
+    expect(step.actions[0].call).toContain('whats_next')
+  })
+
+  it('does say to create one when the brand genuinely has none', () => {
+    const step = nextStep(snap({ campaign: undefined, campaignExists: false, campaignCount: 0 }))
+    expect(step.stage).toBe('campaign')
+    expect(step.headline).toContain('no campaigns yet')
+    expect(step.actions[0].call).toContain('new_campaign')
+  })
+
+  it('names the campaign that is missing when one was asked for by name', () => {
+    const step = nextStep(snap({ campaign: 'Spring push', campaignExists: false, campaignCount: 4 }))
+    expect(step.headline).toContain('no campaign called "Spring push"')
+  })
+})
+
+describe('a review that no longer describes the campaign', () => {
+  it('reopens the rung when the copy changed after the check ran', () => {
+    const step = nextStep(snap({ reviewRun: true, reviewFindings: 0, reviewStale: true }))
+    expect(step.stage).toBe('review')
+    expect(step.ladder.find((r) => r.key === 'review')!.done).toBe(false)
+    expect(step.headline).toMatch(/edited since|older campaign/i)
+  })
+
+  it('does not let a stale clean result walk the ladder through to approved', () => {
+    expect(nextStep(snap({ reviewStale: true })).complete).toBe(false)
   })
 })
 

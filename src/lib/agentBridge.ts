@@ -13,7 +13,7 @@ import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCover
 import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
 import { nextStep } from '../domain/nextStep'
 import { brandPresence } from '../domain/presence'
-import { detectBreaks } from '../domain/breaks'
+import { breakScopeKey, coherenceContentHash, detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
 import type { MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { type AssetFilter, type ViewGroupBy, assetMatchesFilter, assetDate, groupKeyFor, resolveWindow } from '../domain/savedViews'
@@ -990,22 +990,40 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const uncovered = rows.length
       ? brandPresence(rows).journey.filter((j) => !j.covered).map((j) => ({ label: j.label, suggest: j.suggest }))
       : []
+    /**
+     * THE REVIEW RUNG, ANSWERED FOR THIS SCOPE — not "a check ran once, somewhere".
+     *
+     * The store keeps which scope its breaks were computed for and a fingerprint of the copy they
+     * were computed from, and reading neither is how the ladder waves work through to approval:
+     * a check run on another campaign reports THIS one as reviewed, and a check run before the
+     * last edit reports its stale findings as current. Both end the same way — "reviewed, nothing
+     * outstanding" about a campaign nobody has read. The scope must match exactly; a brand-wide
+     * run counts findings from every other campaign, so it is not an answer about this one.
+     */
+    const reviewedHere = !!st.coherenceLive && st.claudeBreaksScope === breakScopeKey(brand, campaign || 'all')
+    const reviewStale = reviewedHere && !!st.coherenceCheckedHash && st.coherenceCheckedHash !== coherenceContentHash(rows)
+    const profile = st.clientProfiles?.[brand]
     const step = nextStep({
       brands: st.clientList ?? [],
       brand: brand || undefined,
       audiences: system?.audiences?.length ?? 0,
       proofPoints: system?.rtbs?.length ?? 0,
-      strategy: st.clientProfiles?.[brand]?.strategy,
+      strategy: profile?.strategy,
+      // setStrategy clears the inferred signals when a person answers, so a motion still carrying
+      // them is one setup guessed and nobody has confirmed.
+      strategyInferred: (profile?.strategySignals?.length ?? 0) > 0,
       campaign: campaign || undefined,
       campaignExists: !!campaign && st.campaignList.some((c) => c.name === campaign),
+      campaignCount: st.campaignList.filter((c) => !brand || c.client === brand).length,
       cardsAskingDirection: asking.length,
       cardsWithDirection: asking.filter((o) => directionCoverage(o.kind, o.direction).filled.length > 0).length,
       assetCount: rows.length,
       unfinishedAssets: unfinished,
       approvedAssets: rows.filter((r) => r.status === 'approved').length,
       uncoveredStages: uncovered,
-      reviewRun: !!st.coherenceLive,
-      reviewFindings: (st.claudeBreaks ?? []).length,
+      reviewRun: reviewedHere,
+      reviewFindings: reviewedHere ? (st.claudeBreaks ?? []).length : 0,
+      reviewStale,
     })
     return { brand, campaign, ...step }
   },
