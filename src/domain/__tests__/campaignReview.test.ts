@@ -146,6 +146,44 @@ describe('the order it is read in', () => {
     expect(rankSuggestions([...list].reverse()).map((x) => `${x.severity}:${x.kind}:${x.where.objectId ?? ''}`)).toEqual(once)
   })
 
+  /**
+   * A REVIEW THAT ANSWERS ITSELF.
+   *
+   * Every finding used to carry a `fix`, so a list of them read as a list of tasks — and the fastest
+   * way through a task list is to do it. "This audience card carries no pain" has an obvious-looking
+   * repair, and a model holding the brand profile will write a fluent, plausible pain that nobody
+   * has ever said, after which every asset argues from it and the review comes back clean. The ones
+   * whose answer is not in the workspace are marked, so the difference is structural rather than a
+   * matter of noticing.
+   */
+  it('asks about the findings whose fix it cannot choose', () => {
+    const review = reviewCampaign({ campaign: 'c', rows: [], objects: [] })
+    const empty = review.suggestions.find((x) => x.kind === 'empty-campaign')!
+    expect(empty.ask).toBeTruthy()
+    expect(empty.ask).toMatch(/announcing/i)
+  })
+
+  it('asks what a silent card should say rather than writing one', () => {
+    const review = reviewCampaign({ campaign: 'c', rows: [row()], objects: [card()] })
+    const silent = review.suggestions.find((x) => x.kind === 'silent-object-card')!
+    expect(silent.ask).toMatch(/pain|objection/i)
+    // The whole point: it says out loud that inventing one is the worse option.
+    expect(silent.ask).toMatch(/invented/i)
+  })
+
+  it('stays silent on findings that are simply work', () => {
+    // A component the format already names is not a decision. Asking about it would teach the
+    // reader to skim the questions that are.
+    const review = reviewCampaign({
+      campaign: 'c',
+      rows: [row({ channel: 'website' as ChannelId, messaging: {} })],
+      objects: [card({ direction: [{ key: 'pain', value: 'p' }, { key: 'objection', value: 'o' }] })],
+    })
+    const work = review.suggestions.find((x) => x.kind === 'unfinished-asset')!
+    expect(work).toBeTruthy()
+    expect(work.ask).toBeUndefined()
+  })
+
   it('every finding carries why it matters and what to call', () => {
     const review = reviewCampaign({
       campaign: 'c',

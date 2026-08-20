@@ -43,6 +43,20 @@ export interface Suggestion {
   where: { assetId?: string; assetName?: string; objectId?: string; channel?: string }
   /** The call that fixes it, named exactly, so acting on the review needs no translation. */
   fix: string
+  /**
+   * The question to put to the PERSON, on findings whose fix cannot be chosen from what the
+   * workspace holds.
+   *
+   * A review that answers itself is the failure worth naming here. "This audience card carries no
+   * pain" has an obvious-looking repair — write a pain — and a model with the brand profile in front
+   * of it will write a fluent, plausible one that nobody has ever said out loud, then everything
+   * downstream argues from it. Present only where a guess would be invisible in the output: a
+   * dangling CTA can be repointed, removed, or have its target built, and the copy reads the same
+   * whichever was wrong. Absent on findings that are simply work — filling a component the format
+   * already names is not a decision, and asking about it would teach the reader to skim the ones
+   * that are.
+   */
+  ask?: string
 }
 
 const RANK: Record<ReviewSeverity, number> = { high: 0, medium: 1, low: 2 }
@@ -95,6 +109,7 @@ export function reviewCampaign({ campaign, rows, objects }: CampaignReviewInput)
       why: 'Nothing to review, ship or schedule — the campaign exists only as a name.',
       where: {},
       fix: `generate_assets(campaign: "${campaign}") to seed the strategy's deliverables, or add_asset for a one-off.`,
+      ask: `What is this campaign announcing, and should it be the motion's full deliverable set or a few specific pieces?`,
     })
   }
 
@@ -125,6 +140,7 @@ export function reviewCampaign({ campaign, rows, objects }: CampaignReviewInput)
         why: 'The button leads nowhere — the one action the asset asks for is broken.',
         where: { assetId: r.id, assetName: r.assetName },
         fix: `Repoint or remove it with edit_asset(assetId: "${r.id}"), or add the missing asset.`,
+        ask: `"${r.assetName}" asks the reader to go to "${c.target}", which is not here. Should that asset be built, should the CTA point somewhere else, or should it come out?`,
       })
     }
     for (const h of uncoveredHandoffs(r, rows)) {
@@ -153,6 +169,7 @@ export function reviewCampaign({ campaign, rows, objects }: CampaignReviewInput)
       why: 'Direction is what a card contributes to the copy; with none it adds a name and nothing else.',
       where: { objectId: o.id },
       fix: `edit_object_card(objectId: "${o.id}", fields: { ${c.missing.join(', ')} })`,
+      ask: `What should the ${o.kind} card "${o.name || o.text.split('\n')[0] || o.kind}" tell the writer — its ${c.missing.join(', ')}? These are things about real people and real claims; a plausible invented one is worse than a blank.`,
     })
   }
 
@@ -167,6 +184,7 @@ export function reviewCampaign({ campaign, rows, objects }: CampaignReviewInput)
       why: 'The copy is written from the brief alone — the board looks like context and contributes none.',
       where: {},
       fix: `list_object_cards(campaign: "${campaign}"), then edit_object_card on each.`,
+      ask: `What should "${campaign}" lean on — the pain it argues from, the objection it has to beat, the claim it asserts?`,
     })
   }
 
