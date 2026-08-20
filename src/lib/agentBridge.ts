@@ -8,7 +8,8 @@ import { mapSite } from '../adapters/setup/siteMap'
 import { newAudience } from '../domain/audiences'
 import { newDescriptor } from '../domain/descriptors'
 import { newLibraryCta } from '../domain/library'
-import { DRAFTS_SPACE, clientForCampaign, liveCampaignNames } from '../domain/clients'
+import { DRAFTS_SPACE, UNASSIGNED, clientForCampaign, liveCampaignNames } from '../domain/clients'
+import { brandFromBoard, isBrandless } from '../domain/brand'
 import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
@@ -336,8 +337,58 @@ function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { 
   }
 }
 /** Rows for a brand matching a filter, sorted, with limit/cursor paging. */
+/**
+ * WHOSE CAMPAIGN IS THIS — answered the way the app answers it, not the way the record does.
+ *
+ * A campaign can carry its brand on the BOARD and nowhere else. bindCampaignBrand writes the
+ * record only when a Brand card is wired into the brief, so every campaign built before that
+ * wiring, imported, or holding a card nobody has attached yet has a Brand card naming a brand —
+ * shaping the copy, filling the pickers, shown under the brand in the app — while the record still
+ * says nobody. Reading the record alone calls those brandless, which is a fact about where you
+ * looked and not about the campaign.
+ *
+ * The connector read the record alone. So a campaign the person could see filed under World Within
+ * came back as Drafts, get_brand reported World Within as having no campaigns at all, and a session
+ * reading that pair concluded the connector and the app were on different databases and offered to
+ * rebuild the work. One store, one campaign, two places its brand is written, and only one of them
+ * was ever consulted.
+ *
+ * READ-ONLY on purpose. The store's healCampaignBrand resolves the same way and writes the record
+ * back, which is right when a person opens the campaign and wrong as a side effect of listing.
+ */
+function brandForCampaignName(name: string): string {
+  const st = useTrafficStore.getState()
+  const recorded = st.campaignList.find((c) => c.name === name)?.client?.trim() || clientForCampaign(name)
+  const filed = !isBrandless(recorded) && recorded !== DRAFTS_SPACE ? recorded : ''
+  if (filed) return filed
+  const board = st.flowBoards.find((b) => b.key === name)
+  const fromBoard = brandFromBoard(board, (refId) => st.brandObjects.find((o) => o.id === refId)?.name)
+  // Falling back to the record keeps DRAFTS_SPACE meaning "deliberately nobody's" rather than
+  // flattening it into UNASSIGNED, which means "nothing knows".
+  return fromBoard || recorded || UNASSIGNED
+}
+
+/**
+ * brandForCampaignName over a row set. Memoised per call because the resolution walks a board and a
+ * workspace has thousands of rows, but only a few dozen campaign names among them.
+ */
+function brandResolver(): (campaign?: string) => string {
+  const cache = new Map<string, string>()
+  return (campaign) => {
+    const name = (campaign ?? '').trim()
+    if (!name) return UNASSIGNED
+    let resolved = cache.get(name)
+    if (resolved === undefined) {
+      resolved = brandForCampaignName(name)
+      cache.set(name, resolved)
+    }
+    return resolved
+  }
+}
+
 function resolveBrandAssets(brand: string, filter: AssetFilter, opts: { sort?: string; limit?: number; cursor?: number } = {}) {
   const st = useTrafficStore.getState()
+  const brandOf = brandResolver()
   const proofLabel = new Map<string, string>()
   for (const rtb of st.brandSystems[brand]?.rtbs ?? []) proofLabel.set(rtb.id, rtb.label)
   const brandCtas = st.brandSystems[brand]?.ctas ?? []
@@ -345,7 +396,9 @@ function resolveBrandAssets(brand: string, filter: AssetFilter, opts: { sort?: s
   // stays relative: "last 30 days" recomputes its start every time it's opened.
   const f = resolveWindow(filter, Date.now())
   const matched = sortRows(
-    st.rows.filter((r) => clientForCampaign(r.campaign) === brand && assetMatchesFilter(r, f)),
+    // Resolved, not recorded: a campaign whose brand lives on its board still belongs to that
+    // brand, and matching on the record alone answered "no assets" about a campaign holding eight.
+    st.rows.filter((r) => brandOf(r.campaign) === brand && assetMatchesFilter(r, f)),
     opts.sort,
   )
   const total = matched.length
@@ -527,29 +580,74 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       const c = (r.campaign ?? '').trim()
       if (c) counted.set(c, (counted.get(c) ?? 0) + 1)
     }
-    const campaigns = st.campaignList
-      .filter((c) => !c.archivedAt)
-      .filter((c) => !brand || (c.client ?? '').trim().toLowerCase() === brand.toLowerCase())
-      .map((c) => ({
+    /**
+     * BOTH WAYS A CAMPAIGN EXISTS, because a listing built from only one of them is the bug again.
+     *
+     * The register is one way. The other is a live asset simply carrying the name — ingested assets
+     * arrive that way before anything registers them, and liveCampaignNames exists precisely because
+     * the Campaigns page counts those too. A tool that read campaignList alone would answer "no such
+     * campaign" about a campaign with eight assets in it, which is the failure that sent a session
+     * off to rebuild work that was already there.
+     */
+    const byName = new Map<
+      string,
+      { name: string; brand: string; registered: boolean; strategy: string; subject: string; parent: string }
+    >()
+    for (const c of st.campaignList) {
+      if (c.archivedAt) continue
+      byName.set(c.name, {
         name: c.name,
-        // The Drafts space is a real answer to "whose is it", not a missing one.
-        brand: (c.client ?? '').trim() || DRAFTS_SPACE,
-        unowned: ((c.client ?? '').trim() || DRAFTS_SPACE) === DRAFTS_SPACE,
+        // The board, when the record has not caught up with it — see brandForCampaignName.
+        brand: brandForCampaignName(c.name),
+        registered: true,
         strategy: c.strategy ?? '',
         subject: c.subject ?? '',
         parent: c.parent ?? '',
-        assets: counted.get(c.name) ?? 0,
-        started: live.has(c.name),
-      }))
-    const unowned = campaigns.filter((c) => c.unowned).length
+      })
+    }
+    for (const name of live) {
+      if (byName.has(name)) continue
+      // Nothing registers it, so the only brand available is whatever the campaign→client map says,
+      // and that map answers "Unassigned" when it has never heard of the campaign either.
+      byName.set(name, { name, brand: brandForCampaignName(name), registered: false, strategy: '', subject: '', parent: '' })
+    }
+    const campaigns = [...byName.values()]
+      .filter((c) => !brand || c.brand.toLowerCase() === brand.toLowerCase())
+      .map((c) => {
+        // What the RECORD says, kept beside what the campaign actually resolves to. When they
+        // differ, this campaign is bound by its board alone — the state that had the connector
+        // reporting Drafts about a campaign the person could see under World Within. Opening it in
+        // the app runs healCampaignBrand and the record catches up, so naming them is naming the fix.
+        const recorded = st.campaignList.find((x) => x.name === c.name)?.client?.trim() || clientForCampaign(c.name)
+        return {
+          ...c,
+          recordedBrand: recorded,
+          boundOnBoardOnly: recorded !== c.brand,
+          // Drafts and Unassigned are both real answers to "whose is it" — one deliberate, one a gap.
+          unowned: c.brand === DRAFTS_SPACE || c.brand === UNASSIGNED,
+          assets: counted.get(c.name) ?? 0,
+          started: live.has(c.name),
+        }
+      })
+    const unowned = campaigns.filter((c) => c.unowned)
+    const unregistered = campaigns.filter((c) => !c.registered)
+    const unhealed = campaigns.filter((c) => c.boundOnBoardOnly)
     return {
       total: campaigns.length,
       campaigns,
       note:
-        `${campaigns.length} campaign(s)` +
-        (unowned
-          ? `, ${unowned} of them in ${DRAFTS_SPACE} — those belong to no brand, so list_clients does not and cannot show them.`
-          : '.'),
+        `${campaigns.length} campaign(s).` +
+        (unowned.length
+          ? ` ${unowned.length} belong to no brand (${DRAFTS_SPACE} or ${UNASSIGNED}), so list_clients does not and cannot show them.`
+          : '') +
+        (unregistered.length
+          ? ` ${unregistered.length} exist only as the name their assets carry — nothing registered them, which is why their brand may read ${UNASSIGNED}.`
+          : '') +
+        (unhealed.length
+          ? ` ${unhealed.length} are bound to their brand by the BOARD only, their record still saying otherwise (${unhealed
+              .map((c) => `"${c.name}": record ${c.recordedBrand}, board ${c.brand}`)
+              .join('; ')}). Opening one in the app writes the record from the Brand card and the two agree again.`
+          : ''),
     }
   },
 
@@ -1291,12 +1389,13 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
    */
   async getNextStep(a) {
     const st = useTrafficStore.getState()
+    const brandOf = brandResolver()
     // An explicit brand wins; otherwise the one the app is scoped to, and 'all' is not a brand.
     const brand = str(a.brand).trim() || (st.clientFilter !== 'all' ? st.clientFilter : '')
     const campaign = str(a.campaign).trim()
     const rows = campaign
       ? st.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
-      : st.rows.filter((r) => (!brand || clientForCampaign(r.campaign) === brand) && !r.archivedAt)
+      : st.rows.filter((r) => (!brand || brandOf(r.campaign) === brand) && !r.archivedAt)
     const board = campaign ? boardFor(st.flowBoards, campaign) : null
     const cards = board?.objects ?? []
     const asking = cards.filter((o) => !directionCoverage(o.kind, o.direction).asksNothing)
@@ -1360,7 +1459,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!campaign) throw new Error('campaign is required')
     const st0 = useTrafficStore.getState()
     const rows = st0.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
-    const brand = clientForCampaign(campaign)
+    const brand = brandForCampaignName(campaign)
     const board = boardFor(st0.flowBoards, campaign)
     const review = reviewCampaign({ campaign, rows, objects: board.objects })
 
@@ -1974,6 +2073,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const brand = str(a.brand).trim()
     if (!brand) throw new Error('brand is required')
     const st = useTrafficStore.getState()
+    const brandOf = brandResolver()
     const sys = st.brandSystems[brand]
     const prof = st.clientProfiles[brand] ?? {}
     const strat = prof.strategy ? GTM_STRATEGIES.find((s) => s.key === prof.strategy) : undefined
@@ -1999,8 +2099,26 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
             ctas: sys.ctas.map((x) => x.label),
           }
         : null,
-      campaigns: st.campaignList.filter((c) => c.client === brand && !c.archivedAt).map((c) => c.name),
-      assets: st.rows.filter((r) => clientForCampaign(r.campaign) === brand).length,
+      /**
+       * Every campaign that resolves to this brand, not only the ones whose RECORD names it. A
+       * campaign carrying its brand on the board and nowhere else belongs here — the person can see
+       * it filed under this brand, and reporting "no campaigns" about a brand they are looking at a
+       * campaign inside of is how this connector got accused of being a different database.
+       */
+      campaigns: [...liveCampaignNames(st.rows, st.campaignList)]
+        .filter((name) => brandForCampaignName(name) === brand)
+        .sort(),
+      /**
+       * LIVE assets, and the archived ones counted separately rather than folded in.
+       *
+       * This used to count every row the brand had, archived included, while list_assets excludes
+       * archived by default. A brand whose assets had all been deleted therefore reported 582 here
+       * and 0 there, and two separate sessions read that pair as proof they were talking to two
+       * different databases — one of them offering to rebuild the work somewhere else. Both numbers
+       * were right; they were answering different questions, and only one of them said so.
+       */
+      assets: st.rows.filter((r) => brandOf(r.campaign) === brand && !r.archivedAt).length,
+      archivedAssets: st.rows.filter((r) => brandOf(r.campaign) === brand && !!r.archivedAt).length,
     }
   },
 }
