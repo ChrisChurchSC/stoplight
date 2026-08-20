@@ -147,8 +147,14 @@ or are unsure what to do. It reads the real workspace and returns where it is, t
 worth doing, and the exact calls that would do it. Prefer it over guessing an order.
 
 THE ORDER THE WORK HAPPENS: a brand -> who it sells to and what backs its claims -> the goal ->
-a campaign -> the direction behind it (object cards) -> assets -> the gaps -> a review -> approval.
-Skipping a rung does not fail, it just produces confident work aimed at nothing.
+a campaign -> the direction behind it (object cards) -> assets -> the journey between them -> the
+gaps -> a review -> approval. Skipping a rung does not fail, it just produces confident work aimed
+at nothing.
+
+THE JOURNEY IS A RUNG, not decoration. Assets that never say where they lead are a pile of posts
+that each read fine and take the reader nowhere. link_assets draws it — a LinkedIn post to the blog
+post it drives to, an ad to its landing page — and every line it draws owes a control at the near
+end, which review_campaign then holds you to.
 
 ASK, DO NOT INFER, on two things. The GOAL (which GTM motion this campaign is for) and WHICH
 CHANNELS it should live on. Neither is derivable from the brand, and a wrong guess is invisible:
@@ -690,7 +696,7 @@ server.registerTool(
   {
     title: 'List a campaign’s assets (with copy + status)',
     description:
-      "Read back each asset for a brand (optionally one campaign): id, status, source, sourceUrl, publishedAt, metrics, funnel stage, audience, channel, type, headline, primaryText, description, cta, proof points. Verify generation AND lifecycle AND real-content imports. Filter status:[\"approved\"] for the shippable set, or source:[\"social-live\"] / [\"site\"] for imported real content (the actual captions/copy). Archived hidden unless includeArchived.",
+      "Read back each asset for a brand (optionally one campaign): id, assetName, status, source, sourceUrl, publishedAt, metrics, funnel stage, audience, channel, type, headline, primaryText, description, cta, proof points, and the journey it sits in — `linksTo` (what it leads to), `branchOf` (what it hangs off) and `variantOf`, all of them asset NAMES, which is why assetName comes back too. Verify generation AND lifecycle AND real-content imports. Filter status:[\"approved\"] for the shippable set, or source:[\"social-live\"] / [\"site\"] for imported real content (the actual captions/copy). Archived hidden unless includeArchived.",
     inputSchema: {
       brand: z.string().describe('The brand / client name'),
       campaign: z.string().optional().describe('A specific campaign name, or omit for all of the brand'),
@@ -822,6 +828,38 @@ server.registerTool(
     },
   },
   async (a) => text(await dispatch('editAsset', a)),
+)
+
+server.registerTool(
+  'link_assets',
+  {
+    title: 'Connect one asset to the next',
+    description:
+      "Draw the journey: say that one asset leads to another — a LinkedIn post driving to a blog post, an ad to its landing page, a lead magnet to its nurture email. Without this a campaign is a pile of assets that individually read fine and lead nowhere, and review_campaign's findings about dangling CTAs and uncovered handoffs cannot be acted on. `as: \"next\"` (the default) sets the asset's single explicit destination; `as: \"branch\"` adds a second or third destination off the SAME asset, which is what one post going to both a blog and a pricing page needs. Both assets must be in the same campaign. Replacing an existing destination is an error, not a silent rewire — unlink_assets first. The reply names the control this line now owes (a button, a form, a booking) on the asset it leaves from: a line is a promise somebody builds something at this end of it, and review_campaign reports it as an uncovered handoff until they do.",
+    inputSchema: {
+      from: z.string().describe('The asset the reader leaves — its id from list_assets, or its exact name'),
+      to: z.string().describe('The asset they arrive at — id or exact name'),
+      as: z
+        .enum(['next', 'branch'])
+        .optional()
+        .describe('"next" (default) = this asset\'s one destination. "branch" = an additional destination alongside the one it already has.'),
+    },
+  },
+  async (a) => text(await dispatch('linkAssets', a)),
+)
+
+server.registerTool(
+  'unlink_assets',
+  {
+    title: 'Remove a journey link',
+    description:
+      'Take a connection back out. With only `from`, clears where that asset leads. With `to` as well, removes just that link — including a branch. Use before pointing an asset somewhere new.',
+    inputSchema: {
+      from: z.string().describe('The asset the link leaves — id or exact name'),
+      to: z.string().optional().describe('The far end, when removing one specific link (needed to clear a branch)'),
+    },
+  },
+  async (a) => text(await dispatch('unlinkAssets', a)),
 )
 
 server.registerTool(
