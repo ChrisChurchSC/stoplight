@@ -1,4 +1,9 @@
-import { useTrafficStore } from '../store/useTrafficStore'
+import { FLOW_BOARDS_KEY, useTrafficStore } from '../store/useTrafficStore'
+import { STORAGE_FULL, confirmPersisted } from '../adapters/state/workspaceState'
+import { SHEET_STORAGE_KEY } from '../adapters/sheet/mockSheetAdapter'
+import { isSupabaseConfigured } from './supabase'
+import type { FlowBoard } from '../domain/flowBoard'
+import type { SheetSnapshot } from '../domain/types'
 import { mapSite } from '../adapters/setup/siteMap'
 import { newAudience } from '../domain/audiences'
 import { newDescriptor } from '../domain/descriptors'
@@ -7,6 +12,7 @@ import { clientForCampaign } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
+import { ctaForHandoff } from '../domain/assetCtas'
 import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, identityCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
@@ -254,6 +260,26 @@ function sortRows(rows: TrafficRow[], sort?: string): TrafficRow[] {
   return out
 }
 /** Map a row to the asset shape the connector returns (shared by list_assets + get_canvas). */
+/**
+ * One asset, by id or by exact name.
+ *
+ * Both, because the two vocabularies are already both in use: every tool that returns an asset
+ * returns its id, and the journey's own fields (linksTo, branchOf, variantOf) are names. Requiring
+ * ids here would mean the model reading "leads to Launch post" could not act on it without a lookup
+ * it has no reason to know it needs. An ambiguous name is an error rather than a first match —
+ * picking one of two assets called the same thing silently rewires the wrong journey.
+ */
+function resolveAsset(rows: TrafficRow[], ref: string): TrafficRow {
+  const q = ref.trim()
+  if (!q) throw new Error('from and to are required (an asset id or its exact name)')
+  const byId = rows.find((r) => r.id === q)
+  if (byId) return byId
+  const named = rows.filter((r) => (r.assetName ?? '').trim().toLowerCase() === q.toLowerCase())
+  if (named.length === 1) return named[0]
+  if (named.length > 1) throw new Error(`"${q}" is the name of ${named.length} assets — pass the id from list_assets instead.`)
+  throw new Error(`No asset "${q}". list_assets returns the ids and names in this campaign.`)
+}
+
 function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { label: string; stage?: string }[]) {
   const firstSentence = (s: string) => (s.split(/(?<=[.!?])\s+/)[0] ?? s).trim()
   const roles = messagingKeys(r.channel, r.assetType)
@@ -271,6 +297,14 @@ function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { 
   const proofIds = [...new Set(Object.values(r.rtbMap ?? {}).flat())]
   return {
     id: r.id,
+    /**
+     * The journey speaks in NAMES — linksTo, branchOf and variantOf are all asset names — so a view
+     * that returned those three and not the name they refer to handed back edges with nothing at
+     * either end. Nothing outside could tell which asset "branches off Launch post" was about.
+     */
+    assetName: r.assetName,
+    /** Where this one leads. The other half of branchOf, and the half nothing here could see. */
+    linksTo: r.linksTo ?? '',
     stage,
     audience: r.audience ?? '',
     channel: r.channel,
@@ -372,6 +406,52 @@ export async function runAppAction(action: string, args: Record<string, unknown>
   const h = handlers[action]
   if (!h) throw new Error(`"${action}" is allowlisted but has no handler`)
   return h(args as Args)
+}
+
+/**
+ * A CONNECTOR WRITE THAT DID NOT PERSIST MUST NOT REPORT SUCCESS.
+ *
+ * Every write here updates the store first and answers from memory, so a card or an asset that
+ * never reached storage still comes back as a clean result with an id on it. In the app that is
+ * survivable — the canvas is on screen, and the next reload shows the truth to someone who was
+ * looking. Through the connector nobody is looking: the model is told "added", says so, moves on
+ * to the next of forty calls, and the whole session's work is gone at the next load with the
+ * transcript still claiming it exists.
+ *
+ * So the two writes big enough to fail on their own — a board and a batch of rows — are read back
+ * out of storage before they are reported. Only with no backend configured: with one, the workspace
+ * mirror carries the write whatever this browser's cache managed to keep.
+ */
+function assertBoardLanded(
+  campaign: string,
+  cardId: string,
+  revertTo: FlowBoard,
+  /**
+   * What the stored card has to look like. Presence alone is the right test for a card being ADDED
+   * and the wrong one for a card being EDITED: the id is already in storage either way, so an edit
+   * whose write was dropped would sail through a check that only asks whether the card is there.
+   */
+  matches: (card: CanvasObject | undefined) => boolean = (card) => !!card,
+): void {
+  if (isSupabaseConfigured) return
+  const landed = confirmPersisted<FlowBoard[]>(FLOW_BOARDS_KEY, (boards) =>
+    matches(boards.find((b) => b.key === campaign)?.objects?.find((o) => o.id === cardId)),
+  )
+  if (landed) return
+  // Put the board back the way it was. Leaving it means the rest of the session reads a card out of
+  // this tab's memory and keeps building on it — list_object_cards would confirm it exists.
+  useTrafficStore.getState().saveFlowBoard(revertTo)
+  throw new Error(STORAGE_FULL)
+}
+
+/** The same check for asset rows, which go to storage through the sheet adapter rather than a slice. */
+function assertRowsLanded(ids: string[]): void {
+  if (isSupabaseConfigured || !ids.length) return
+  const landed = confirmPersisted<SheetSnapshot>(SHEET_STORAGE_KEY, (snap) => {
+    const have = new Set((snap.rows ?? []).map((r) => r.id))
+    return ids.every((id) => have.has(id))
+  })
+  if (!landed) throw new Error(STORAGE_FULL)
 }
 
 const handlers: Record<string, (a: Args) => Promise<unknown>> = {
@@ -790,6 +870,15 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       accountVariants = res.variantCount
     }
     const after = countFor()
+    // The bulk path is where the most work goes missing at once — a seeded motion is the biggest
+    // single write the connector makes, and so the first one that will not fit. Read the rows back
+    // out of storage rather than counting what is in memory, which is what `after` counts.
+    assertRowsLanded(
+      useTrafficStore
+        .getState()
+        .rows.filter((r) => (r.campaign ?? '').trim() === campaign)
+        .map((r) => r.id),
+    )
     // Echo the applied strategy KEY (so result.strategy === the requested key) plus
     // its display name and the deliverable count, which differs by motion.
     return {
@@ -946,6 +1035,94 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       ...copyReport(channel, assetType, after?.messaging ?? patch.messaging ?? row.messaging, applied, after ?? row),
       note: 'Re-run run_coherence_check to see the edit reflected.',
     }
+  },
+
+  /**
+   * CONNECT TWO ASSETS — the line that says this one leads to that one.
+   *
+   * The journey was reviewable from here and not buildable. runCampaignReview reports a CTA pointed
+   * at nothing and a handoff no button covers, and both are computed off `linksTo` and `branchOf` —
+   * neither of which anything outside the app could set, and `linksTo` was not even readable. So a
+   * campaign assembled over the connector came out a pile of assets that led nowhere, every one of
+   * them individually fine, and the review's advice about it could not be acted on.
+   *
+   * `next` is the single explicit destination — a post naming the page it drives to, which
+   * handoffsFrom treats as the clearest statement of intent there is. `branch` is for the second and
+   * third destination off the same asset: that is the tree branchOf models and the one linksTo
+   * cannot, because it holds one name.
+   *
+   * Rewiring an existing destination is an ERROR rather than a silent replacement. A journey changed
+   * by accident reads exactly like one changed on purpose, and the asset that used to be next does
+   * not complain about being dropped.
+   */
+  async linkAssets(a) {
+    const rows = useTrafficStore.getState().rows.filter((r) => !r.archivedAt)
+    const from = resolveAsset(rows, str(a.from))
+    const to = resolveAsset(rows, str(a.to))
+    if (from.id === to.id) throw new Error('An asset cannot lead to itself.')
+    const fromCampaign = (from.campaign ?? '').trim()
+    const toCampaign = (to.campaign ?? '').trim()
+    if (fromCampaign !== toCampaign) {
+      throw new Error(
+        `"${from.assetName}" is in "${fromCampaign}" and "${to.assetName}" is in "${toCampaign}". A journey link cannot cross campaigns — the review reads a target outside the campaign as a CTA pointed at nothing.`,
+      )
+    }
+    const mode = str(a.as).trim().toLowerCase() || 'next'
+    if (mode !== 'next' && mode !== 'branch') throw new Error(`as must be "next" or "branch", not "${mode}".`)
+    const same = (x: string | undefined, y: string | undefined) => (x ?? '').trim().toLowerCase() === (y ?? '').trim().toLowerCase()
+    if (mode === 'next') {
+      const current = (from.linksTo ?? '').trim()
+      if (current && !same(current, to.assetName)) {
+        throw new Error(
+          `"${from.assetName}" already leads to "${current}". Pass as: "branch" to add "${to.assetName}" alongside it, or unlink_assets first to replace it.`,
+        )
+      }
+      await useTrafficStore.getState().updateRow(from.id, { linksTo: to.assetName })
+    } else {
+      const parent = (to.branchOf ?? '').trim()
+      if (parent && !same(parent, from.assetName)) {
+        throw new Error(`"${to.assetName}" already branches off "${parent}". Unlink that first.`)
+      }
+      await useTrafficStore.getState().updateRow(to.id, { branchOf: from.assetName })
+    }
+    // What the line costs. A handoff is a promise that somebody builds a control at this end of it,
+    // and naming it here is the difference between a journey that is drawn and one that works.
+    const owed = ctaForHandoff(to)
+    return {
+      from: from.assetName,
+      to: to.assetName,
+      as: mode,
+      owes: owed,
+      note:
+        `"${from.assetName}" now leads to "${to.assetName}". That line owes a ${owed.kind} on "${from.assetName}" ` +
+        `("${owed.label}"): ${owed.note} review_campaign reports it as an uncovered handoff until it exists.`,
+    }
+  },
+
+  /** Take a link back out. Clears the destination, the branch, or both, depending on what is there. */
+  async unlinkAssets(a) {
+    const rows = useTrafficStore.getState().rows.filter((r) => !r.archivedAt)
+    const from = resolveAsset(rows, str(a.from))
+    const toRef = str(a.to).trim()
+    const to = toRef ? resolveAsset(rows, toRef) : null
+    const same = (x: string | undefined, y: string | undefined) => (x ?? '').trim().toLowerCase() === (y ?? '').trim().toLowerCase()
+    const cleared: string[] = []
+    if ((from.linksTo ?? '').trim() && (!to || same(from.linksTo, to.assetName))) {
+      cleared.push(`${from.assetName} → ${from.linksTo}`)
+      await useTrafficStore.getState().updateRow(from.id, { linksTo: undefined })
+    }
+    if (to && same(to.branchOf, from.assetName)) {
+      cleared.push(`${from.assetName} → ${to.assetName} (branch)`)
+      await useTrafficStore.getState().updateRow(to.id, { branchOf: undefined })
+    }
+    if (!cleared.length) {
+      throw new Error(
+        to
+          ? `"${from.assetName}" does not lead to "${to.assetName}".`
+          : `"${from.assetName}" does not lead anywhere. Its branches, if any, are cleared by naming the branch as \`to\`.`,
+      )
+    }
+    return { cleared, note: `${cleared.length} link(s) removed.` }
   },
 
   // Apply a coherence check's suggested fix to the flagged asset (the repair payoff).
@@ -1122,6 +1299,18 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     }
 
     const suggestions = rankSuggestions([...review.suggestions, ...breaks])
+    /**
+     * THE FINDINGS THAT ARE NOT THE MODEL'S TO CLOSE, pulled out of the ranked list.
+     *
+     * Left in among thirty findings each carrying a `fix`, a question reads as one more task, and
+     * the fastest way through a task list is to do it. That is how a review of a campaign ends with
+     * an invented pain on an audience card and an invented reason a CTA pointed nowhere — every
+     * finding closed, the report clean, and nobody asked. Separating them makes the difference
+     * structural rather than a matter of noticing.
+     */
+    const decisions = suggestions
+      .filter((s) => s.ask)
+      .map((s) => ({ ask: s.ask as string, about: s.what, where: s.where, ifAnswered: s.fix }))
     return {
       campaign,
       brand,
@@ -1129,10 +1318,14 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       objectCardCount: review.objectCardCount,
       copyCheckRun: checked,
       total: suggestions.length,
+      decisions,
       suggestions,
       fixable,
       note: suggestions.length
-        ? `${suggestions.length} finding(s), highest severity first. Each carries the call that fixes it.`
+        ? `${suggestions.length} finding(s), highest severity first. Each carries the call that fixes it.` +
+          (decisions.length
+            ? ` ${decisions.length} of them are in \`decisions\`: those are not yours to close — put each question to the person and act on the answer.`
+            : '')
         : `Nothing to raise: every asset's components are filled, every card carries direction, and the copy check found no breaks.`,
     }
   },
@@ -1201,6 +1394,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       // as anyone looking at it is concerned.
       pos: { ...board.pos, [made.id]: nextSlot(board.pos) },
     })
+    assertBoardLanded(campaign, made.id, board)
     return {
       id: made.id,
       campaign,
@@ -1234,6 +1428,8 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       ...board,
       objects: board.objects.map((o) => (o.id === id ? next : o)),
     })
+    // The edit, not the card: compare what is in storage against what was just written.
+    assertBoardLanded(board.key, id, board, (card) => JSON.stringify(card) === JSON.stringify(next))
     return {
       id,
       campaign: board.key,
@@ -1282,6 +1478,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       patch.mediaRef = mediaRefs[0]
     }
     const row = await useTrafficStore.getState().addAsset(brand, campaign, patch)
+    assertRowsLanded([row.id])
     return {
       id: row.id,
       assetName: row.assetName,
@@ -1307,6 +1504,12 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const items = Array.isArray(a.items) ? (a.items as Record<string, unknown>[]) : []
     if (!items.length) throw new Error('items[] is required (the posts / pages / rows to import)')
     const res = await useTrafficStore.getState().importAssets(brand, campaign, items, source)
+    assertRowsLanded(
+      useTrafficStore
+        .getState()
+        .rows.filter((r) => (r.campaign ?? '').trim() === campaign)
+        .map((r) => r.id),
+    )
     return {
       brand,
       campaign,
