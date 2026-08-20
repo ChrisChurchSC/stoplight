@@ -319,6 +319,43 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
  * The server mirror is deliberately NOT part of this answer: it's debounced, so it hasn't happened
  * yet when this returns. Its outcome arrives later, through onSaveTrouble.
  */
+/**
+ * The message for a write this browser could not keep. One string because the person meets the same
+ * wall whichever door they came through, and three wordings for one failure reads as three bugs.
+ */
+export const STORAGE_FULL =
+  'This browser could not store that — its local storage is full. Sign in to a workspace so work saves to the backend, or clear space by deleting brands or campaigns you no longer need.'
+
+/**
+ * DID IT ACTUALLY LAND? — the check a caller makes after writing something big.
+ *
+ * persistState swallows a quota error by design: nearly every write through it is small, and
+ * failing those loudly would be worse than dropping one. Boards and asset rows are the writes big
+ * enough to blow the budget on their own, and a caller that reports success on one of those ships
+ * the bug attachObjectReference was reported as — a thing that looks saved, reads back fine from
+ * memory, and is gone on reload. The connector is the worst place for it: nothing is on screen to
+ * contradict the "done" it just said.
+ *
+ * `find` locates what was just written inside the stored blob. TRUE WHEN IT CANNOT TELL: storage
+ * that will not read or will not parse says nothing either way, and the benefit of the doubt is the
+ * same one the two existing read-back checks give. Only a key that is genuinely absent, or a blob
+ * that genuinely lacks the thing, comes back false.
+ */
+export function confirmPersisted<T>(key: string, find: (stored: T) => boolean): boolean {
+  let raw: string | null
+  try {
+    raw = localStorage.getItem(key)
+  } catch {
+    return true
+  }
+  if (raw === null) return false
+  try {
+    return find(JSON.parse(raw) as T)
+  } catch {
+    return true
+  }
+}
+
 export function persistState(key: string, value: unknown): boolean {
   // Synchronous and unconditional: this is the copy a reload reads, so it must never wait on a
   // debounce. Only the workspace mirror below is coalesced.
