@@ -368,8 +368,27 @@ function brandForCampaignName(name: string): string {
   return fromBoard || recorded || UNASSIGNED
 }
 
+/**
+ * brandForCampaignName over a row set. Memoised per call because the resolution walks a board and a
+ * workspace has thousands of rows, but only a few dozen campaign names among them.
+ */
+function brandResolver(): (campaign?: string) => string {
+  const cache = new Map<string, string>()
+  return (campaign) => {
+    const name = (campaign ?? '').trim()
+    if (!name) return UNASSIGNED
+    let resolved = cache.get(name)
+    if (resolved === undefined) {
+      resolved = brandForCampaignName(name)
+      cache.set(name, resolved)
+    }
+    return resolved
+  }
+}
+
 function resolveBrandAssets(brand: string, filter: AssetFilter, opts: { sort?: string; limit?: number; cursor?: number } = {}) {
   const st = useTrafficStore.getState()
+  const brandOf = brandResolver()
   const proofLabel = new Map<string, string>()
   for (const rtb of st.brandSystems[brand]?.rtbs ?? []) proofLabel.set(rtb.id, rtb.label)
   const brandCtas = st.brandSystems[brand]?.ctas ?? []
@@ -377,7 +396,9 @@ function resolveBrandAssets(brand: string, filter: AssetFilter, opts: { sort?: s
   // stays relative: "last 30 days" recomputes its start every time it's opened.
   const f = resolveWindow(filter, Date.now())
   const matched = sortRows(
-    st.rows.filter((r) => clientForCampaign(r.campaign) === brand && assetMatchesFilter(r, f)),
+    // Resolved, not recorded: a campaign whose brand lives on its board still belongs to that
+    // brand, and matching on the record alone answered "no assets" about a campaign holding eight.
+    st.rows.filter((r) => brandOf(r.campaign) === brand && assetMatchesFilter(r, f)),
     opts.sort,
   )
   const total = matched.length
@@ -1353,12 +1374,13 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
    */
   async getNextStep(a) {
     const st = useTrafficStore.getState()
+    const brandOf = brandResolver()
     // An explicit brand wins; otherwise the one the app is scoped to, and 'all' is not a brand.
     const brand = str(a.brand).trim() || (st.clientFilter !== 'all' ? st.clientFilter : '')
     const campaign = str(a.campaign).trim()
     const rows = campaign
       ? st.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
-      : st.rows.filter((r) => (!brand || clientForCampaign(r.campaign) === brand) && !r.archivedAt)
+      : st.rows.filter((r) => (!brand || brandOf(r.campaign) === brand) && !r.archivedAt)
     const board = campaign ? boardFor(st.flowBoards, campaign) : null
     const cards = board?.objects ?? []
     const asking = cards.filter((o) => !directionCoverage(o.kind, o.direction).asksNothing)
@@ -2036,6 +2058,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const brand = str(a.brand).trim()
     if (!brand) throw new Error('brand is required')
     const st = useTrafficStore.getState()
+    const brandOf = brandResolver()
     const sys = st.brandSystems[brand]
     const prof = st.clientProfiles[brand] ?? {}
     const strat = prof.strategy ? GTM_STRATEGIES.find((s) => s.key === prof.strategy) : undefined
@@ -2079,8 +2102,8 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
        * different databases — one of them offering to rebuild the work somewhere else. Both numbers
        * were right; they were answering different questions, and only one of them said so.
        */
-      assets: st.rows.filter((r) => clientForCampaign(r.campaign) === brand && !r.archivedAt).length,
-      archivedAssets: st.rows.filter((r) => clientForCampaign(r.campaign) === brand && !!r.archivedAt).length,
+      assets: st.rows.filter((r) => brandOf(r.campaign) === brand && !r.archivedAt).length,
+      archivedAssets: st.rows.filter((r) => brandOf(r.campaign) === brand && !!r.archivedAt).length,
     }
   },
 }
