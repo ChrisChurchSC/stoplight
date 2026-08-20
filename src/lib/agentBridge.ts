@@ -1,4 +1,9 @@
-import { useTrafficStore } from '../store/useTrafficStore'
+import { FLOW_BOARDS_KEY, useTrafficStore } from '../store/useTrafficStore'
+import { STORAGE_FULL, confirmPersisted } from '../adapters/state/workspaceState'
+import { SHEET_STORAGE_KEY } from '../adapters/sheet/mockSheetAdapter'
+import { isSupabaseConfigured } from './supabase'
+import type { FlowBoard } from '../domain/flowBoard'
+import type { SheetSnapshot } from '../domain/types'
 import { mapSite } from '../adapters/setup/siteMap'
 import { newAudience } from '../domain/audiences'
 import { newDescriptor } from '../domain/descriptors'
@@ -327,6 +332,52 @@ export async function runAppAction(action: string, args: Record<string, unknown>
   const h = handlers[action]
   if (!h) throw new Error(`"${action}" is allowlisted but has no handler`)
   return h(args as Args)
+}
+
+/**
+ * A CONNECTOR WRITE THAT DID NOT PERSIST MUST NOT REPORT SUCCESS.
+ *
+ * Every write here updates the store first and answers from memory, so a card or an asset that
+ * never reached storage still comes back as a clean result with an id on it. In the app that is
+ * survivable — the canvas is on screen, and the next reload shows the truth to someone who was
+ * looking. Through the connector nobody is looking: the model is told "added", says so, moves on
+ * to the next of forty calls, and the whole session's work is gone at the next load with the
+ * transcript still claiming it exists.
+ *
+ * So the two writes big enough to fail on their own — a board and a batch of rows — are read back
+ * out of storage before they are reported. Only with no backend configured: with one, the workspace
+ * mirror carries the write whatever this browser's cache managed to keep.
+ */
+function assertBoardLanded(
+  campaign: string,
+  cardId: string,
+  revertTo: FlowBoard,
+  /**
+   * What the stored card has to look like. Presence alone is the right test for a card being ADDED
+   * and the wrong one for a card being EDITED: the id is already in storage either way, so an edit
+   * whose write was dropped would sail through a check that only asks whether the card is there.
+   */
+  matches: (card: CanvasObject | undefined) => boolean = (card) => !!card,
+): void {
+  if (isSupabaseConfigured) return
+  const landed = confirmPersisted<FlowBoard[]>(FLOW_BOARDS_KEY, (boards) =>
+    matches(boards.find((b) => b.key === campaign)?.objects?.find((o) => o.id === cardId)),
+  )
+  if (landed) return
+  // Put the board back the way it was. Leaving it means the rest of the session reads a card out of
+  // this tab's memory and keeps building on it — list_object_cards would confirm it exists.
+  useTrafficStore.getState().saveFlowBoard(revertTo)
+  throw new Error(STORAGE_FULL)
+}
+
+/** The same check for asset rows, which go to storage through the sheet adapter rather than a slice. */
+function assertRowsLanded(ids: string[]): void {
+  if (isSupabaseConfigured || !ids.length) return
+  const landed = confirmPersisted<SheetSnapshot>(SHEET_STORAGE_KEY, (snap) => {
+    const have = new Set((snap.rows ?? []).map((r) => r.id))
+    return ids.every((id) => have.has(id))
+  })
+  if (!landed) throw new Error(STORAGE_FULL)
 }
 
 const handlers: Record<string, (a: Args) => Promise<unknown>> = {
@@ -745,6 +796,15 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       accountVariants = res.variantCount
     }
     const after = countFor()
+    // The bulk path is where the most work goes missing at once — a seeded motion is the biggest
+    // single write the connector makes, and so the first one that will not fit. Read the rows back
+    // out of storage rather than counting what is in memory, which is what `after` counts.
+    assertRowsLanded(
+      useTrafficStore
+        .getState()
+        .rows.filter((r) => (r.campaign ?? '').trim() === campaign)
+        .map((r) => r.id),
+    )
     // Echo the applied strategy KEY (so result.strategy === the requested key) plus
     // its display name and the deliverable count, which differs by motion.
     return {
@@ -1150,6 +1210,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       // as anyone looking at it is concerned.
       pos: { ...board.pos, [made.id]: nextSlot(board.pos) },
     })
+    assertBoardLanded(campaign, made.id, board)
     return {
       id: made.id,
       campaign,
@@ -1179,6 +1240,8 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       ...board,
       objects: board.objects.map((o) => (o.id === id ? next : o)),
     })
+    // The edit, not the card: compare what is in storage against what was just written.
+    assertBoardLanded(board.key, id, board, (card) => JSON.stringify(card) === JSON.stringify(next))
     return {
       id,
       campaign: board.key,
@@ -1227,6 +1290,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       patch.mediaRef = mediaRefs[0]
     }
     const row = await useTrafficStore.getState().addAsset(brand, campaign, patch)
+    assertRowsLanded([row.id])
     return {
       id: row.id,
       assetName: row.assetName,
@@ -1252,6 +1316,12 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const items = Array.isArray(a.items) ? (a.items as Record<string, unknown>[]) : []
     if (!items.length) throw new Error('items[] is required (the posts / pages / rows to import)')
     const res = await useTrafficStore.getState().importAssets(brand, campaign, items, source)
+    assertRowsLanded(
+      useTrafficStore
+        .getState()
+        .rows.filter((r) => (r.campaign ?? '').trim() === campaign)
+        .map((r) => r.id),
+    )
     return {
       brand,
       campaign,

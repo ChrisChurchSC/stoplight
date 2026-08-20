@@ -1,7 +1,15 @@
 import type { RowStatus, SheetSnapshot, TrafficRow } from '../../domain/types'
 import type { SheetAdapter } from './types'
+import { STORAGE_FULL } from '../state/workspaceState'
 
-const STORAGE_KEY = 'stoplight.sheet.v1'
+/**
+ * Exported for the callers that check a row they just appended actually reached storage — the same
+ * reason FLOW_BOARDS_KEY is. `write` below hands a quota error straight to its caller, but a row
+ * can also go missing without one throwing (a second tab persisting its own older snapshot over
+ * this one), so the connector reads the key back rather than trusting the absence of an exception.
+ */
+export const SHEET_STORAGE_KEY = 'stoplight.sheet.v1'
+const STORAGE_KEY = SHEET_STORAGE_KEY
 
 /**
  * Mock sheet backed by localStorage. Stands in for Google Sheets / Airtable so
@@ -22,8 +30,19 @@ export class MockSheetAdapter implements SheetAdapter {
     }
   }
 
+  /**
+   * Unlike persistState, this has always let a quota error reach its caller — the right call, since
+   * dropping rows silently is how a campaign's assets disappear. What it did not do was say
+   * anything a person could act on: the failure surfaced as the DOMException's own name, so a
+   * connector session was told "QuotaExceededError" and a canvas showed the same. Same throw, in
+   * the words the two read-back checks use.
+   */
   private write(snapshot: SheetSnapshot): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+    } catch {
+      throw new Error(STORAGE_FULL)
+    }
   }
 
   async list(): Promise<TrafficRow[]> {
