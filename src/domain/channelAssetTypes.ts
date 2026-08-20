@@ -54,10 +54,11 @@ export const CHANNEL_TYPES: Record<ChannelId, AssetType[]> = {
   // product / solutions / comparison were on the website DELIVERABLE_PRESETS and missing from here, so
   // seedCampaignAssets coerced all three to the channel's primary type and a "Product / feature page"
   // deliverable produced homepages. A test now asserts every preset's assetType exists in its channel.
-  // 'login' is appended, never prepended: primaryTypeKey takes [0], and the closing-channels
-  // invariant resolves a playbook band from funnelStageFor(channel, primaryType). Moving it to
-  // the front would retype the channel as retention and invert the funnel on the canvas.
-  website: [t('homepage', 'Homepage'), t('page', 'Web page'), t('product', 'Product / feature page'), t('pricing', 'Pricing page'), t('solutions', 'Solutions page'), t('comparison', 'Comparison page'), t('about', 'About page'), t('login', 'Login page')],
+  // 'login' and 'contact' are appended, never prepended: primaryTypeKey takes [0], and the
+  // closing-channels invariant resolves a playbook band from funnelStageFor(channel, primaryType).
+  // Moving either to the front would retype the whole channel — as retention for login, as
+  // conversion for contact — and invert the funnel on the canvas.
+  website: [t('homepage', 'Homepage'), t('page', 'Web page'), t('product', 'Product / feature page'), t('pricing', 'Pricing page'), t('solutions', 'Solutions page'), t('comparison', 'Comparison page'), t('about', 'About page'), t('login', 'Login page'), t('contact', 'Contact page')],
   blog: [t('article', 'Article'), t('pillar', 'Long-form guide/pillar'), t('listicle', 'Listicle'), t('case-study', 'Case study')],
   'landing-page': [t('lead-capture', 'Lead capture page'), t('sales', 'Sales/offer page'), t('webinar-reg', 'Webinar/event registration'), t('waitlist', 'Waitlist/coming soon')],
   'lead-magnet': [t('ebook', 'Ebook'), t('whitepaper', 'Whitepaper'), t('checklist', 'Checklist'), t('template', 'Template'), t('webinar', 'Webinar'), t('cheat-sheet', 'Cheat sheet')],

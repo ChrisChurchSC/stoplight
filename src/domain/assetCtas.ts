@@ -247,6 +247,10 @@ const TYPE_HANDOFF: Record<string, HandoffRule> = {
   'landing-page:sales': (t) => ({ kind: 'button', label: 'See the offer', note: `A button to ${t.assetName}. If the offer is chosen here, carry the choice through.` }),
   'website:login': () => ({ kind: 'account', label: 'Sign in', note: 'A way in from this asset: sign in, create an account, and the reset path. A journey that hands to a login needs all three doors, not one.' }),
   'website:pricing': (t) => ({ kind: 'button', label: 'See pricing', note: `A button to ${t.assetName}. If the plan is chosen here, carry the choice through so they do not pick it twice.` }),
+  // The website default is a button, which is right for a page you go and read. A contact page is
+  // the one that is not read but filled in, and what it owes is the same as any other form: the
+  // fields, the reply that confirms it arrived, and the person it actually reaches.
+  'website:contact': (t) => ({ kind: 'form', label: 'Get in touch', note: `The enquiry ${t.assetName} takes: the fields, the confirmation that it landed, and the person it routes to. A hand-raise nobody answers is worse than no form.` }),
   'checkout:cart': () => ({ kind: 'button', label: 'Add to cart', note: 'Adds the item and shows it went in. The count in the header is part of the build.' }),
   'post-purchase:referral': () => ({ kind: 'share', label: 'Refer a friend', note: 'A share or an invite with a code on it that survives being pasted into a message.' }),
   'lead-magnet:webinar': () => ({ kind: 'form', label: 'Save my seat', note: 'Registration, the calendar invite, and the reminder. A webinar signup that sends no invite loses most of the room.' }),
