@@ -107,9 +107,15 @@ describe('finding a campaign by name', () => {
     })
 
     const res = (await runAgentAction('listCampaigns', {})) as {
-      result: { campaigns: { name: string; brand: string }[] }
+      result: { campaigns: { name: string; brand: string; recordedBrand: string; boundOnBoardOnly: boolean }[]; note: string }
     }
-    expect(res.result.campaigns.find((c) => c.name === campaign)!.brand).toBe('World Within')
+    const found = res.result.campaigns.find((c) => c.name === campaign)!
+    expect(found.brand).toBe('World Within')
+    // Both halves are reported, because the disagreement IS the finding — and the note says the fix.
+    expect(found.recordedBrand).toBe('Drafts')
+    expect(found.boundOnBoardOnly).toBe(true)
+    expect(res.result.note).toMatch(/BOARD only/)
+    expect(res.result.note).toMatch(/Opening one in the app/)
 
     // And the brand stops claiming it has no campaigns.
     const brand = (await runAgentAction('getBrand', { brand: 'World Within' })) as { result: { campaigns: string[] } }
