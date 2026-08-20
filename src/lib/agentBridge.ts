@@ -8,7 +8,7 @@ import { mapSite } from '../adapters/setup/siteMap'
 import { newAudience } from '../domain/audiences'
 import { newDescriptor } from '../domain/descriptors'
 import { newLibraryCta } from '../domain/library'
-import { DRAFTS_SPACE, clientForCampaign, liveCampaignNames } from '../domain/clients'
+import { DRAFTS_SPACE, UNASSIGNED, clientForCampaign, liveCampaignNames } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
@@ -527,29 +527,58 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       const c = (r.campaign ?? '').trim()
       if (c) counted.set(c, (counted.get(c) ?? 0) + 1)
     }
-    const campaigns = st.campaignList
-      .filter((c) => !c.archivedAt)
-      .filter((c) => !brand || (c.client ?? '').trim().toLowerCase() === brand.toLowerCase())
-      .map((c) => ({
+    /**
+     * BOTH WAYS A CAMPAIGN EXISTS, because a listing built from only one of them is the bug again.
+     *
+     * The register is one way. The other is a live asset simply carrying the name — ingested assets
+     * arrive that way before anything registers them, and liveCampaignNames exists precisely because
+     * the Campaigns page counts those too. A tool that read campaignList alone would answer "no such
+     * campaign" about a campaign with eight assets in it, which is the failure that sent a session
+     * off to rebuild work that was already there.
+     */
+    const byName = new Map<
+      string,
+      { name: string; brand: string; registered: boolean; strategy: string; subject: string; parent: string }
+    >()
+    for (const c of st.campaignList) {
+      if (c.archivedAt) continue
+      byName.set(c.name, {
         name: c.name,
-        // The Drafts space is a real answer to "whose is it", not a missing one.
         brand: (c.client ?? '').trim() || DRAFTS_SPACE,
-        unowned: ((c.client ?? '').trim() || DRAFTS_SPACE) === DRAFTS_SPACE,
+        registered: true,
         strategy: c.strategy ?? '',
         subject: c.subject ?? '',
         parent: c.parent ?? '',
+      })
+    }
+    for (const name of live) {
+      if (byName.has(name)) continue
+      // Nothing registers it, so the only brand available is whatever the campaign→client map says,
+      // and that map answers "Unassigned" when it has never heard of the campaign either.
+      byName.set(name, { name, brand: clientForCampaign(name), registered: false, strategy: '', subject: '', parent: '' })
+    }
+    const campaigns = [...byName.values()]
+      .filter((c) => !brand || c.brand.toLowerCase() === brand.toLowerCase())
+      .map((c) => ({
+        ...c,
+        // Drafts and Unassigned are both real answers to "whose is it" — one deliberate, one a gap.
+        unowned: c.brand === DRAFTS_SPACE || c.brand === UNASSIGNED,
         assets: counted.get(c.name) ?? 0,
         started: live.has(c.name),
       }))
-    const unowned = campaigns.filter((c) => c.unowned).length
+    const unowned = campaigns.filter((c) => c.unowned)
+    const unregistered = campaigns.filter((c) => !c.registered)
     return {
       total: campaigns.length,
       campaigns,
       note:
-        `${campaigns.length} campaign(s)` +
-        (unowned
-          ? `, ${unowned} of them in ${DRAFTS_SPACE} — those belong to no brand, so list_clients does not and cannot show them.`
-          : '.'),
+        `${campaigns.length} campaign(s).` +
+        (unowned.length
+          ? ` ${unowned.length} belong to no brand (${DRAFTS_SPACE} or ${UNASSIGNED}), so list_clients does not and cannot show them.`
+          : '') +
+        (unregistered.length
+          ? ` ${unregistered.length} exist only as the name their assets carry — nothing registered them, which is why their brand may read ${UNASSIGNED}.`
+          : ''),
     }
   },
 
