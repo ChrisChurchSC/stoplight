@@ -1,5 +1,5 @@
 import { FLOW_BOARDS_KEY, useTrafficStore } from '../store/useTrafficStore'
-import { STORAGE_FULL, confirmPersisted } from '../adapters/state/workspaceState'
+import { STORAGE_FULL, confirmPersisted, flushPersistedState, saveTrouble } from '../adapters/state/workspaceState'
 import { SHEET_STORAGE_KEY } from '../adapters/sheet/mockSheetAdapter'
 import { isSupabaseConfigured } from './supabase'
 import type { FlowBoard } from '../domain/flowBoard'
@@ -419,10 +419,32 @@ export async function runAppAction(action: string, args: Record<string, unknown>
  * transcript still claiming it exists.
  *
  * So the two writes big enough to fail on their own — a board and a batch of rows — are read back
- * out of storage before they are reported. Only with no backend configured: with one, the workspace
- * mirror carries the write whatever this browser's cache managed to keep.
+ * before they are reported. WHERE they are read back from depends on where the work actually has to
+ * land, and getting that wrong is how the first version of this check passed a campaign that was
+ * being lost: it looked only at localStorage, and only when there was no backend. Signed in, the
+ * card sits in localStorage looking perfect while the write the work depends on — the one to the
+ * workspace — is refused. A deployed session added 22 object cards to a campaign and 2 of them
+ * survived; every one of the 22 had been reported as added.
  */
-function assertBoardLanded(
+
+/**
+ * A board write made before the workspace has been read is DISCARDED BY DESIGN.
+ *
+ * saveFlowBoard keeps the in-memory slice and withholds the write while `boardsHydrated` is false,
+ * because it persists the whole array under one key and a write made too early would push this
+ * tab's stale copy of every board over the workspace's. Sound, and invisible to the caller: the
+ * card is in the store, list_object_cards confirms it, and nothing was written. Signed in, that
+ * flag starts false and only turns true when the hydrate lands, so it is exactly the opening of a
+ * session — where a connector does its setting up — that silently drops work.
+ */
+function assertBoardsWritable(): void {
+  if (useTrafficStore.getState().boardsHydrated) return
+  throw new Error(
+    'This tab has not finished loading the workspace, and a board written now would be kept in memory and dropped. Wait a moment and try again.',
+  )
+}
+
+async function assertBoardLanded(
   campaign: string,
   cardId: string,
   revertTo: FlowBoard,
@@ -432,16 +454,35 @@ function assertBoardLanded(
    * whose write was dropped would sail through a check that only asks whether the card is there.
    */
   matches: (card: CanvasObject | undefined) => boolean = (card) => !!card,
-): void {
-  if (isSupabaseConfigured) return
+): Promise<void> {
+  const revert = (message: string): never => {
+    // Put the board back the way it was. Leaving it means the rest of the session reads a card out
+    // of this tab's memory and keeps building on it — list_object_cards would confirm it exists.
+    useTrafficStore.getState().saveFlowBoard(revertTo)
+    throw new Error(message)
+  }
+  if (isSupabaseConfigured) {
+    /**
+     * The mirror is DEBOUNCED, so at this instant the write has not been attempted yet and asking
+     * whether it succeeded would always say yes. Flush it, then ask. That makes a connector write
+     * synchronous with the server in a way the app's own editing deliberately is not — right here,
+     * because the answer is about to be reported to somebody who cannot see the board.
+     */
+    await flushPersistedState()
+    const trouble = saveTrouble()
+    if (trouble?.keys.includes(FLOW_BOARDS_KEY)) {
+      return revert(
+        trouble.conflict
+          ? 'This board was changed somewhere else — another tab or another session — so the change was refused rather than overwrite it. Reload the app and try again.'
+          : `That card did not reach your workspace: ${trouble.message}`,
+      )
+    }
+    return
+  }
   const landed = confirmPersisted<FlowBoard[]>(FLOW_BOARDS_KEY, (boards) =>
     matches(boards.find((b) => b.key === campaign)?.objects?.find((o) => o.id === cardId)),
   )
-  if (landed) return
-  // Put the board back the way it was. Leaving it means the rest of the session reads a card out of
-  // this tab's memory and keeps building on it — list_object_cards would confirm it exists.
-  useTrafficStore.getState().saveFlowBoard(revertTo)
-  throw new Error(STORAGE_FULL)
+  if (!landed) revert(STORAGE_FULL)
 }
 
 /** The same check for asset rows, which go to storage through the sheet adapter rather than a slice. */
@@ -1386,6 +1427,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       ...(reference ? { reference } : {}),
       ...(direction.length ? { direction } : {}),
     }
+    assertBoardsWritable()
     const board = boardFor(useTrafficStore.getState().flowBoards, campaign)
     useTrafficStore.getState().saveFlowBoard({
       ...board,
@@ -1394,7 +1436,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       // as anyone looking at it is concerned.
       pos: { ...board.pos, [made.id]: nextSlot(board.pos) },
     })
-    assertBoardLanded(campaign, made.id, board)
+    await assertBoardLanded(campaign, made.id, board)
     return {
       id: made.id,
       campaign,
@@ -1424,12 +1466,13 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       ...(typeof a.description === "string" ? { reference } : {}),
       ...(direction.length ? { direction } : { direction: undefined }),
     }
+    assertBoardsWritable()
     useTrafficStore.getState().saveFlowBoard({
       ...board,
       objects: board.objects.map((o) => (o.id === id ? next : o)),
     })
     // The edit, not the card: compare what is in storage against what was just written.
-    assertBoardLanded(board.key, id, board, (card) => JSON.stringify(card) === JSON.stringify(next))
+    await assertBoardLanded(board.key, id, board, (card) => JSON.stringify(card) === JSON.stringify(next))
     return {
       id,
       campaign: board.key,
