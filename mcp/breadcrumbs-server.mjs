@@ -831,7 +831,7 @@ server.registerTool(
   {
     title: 'What an object card asks for',
     description:
-      'The direction a flow-board object card of this kind asks for — key, label, hint, character cap — plus the record type it names. Direction is the INSTRUCTION the card gives the copy writer (an Audience asks for a pain and an objection; a Trigger for what the reader just did and the ask), and it is what the card contributes: one with none adds a name and nothing else. Call before add_object_card / edit_object_card. Some kinds (voice, concept, note, brand, product, pattern) ask for no direction and contribute through their record.',
+      'EVERY card takes a `name` and a `description` (markdown, reaches the copy writer) whatever its kind. On top of those, the direction a flow-board object card of this kind asks for — key, label, hint, character cap — plus the record type it names. Direction is the INSTRUCTION the card gives the copy writer (an Audience asks for a pain and an objection; a Trigger for what the reader just did and the ask), and it is what the card contributes: one with none adds a name and nothing else. Call before add_object_card / edit_object_card. Some kinds (voice, concept, note, brand, product, pattern) ask for no direction and contribute through their record.',
     inputSchema: { kind: z.string().describe('Card kind: audience, proof-point, company, person, message, voice, trigger, brand, product, concept, season, pattern') },
   },
   async (a) => text(await dispatch('getObjectFields', a)),
@@ -853,11 +853,13 @@ server.registerTool(
   {
     title: 'Put an object card on a campaign’s board',
     description:
-      'Add an object card to a campaign’s flow board — the cards that instruct the copy writer, as opposed to the assets it writes. Call get_object_fields first and pass every key it lists in `fields`: a card with no direction contributes a name and nothing else. The reply names whatever is still unanswered.',
+      'Add an object card to a campaign’s flow board — the cards that instruct the copy writer, as opposed to the assets it writes. A card owes THREE things and the reply reports all three: a NAME (what it is, not its kind), a DESCRIPTION (markdown saying what this thing is — it reaches the writer, the note does not), and its DIRECTION (call get_object_fields and pass every key it lists in `fields`). Generating a card without a description and a real name produces a board nobody can read and copy written from nothing.',
     inputSchema: {
       campaign: z.string().describe('The campaign whose board to add to'),
       kind: z.string().describe('Card kind: audience, proof-point, company, person, message, voice, trigger, brand, product, concept, season, pattern'),
-      name: z.string().optional().describe('What to call this card, in your own words (survives changing the record under it)'),
+      name: z.string().describe('What this card is called — REQUIRED unless you pass a description, in which case the name is read from its first heading. A card with no name is listed everywhere as its bare kind ("Audience", "Audience", "Audience"), so name it for what it actually is: "Enterprise ops, renewal".'),
+      description: z.string().optional().describe('Markdown describing what this thing IS, in the words of someone who knows it — the same content you would upload as a .md. This REACHES THE COPY WRITER; the team note does not. Open it with an H1 and the card takes its name from that. Up to 20k characters; longer is trimmed at a paragraph break and flagged.'),
+      documentName: z.string().optional().describe('A filename for the description, e.g. "persona-enterprise-ops.md". Only used for display and as a fallback name.'),
       note: z.string().optional().describe('A team note on the card. Never sent to the copy writer — direction is what reaches it.'),
       fields: z
         .record(z.string())
@@ -874,10 +876,12 @@ server.registerTool(
   {
     title: 'Sharpen an object card',
     description:
-      'Edit an object card already on a board: its name, its note, the record it points at, and its direction. Keys you do not mention keep their answers; an empty string clears one. This is how a card that contributes nothing gets given something to say.',
+      'Edit an object card already on a board: its name, its description (the markdown that reaches the writer), its note, the record it points at, and its direction. Keys you do not mention keep their answers; an empty string clears one. This is how a card that contributes nothing gets given something to say.',
     inputSchema: {
       objectId: z.string().describe('The card id (from list_object_cards)'),
-      name: z.string().optional(),
+      name: z.string().optional().describe('Rename the card.'),
+      description: z.string().optional().describe('Markdown describing what this thing IS. Reaches the copy writer. An empty string clears it.'),
+      documentName: z.string().optional().describe('A filename for the description, e.g. "persona-enterprise-ops.md".'),
       note: z.string().optional(),
       fields: z.record(z.string()).optional().describe('Direction by key → answer. Empty string clears a key.'),
       refId: z.string().optional(),

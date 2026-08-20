@@ -1,6 +1,6 @@
 import { fieldCoverage } from './assetFields'
 import { danglingCtas, handoffWhere, uncoveredHandoffs } from './assetCtas'
-import { directionCoverage } from './objectFields'
+import { directionCoverage, identityCoverage } from './objectFields'
 import type { CanvasObject } from './flowBoard'
 import type { TrafficRow } from './types'
 
@@ -31,6 +31,7 @@ export type SuggestionKind =
   | 'dangling-cta'
   | 'uncovered-handoff'
   | 'no-direction'
+  | 'unnamed-object-card'
 
 export interface Suggestion {
   kind: SuggestionKind
@@ -52,7 +53,7 @@ const RANK: Record<ReviewSeverity, number> = { high: 0, medium: 1, low: 2 }
  * twice reads the same way round — an unstable review looks like the campaign changed.
  */
 const KIND_ORDER: SuggestionKind[] = [
-  'empty-campaign', 'no-direction', 'unfinished-asset', 'dangling-cta', 'uncovered-handoff', 'silent-object-card',
+  'empty-campaign', 'no-direction', 'unfinished-asset', 'dangling-cta', 'uncovered-handoff', 'unnamed-object-card', 'silent-object-card',
 ]
 
 export function rankSuggestions(list: Suggestion[]): Suggestion[] {
@@ -137,6 +138,23 @@ export function reviewCampaign({ campaign, rows, objects }: CampaignReviewInput)
         fix: `Give it the CTA with edit_asset(assetId: "${r.id}", fields: { cta: … }).`,
       })
     }
+  }
+
+  // A card nobody can identify, or that never says what it is. Distinct from a silent card: this
+  // one may instruct the writer perfectly well and still leave a board nobody can read.
+  for (const o of objects) {
+    const id = identityCoverage(o)
+    if (!id.missing.length) continue
+    out.push({
+      kind: 'unnamed-object-card',
+      severity: id.missing.includes('name') ? 'medium' : 'low',
+      what: `The ${o.kind} card ${o.name ? `"${o.name}"` : '(unnamed)'} has no ${id.missing.join(' and no ')}.`,
+      why: id.missing.includes('name')
+        ? 'An unnamed card is listed everywhere as its bare kind, so three of them read alike and none says which is which.'
+        : 'A description is the document standing as "what this thing is", and it is what reaches the writer — the team note does not.',
+      where: { objectId: o.id },
+      fix: `edit_object_card(objectId: "${o.id}", ${id.missing.map((m) => (m === 'name' ? 'name: …' : 'description: …')).join(', ')})`,
+    })
   }
 
   // A card on the board instructing the writer to do nothing. It still LOOKS like context.

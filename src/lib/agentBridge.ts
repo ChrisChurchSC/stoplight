@@ -9,7 +9,8 @@ import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields,
 import { isCtaField } from '../domain/messaging'
 import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
-import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
+import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, identityCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
+import { makeObjectReference, titleFromDoc } from '../domain/objectReference'
 import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
 import { nextStep } from '../domain/nextStep'
 import { brandPresence } from '../domain/presence'
@@ -124,6 +125,34 @@ function objectKindArg(value: unknown): CanvasObjectKind {
   return hit
 }
 
+/**
+ * The document an agent supplied as this card's description, clamped to the same budget an uploaded
+ * .md gets. Kept on the CARD rather than written through to a record: a card created over MCP
+ * usually points at no record, and writing to a shared record would silently rewrite what every
+ * other campaign generates from — the one failure a shared library cannot recover from.
+ */
+function referenceArg(a: Args): { reference?: ReturnType<typeof makeObjectReference> } {
+  const text = str(a.description).trim()
+  if (!text) return {}
+  return { reference: makeObjectReference(str(a.documentName).trim() || 'Pasted text', text, Date.now()) }
+}
+
+/**
+ * What to call the card. An explicit name wins; otherwise it is read off the document the way an
+ * uploaded one is named — its H1, then its filename, then its opening line.
+ *
+ * Never guessed from the kind. A nameless card is named by whatever it points at, and a generated
+ * card points at nothing, so a board of them reads "Audience, Audience, Audience" everywhere a card
+ * is listed — in Layers, in the grid's Applied-to column, in every "what feeds this asset" answer.
+ */
+function cardNameArg(a: Args, kind: CanvasObjectKind): string {
+  const explicit = str(a.name).trim()
+  if (explicit) return explicit
+  const text = str(a.description).trim()
+  if (!text) return ''
+  return titleFromDoc(str(a.documentName).trim() || 'Pasted text', text, `Untitled ${kind}`)
+}
+
 /** A free-ish spot for a new card, so a board written over MCP is readable rather than a pile. */
 function nextSlot(pos: Record<string, { x: number; y: number }>): { x: number; y: number } {
   const n = Object.keys(pos ?? {}).length
@@ -131,7 +160,12 @@ function nextSlot(pos: Record<string, { x: number; y: number }>): { x: number; y
 }
 
 /** What an object-card write reports back: what it still owes, in the card's own vocabulary. */
-function objectCardReport(kind: CanvasObjectKind, direction: { key: string; value: string }[], clamped: string[]) {
+function objectCardReport(
+  kind: CanvasObjectKind,
+  direction: { key: string; value: string }[],
+  clamped: string[],
+  card?: CanvasObject,
+) {
   const coverage = directionCoverage(kind, direction)
   const out: Record<string, unknown> = { fields: coverage }
   if (clamped.length) out.clampedToLimit = clamped
@@ -139,6 +173,17 @@ function objectCardReport(kind: CanvasObjectKind, direction: { key: string; valu
     out.fieldsNote =
       `${coverage.missing.join(', ')} unanswered. Direction is what this card contributes to the copy — ` +
       `without it the card adds a name and nothing else.`
+  }
+  if (card) {
+    const identity = identityCoverage(card)
+    out.identity = identity
+    // Said separately from the direction note because it fails for a different reason: direction is
+    // what the card tells the WRITER, this is what it tells anyone looking at the board.
+    if (identity.missing.includes('description')) {
+      out.identityNote =
+        'No description on this card. A description is the document standing as "what this thing is", and it ' +
+        'reaches the writer — the team note deliberately does not. Pass `description` as markdown.'
+    }
   }
   return out
 }
@@ -1101,7 +1146,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const campaign = str(a.campaign).trim()
     if (!campaign) throw new Error('campaign is required')
     const board = boardFor(useTrafficStore.getState().flowBoards, campaign)
-    const cards = board.objects.map(objectCardView)
+    const cards = board.objects.map((o) => objectCardView(o))
     return {
       campaign,
       total: cards.length,
@@ -1116,12 +1161,18 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!campaign) throw new Error('campaign is required')
     const kind = objectKindArg(a.kind)
     const { direction, clamped } = applyDirection(kind, [], a.fields as Record<string, unknown> | undefined)
+    const name = cardNameArg(a, kind)
+    // Refused rather than defaulted. A board of "Untitled audience" is the state this exists to
+    // prevent, and the caller is the only one who knows what this card is.
+    if (!name) throw new Error("name is required (or pass description, and the name is read from its first heading)")
+    const { reference } = referenceArg(a)
     const made: CanvasObject = {
       id: freshObjectId(),
       kind,
       text: str(a.note).trim(),
-      ...(str(a.name).trim() ? { name: str(a.name).trim() } : {}),
+      name,
       ...(str(a.refId).trim() ? { refId: str(a.refId).trim() } : {}),
+      ...(reference ? { reference } : {}),
       ...(direction.length ? { direction } : {}),
     }
     const board = boardFor(useTrafficStore.getState().flowBoards, campaign)
@@ -1137,7 +1188,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       campaign,
       kind,
       name: made.name ?? '',
-      ...objectCardReport(kind, direction, clamped),
+      ...objectCardReport(kind, direction, clamped, made),
     }
   },
 
@@ -1150,11 +1201,15 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!board) throw new Error(`object card not found: ${id}`)
     const existing = board.objects.find((o) => o.id === id)!
     const { direction, clamped } = applyDirection(existing.kind, existing.direction, a.fields as Record<string, unknown> | undefined)
+    const { reference } = referenceArg(a)
     const next: CanvasObject = {
       ...existing,
       ...(typeof a.name === 'string' ? { name: str(a.name).trim() } : {}),
       ...(typeof a.note === 'string' ? { text: str(a.note).trim() } : {}),
       ...(str(a.refId).trim() ? { refId: str(a.refId).trim() } : {}),
+      // An empty string CLEARS the document, so a description can be taken back off a card; the
+      // field being absent leaves whatever is already there.
+      ...(typeof a.description === "string" ? { reference } : {}),
       ...(direction.length ? { direction } : { direction: undefined }),
     }
     useTrafficStore.getState().saveFlowBoard({
@@ -1165,7 +1220,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       id,
       campaign: board.key,
       kind: existing.kind,
-      ...objectCardReport(existing.kind, direction, clamped),
+      ...objectCardReport(existing.kind, direction, clamped, next),
     }
   },
 
