@@ -2,6 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { readFileSync } from 'node:fs'
 
 /**
  * Breadcrumbs MCP server. Claude Desktop launches this over stdio; each tool posts
@@ -202,7 +203,41 @@ ranked, each finding carrying the call that fixes it.
 
 Drafts land for a human to confirm. Say what you changed and what is still outstanding.`
 
-const server = new McpServer({ name: 'breadcrumbs', version: '0.1.0' }, { instructions: INSTRUCTIONS })
+/**
+ * THE CONNECTOR'S FACE, so it is picked out of a list by its mark rather than read out of it.
+ *
+ * Read off the app's own favicon at startup instead of pasted in as a literal: 33KB of base64 in
+ * the middle of this file would be the largest thing in it by a distance, and it would be a COPY —
+ * the icon in the client would keep whatever the favicon looked like on the day someone pasted it.
+ * Reading the real file means there is one mark and it cannot drift.
+ *
+ * The PNG rather than the SVG beside it, which draws its bread as an emoji in a `<text>` element:
+ * that renders in a browser with an emoji font and is a tofu box anywhere without one, and a
+ * connector list is exactly the kind of place that has no such font.
+ *
+ * Fail soft. An icon is decoration, and a server that will not start because it could not find its
+ * own picture would be a poor trade — the tools are the point.
+ */
+function serverIcons() {
+  try {
+    const png = readFileSync(new URL('../public/favicon.png', import.meta.url))
+    return [{ src: `data:image/png;base64,${png.toString('base64')}`, mimeType: 'image/png', sizes: ['130x130'] }]
+  } catch {
+    return undefined
+  }
+}
+
+const server = new McpServer(
+  {
+    name: 'breadcrumbs',
+    // `name` is the identifier the client keys on and is lowercase; `title` is what a person reads.
+    title: 'Breadcrumbs',
+    version: '0.1.0',
+    description: 'Campaign workspace: brands, the messaging behind them, and the assets written from it.',
+    icons: serverIcons(),
+  },
+  { instructions: INSTRUCTIONS },
+)
 
 /**
  * GUIDED WAYS IN, as prompts rather than more tools.
