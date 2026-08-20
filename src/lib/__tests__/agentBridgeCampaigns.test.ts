@@ -116,6 +116,36 @@ describe('finding a campaign by name', () => {
     expect(brand.result.campaigns).toContain(campaign)
   })
 
+  it('finds that campaign’s assets under the brand, which is where the damage was', async () => {
+    /**
+     * The same blind spot in the call that matters most. Asked for World Within's assets, list_assets
+     * matched on the record and returned NOTHING for a campaign holding eight drafts — so a session
+     * concluded the campaign was an empty scaffold and offered to write a full set into it. That is
+     * not a bad read, it is duplicate work on top of real work.
+     */
+    const { useTrafficStore } = await import('../../store/useTrafficStore')
+    const campaign = fresh()
+    const st = useTrafficStore.getState()
+    st.addClient('World Within')
+    st.addCampaign({ name: campaign, client: 'Drafts', strategy: 'Demand Gen' })
+    const brandObj = { id: `br_${campaign}`, name: 'World Within' }
+    useTrafficStore.setState({ brandObjects: [...st.brandObjects, brandObj] as never })
+    useTrafficStore.getState().saveFlowBoard({
+      key: campaign,
+      objects: [{ id: 'n1', kind: 'brand', refId: brandObj.id, text: '' }] as never,
+      placements: [],
+      pos: {},
+      connectors: [{ from: 'n1', to: 'campaign' }] as never,
+    })
+    await runAgentAction('addAsset', { brand: 'Drafts', campaign, channel: 'linkedin', assetName: `${campaign} post` })
+
+    const res = (await runAgentAction('listAssets', { brand: 'World Within', campaign })) as {
+      result: { total: number; assets: { assetName: string }[] }
+    }
+    expect(res.result.total, 'the brand must find the assets of a campaign bound to it by the board').toBe(1)
+    expect(res.result.assets[0].assetName).toBe(`${campaign} post`)
+  })
+
   it('scopes to one brand when asked, Drafts included', async () => {
     const { useTrafficStore } = await import('../../store/useTrafficStore')
     const drafted = fresh()
