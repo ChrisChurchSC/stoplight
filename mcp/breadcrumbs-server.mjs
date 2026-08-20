@@ -341,11 +341,25 @@ server.registerTool(
 )
 
 server.registerTool(
+  'set_campaign_brand',
+  {
+    title: 'Move a campaign to a brand',
+    description:
+      "Bind a campaign to a brand — the single act that makes every brand-scoped read (list_assets, get_brand, review_campaign) treat it as that brand's. FILING IT IN A FOLDER DOES NOT DO THIS: a folder is a path INSIDE a brand and only decides where the campaign sits in the gallery, so a campaign filed in a folder named after a brand shows that brand's name as its group heading while its record still says otherwise. The two are different axes and this is the one that counts. It patches the existing campaign rather than creating a second one under the target brand. Pass an empty brand to return it to the brand-less Drafts space. The brand name must match list_clients exactly — near-misses are refused rather than guessed at, because a workspace can hold both \"World Within\" and \"World Within — Network Strategy\".",
+    inputSchema: {
+      campaign: z.string().describe('The campaign to move (its exact name, from list_campaigns)'),
+      brand: z.string().describe('The brand it should belong to, exactly as list_clients spells it. Empty string returns it to Drafts.'),
+    },
+  },
+  async (a) => text(await dispatch('setCampaignBrand', a)),
+)
+
+server.registerTool(
   'list_campaigns',
   {
     title: 'List campaigns, including the ones no brand owns',
     description:
-      "Every campaign in the workspace with the brand that owns it, its asset count, its strategy and subject. THE ONLY WAY TO FIND A CAMPAIGN BY NAME. Campaigns created as a blank canvas belong to the Drafts space rather than to a brand, and Drafts is deliberately absent from list_clients — so those campaigns appear in no other listing, and a session that checked list_clients and did not find a name has learned nothing about whether it exists. Call this before telling anyone a campaign is missing.",
+      "Every campaign in the workspace with the brand that owns it, the FOLDER it sits in, its asset count, its strategy and subject. `brand` and `folder` are different axes and the difference matters: a folder is a path inside a brand and can be named anything, so a campaign filed in a folder called \"World Within\" heads its gallery group WORLD WITHIN while its `brand` says something else entirely — and the brand is what every scoped read filters on. set_campaign_brand changes the brand; filing it in a folder does not. THE ONLY WAY TO FIND A CAMPAIGN BY NAME. Campaigns created as a blank canvas belong to the Drafts space rather than to a brand, and Drafts is deliberately absent from list_clients — so those campaigns appear in no other listing, and a session that checked list_clients and did not find a name has learned nothing about whether it exists. Call this before telling anyone a campaign is missing.",
     inputSchema: {
       brand: z.string().optional().describe('Limit to one brand. Pass "Drafts" for the ones that belong to no brand. Omit for all.'),
     },

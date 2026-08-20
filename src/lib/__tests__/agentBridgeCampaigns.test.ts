@@ -151,7 +151,67 @@ describe('finding a campaign by name', () => {
     expect(res.result.total, 'the brand must find the assets of a campaign bound to it by the board').toBe(1)
     expect(res.result.assets[0].assetName).toBe(`${campaign} post`)
   })
+})
 
+describe('a folder is not a brand', () => {
+  /**
+   * THE ONE THAT LOOKED LIKE A WRITE BUG. Filing a campaign into a folder writes `folder` and
+   * leaves `client` alone — correctly, because a folder is a path INSIDE a brand. But a folder can
+   * be named anything, so a campaign filed in one called "World Within" heads its gallery group
+   * WORLD WITHIN while its record still says Drafts, and every brand-scoped read rightly disagrees
+   * with what the person is looking at. Both layers are reported so the two can be told apart.
+   */
+  it('reports the folder and the brand separately', async () => {
+    const { useTrafficStore } = await import('../../store/useTrafficStore')
+    const campaign = fresh()
+    const st = useTrafficStore.getState()
+    st.addCampaign({ name: campaign, client: 'Drafts', strategy: 'Demand Gen' })
+    st.setCampaignFolder(campaign, 'World Within')
+
+    const res = (await runAgentAction('listCampaigns', {})) as {
+      result: { campaigns: { name: string; brand: string; folder: string }[] }
+    }
+    const found = res.result.campaigns.find((c) => c.name === campaign)!
+    expect(found.folder).toBe('World Within')
+    // Filing it did NOT move it to that brand, and saying so is the whole point.
+    expect(found.brand).toBe('Drafts')
+  })
+
+  it('moves it for real, patching the record rather than making a second campaign', async () => {
+    const { useTrafficStore } = await import('../../store/useTrafficStore')
+    const campaign = fresh()
+    const st = useTrafficStore.getState()
+    st.addClient('World Within')
+    st.addCampaign({ name: campaign, client: 'Drafts', strategy: 'Demand Gen' })
+
+    const res = (await runAgentAction('setCampaignBrand', { campaign, brand: 'World Within' })) as {
+      result: { brand: string; previousBrand: string; changed: boolean }
+    }
+    expect(res.result.brand).toBe('World Within')
+    expect(res.result.previousBrand).toBe('Drafts')
+    expect(res.result.changed).toBe(true)
+
+    // Exactly one campaign of that name — the repair must not leave two copies.
+    const all = (await runAgentAction('listCampaigns', {})) as { result: { campaigns: { name: string; brand: string }[] } }
+    expect(all.result.campaigns.filter((c) => c.name === campaign)).toHaveLength(1)
+    expect(all.result.campaigns.find((c) => c.name === campaign)!.brand).toBe('World Within')
+  })
+
+  it('refuses a near-miss brand name instead of filing it somewhere plausible', async () => {
+    const { useTrafficStore } = await import('../../store/useTrafficStore')
+    const campaign = fresh()
+    const st = useTrafficStore.getState()
+    st.addClient('World Within — Network Strategy')
+    st.addCampaign({ name: campaign, client: 'Drafts', strategy: 'Demand Gen' })
+
+    const res = await runAgentAction('setCampaignBrand', { campaign, brand: 'World Within Network' })
+    expect(res.result).toBeUndefined()
+    expect(res.error).toMatch(/No brand/i)
+    expect(res.error).toMatch(/Did you mean/i)
+  })
+})
+
+describe('more listing', () => {
   it('scopes to one brand when asked, Drafts included', async () => {
     const { useTrafficStore } = await import('../../store/useTrafficStore')
     const drafted = fresh()
