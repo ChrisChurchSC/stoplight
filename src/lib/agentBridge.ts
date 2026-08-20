@@ -8,7 +8,7 @@ import { mapSite } from '../adapters/setup/siteMap'
 import { newAudience } from '../domain/audiences'
 import { newDescriptor } from '../domain/descriptors'
 import { newLibraryCta } from '../domain/library'
-import { clientForCampaign } from '../domain/clients'
+import { DRAFTS_SPACE, clientForCampaign, liveCampaignNames } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
@@ -497,7 +497,60 @@ function assertRowsLanded(ids: string[]): void {
 
 const handlers: Record<string, (a: Args) => Promise<unknown>> = {
   async listClients() {
-    return { clients: useTrafficStore.getState().clientList }
+    return {
+      clients: useTrafficStore.getState().clientList,
+      note: 'These are BRANDS. Campaigns are listed by list_campaigns — including the ones in Drafts, which belong to no brand and so appear nowhere in this list.',
+    }
+  },
+
+  /**
+   * EVERY CAMPAIGN, INCLUDING THE ONES NO BRAND OWNS.
+   *
+   * clientList deliberately excludes the Drafts space, and until now nothing here listed campaigns
+   * at all — get_brand named a brand's own, and that was the whole surface. So a campaign created as
+   * a brand-less canvas, which is what the app's own New Canvas makes, could not be found from the
+   * connector by any route except already knowing its name.
+   *
+   * That is not a cosmetic gap. Asked about a file called "ABM FW 2026", a session called
+   * list_clients, did not see it among the brands, and concluded the connector and the app were
+   * talking to two different databases — then offered to rebuild the work somewhere else. The
+   * campaign was there the whole time, in Drafts, with its eight assets. A tool list with no way to
+   * ask "what campaigns are there" makes absence of evidence look like evidence of absence.
+   */
+  async listCampaigns(a) {
+    const st = useTrafficStore.getState()
+    const brand = str(a.brand).trim()
+    const live = liveCampaignNames(st.rows, st.campaignList)
+    const counted = new Map<string, number>()
+    for (const r of st.rows) {
+      if (r.archivedAt) continue
+      const c = (r.campaign ?? '').trim()
+      if (c) counted.set(c, (counted.get(c) ?? 0) + 1)
+    }
+    const campaigns = st.campaignList
+      .filter((c) => !c.archivedAt)
+      .filter((c) => !brand || (c.client ?? '').trim().toLowerCase() === brand.toLowerCase())
+      .map((c) => ({
+        name: c.name,
+        // The Drafts space is a real answer to "whose is it", not a missing one.
+        brand: (c.client ?? '').trim() || DRAFTS_SPACE,
+        unowned: ((c.client ?? '').trim() || DRAFTS_SPACE) === DRAFTS_SPACE,
+        strategy: c.strategy ?? '',
+        subject: c.subject ?? '',
+        parent: c.parent ?? '',
+        assets: counted.get(c.name) ?? 0,
+        started: live.has(c.name),
+      }))
+    const unowned = campaigns.filter((c) => c.unowned).length
+    return {
+      total: campaigns.length,
+      campaigns,
+      note:
+        `${campaigns.length} campaign(s)` +
+        (unowned
+          ? `, ${unowned} of them in ${DRAFTS_SPACE} — those belong to no brand, so list_clients does not and cannot show them.`
+          : '.'),
+    }
   },
 
   async addClient(a) {
