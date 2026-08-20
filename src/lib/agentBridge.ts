@@ -613,15 +613,25 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     }
     const campaigns = [...byName.values()]
       .filter((c) => !brand || c.brand.toLowerCase() === brand.toLowerCase())
-      .map((c) => ({
-        ...c,
-        // Drafts and Unassigned are both real answers to "whose is it" — one deliberate, one a gap.
-        unowned: c.brand === DRAFTS_SPACE || c.brand === UNASSIGNED,
-        assets: counted.get(c.name) ?? 0,
-        started: live.has(c.name),
-      }))
+      .map((c) => {
+        // What the RECORD says, kept beside what the campaign actually resolves to. When they
+        // differ, this campaign is bound by its board alone — the state that had the connector
+        // reporting Drafts about a campaign the person could see under World Within. Opening it in
+        // the app runs healCampaignBrand and the record catches up, so naming them is naming the fix.
+        const recorded = st.campaignList.find((x) => x.name === c.name)?.client?.trim() || clientForCampaign(c.name)
+        return {
+          ...c,
+          recordedBrand: recorded,
+          boundOnBoardOnly: recorded !== c.brand,
+          // Drafts and Unassigned are both real answers to "whose is it" — one deliberate, one a gap.
+          unowned: c.brand === DRAFTS_SPACE || c.brand === UNASSIGNED,
+          assets: counted.get(c.name) ?? 0,
+          started: live.has(c.name),
+        }
+      })
     const unowned = campaigns.filter((c) => c.unowned)
     const unregistered = campaigns.filter((c) => !c.registered)
+    const unhealed = campaigns.filter((c) => c.boundOnBoardOnly)
     return {
       total: campaigns.length,
       campaigns,
@@ -632,6 +642,11 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
           : '') +
         (unregistered.length
           ? ` ${unregistered.length} exist only as the name their assets carry — nothing registered them, which is why their brand may read ${UNASSIGNED}.`
+          : '') +
+        (unhealed.length
+          ? ` ${unhealed.length} are bound to their brand by the BOARD only, their record still saying otherwise (${unhealed
+              .map((c) => `"${c.name}": record ${c.recordedBrand}, board ${c.brand}`)
+              .join('; ')}). Opening one in the app writes the record from the Brand card and the two agree again.`
           : ''),
     }
   },
