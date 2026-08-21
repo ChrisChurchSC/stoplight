@@ -33,6 +33,23 @@ export interface Attribution {
  * there and reads/writes contacts + attribution here. Email is the dedup key.
  */
 export interface AttioAdapter {
+  /**
+   * WHETHER THE NUMBERS THIS RETURNS ARE REAL.
+   *
+   * The only adapter in the tree is a mock: six fictional contacts and five fictional deals, with
+   * attribution matched on the SAMPLE workspace's asset names. Two things follow, and both reached
+   * the screen unmarked.
+   *
+   * In the sample workspace it returns $48,000 and $72,000 closed-won, which render in the same
+   * type, beside genuinely-measured engagement, with nothing to say they were invented.
+   *
+   * In a REAL workspace no asset name matches, so it returns zero — and a KPI strip reading £0
+   * attributed revenue with no ROAS does not say "no CRM is connected". It says the campaigns
+   * earned nothing. That is the worse of the two, because it is the one a customer sees.
+   *
+   * A real adapter sets this false and the marks disappear on their own.
+   */
+  readonly isSample: boolean
   /** Capture a lead (lead magnet / landing page / intent commenter) into Attio. */
   pushContact(contact: AttioContact): Promise<void>
   listContacts(): AttioContact[]

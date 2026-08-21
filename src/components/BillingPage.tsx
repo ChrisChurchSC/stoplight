@@ -47,8 +47,14 @@ export function BillingPage() {
               <span className="billing-usage-label">Posts published</span>
               <span className="billing-usage-value">{posted}</span>
             </div>
+            {/* On the BILLING page of all places, an invented revenue figure is the one most
+                likely to be read as an account fact. Marked while the attribution source is the
+                sample adapter; a real one turns this off by itself. */}
             <div className="billing-usage-row">
-              <span className="billing-usage-label">Attributed revenue (this cycle)</span>
+              <span className="billing-usage-label">
+                Attributed revenue (this cycle)
+                {mockAttio.isSample && <span className="ins-sample-tag" title="No CRM is connected — this figure comes from sample data.">Sample</span>}
+              </span>
               <span className="billing-usage-value">{attributed}</span>
             </div>
             <div className="billing-usage-row">

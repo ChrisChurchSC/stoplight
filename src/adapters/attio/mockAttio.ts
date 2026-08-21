@@ -20,6 +20,8 @@ const DEALS: AttioDeal[] = [
 ]
 
 export class MockAttioAdapter implements AttioAdapter {
+  /** Everything above this line is invented. See AttioAdapter.isSample. */
+  readonly isSample = true
   private contacts = [...CONTACTS]
   private deals = [...DEALS]
 
