@@ -5436,7 +5436,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       set({ clientFilter: client, campaignFilter: existingCampaign.name, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
       return
     }
-    get().setIcp(setup.icp)
+    /**
+     * Only an ICP somebody actually read. A heuristic setup now returns an empty one rather than a
+     * motion-profile template (see setupGenerator's `source`), and writing that would replace a
+     * brand's real ICP with blanks — turning "we could not read the site" into data loss.
+     */
+    if (setup.icp?.name?.trim()) get().setIcp(setup.icp)
 
     const strat = GTM_STRATEGIES.find((s) => s.key === setup.strategy)
     const strategyName = strat?.name ?? setup.strategy
