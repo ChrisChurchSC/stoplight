@@ -6888,7 +6888,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   fanOutPreview: (campaign, dimension, values, exclude, limit) => {
     const s = get()
     const client = clientForCampaign(campaign)
-    const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    // Live rows only. An archived asset is soft-deleted and invisible everywhere else, but it was
+    // counted here — so a campaign holding 13 live and 34 deleted assets previewed a fan of 47 x
+    // the dimension and returned an "over cap" verdict for work that does not exist.
+    const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim() && !r.archivedAt)
     // Count over the leaves (what fanOut actually fans), so the preview matches reality
     // when cards are stacked. A leaf = a card that isn't already a variant-master; a
     // journey parent (branchOf) still counts as fannable.
@@ -6915,7 +6918,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   fanOut: async (campaign, dimension, values, opts) => {
     const s = get()
     const client = clientForCampaign(campaign)
-    const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    // Live rows only, and here it is not just a count: fanning an archived asset would generate
+    // variants OF A DELETED THING, which then arrive as live drafts nobody asked for.
+    const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim() && !r.archivedAt)
     if (inCampaign.length === 0) return { variantCount: 0, created: 0 }
     const effective = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
     const libVals =
@@ -8470,6 +8475,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // change is visible on the canvas, not just in the field.
     if (row.assetName === String(row.messaging?.[field] ?? '')) patch.assetName = after
     if (attachRtb) patch.rtbMap = { ...(row.rtbMap ?? {}), [field]: [attachRtb] }
+    /**
+     * ON THE UNDO STACK, like every other path that rewrites a row.
+     *
+     * Seven mutation paths push here — updateRows, removeRow, removeRows, applyRowsSnapshot,
+     * duplicateRow, pasteAsset — and this one, which overwrites an asset's copy with a machine
+     * rewrite in a single click, did not. pushAudit records what happened but nothing reads the
+     * trail back to restore; `undo` pops this stack and does sheet.replaceAll, so a missing push
+     * was the difference between a reversible edit and a permanent one.
+     */
+    pushUndo(get().rows)
     await sheet.update(row.id, patch)
     await get().refresh()
     // Clear a Claude break from the live set once fixed, and re-baseline the content hash

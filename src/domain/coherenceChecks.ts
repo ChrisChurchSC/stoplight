@@ -1,6 +1,7 @@
 import { mergeAudiences, type AudienceType } from './audiences'
 import { type BrandMetaMap, type BrandSource, resolveBrandScope, scopeBrands } from './brand'
 import type { BreakEvidence, BreakSeverity, CoherenceBreak } from './breaks'
+import { tidyAfterRemoval, wholeWordPattern } from './tidyCopy'
 import type { ClientProfile } from './clients'
 import { FUNNEL_STAGES, funnelStageFor } from './funnel'
 import type { MessagingLibrary } from './library'
@@ -253,7 +254,7 @@ function detectContamination(rows: TrafficRow[], vocab: CoherenceVocab): Coheren
         headline: `"${row.assetName}" uses ${brand}'s language, not ${vocab.client}'s`,
         why: `${terms.slice(0, 3).join(', ')} ${terms.length > 1 ? 'are' : 'is'} ${brand}'s vocabulary, not ${vocab.client}'s. This copy was contaminated from another brand.`,
         from: evidence(row, e.field, e.text, e.term),
-        after: terms.reduce((s, t) => s.replace(new RegExp(`\\b${t}\\b`, 'ig'), ''), e.text).replace(/\s{2,}/g, ' ').trim(),
+        after: tidyAfterRemoval(terms.reduce((s, t) => s.replace(wholeWordPattern(t), ''), e.text)),
         vocab,
       }),
     )
@@ -279,7 +280,7 @@ function detectLeaks(rows: TrafficRow[], vocab: CoherenceVocab): CoherenceBreak[
             headline: `"${row.assetName}" has an unfilled placeholder in its ${humanField(field).toLowerCase()}`,
             why: `"${ph[0]}" is a raw template artifact, not finished copy.`,
             from: evidence(row, field, text, ph[0]),
-            after: text.replace(placeholder, '').replace(/\s{2,}/g, ' ').trim(),
+            after: tidyAfterRemoval(text.replace(placeholder, '')),
             vocab,
           }),
         )
@@ -302,7 +303,7 @@ function detectLeaks(rows: TrafficRow[], vocab: CoherenceVocab): CoherenceBreak[
                 headline: `"${row.assetName}" pastes the audience's raw pain list into copy`,
                 why: `The pains (${run.join(', ')}) were dumped in verbatim instead of written into a sentence.`,
                 from: evidence(row, field, text, m[0]),
-                after: text.replace(joined, run[0]).replace(/\s{2,}/g, ' ').trim(),
+                after: tidyAfterRemoval(text.replace(joined, run[0])),
                 vocab,
               }),
             )
@@ -450,7 +451,11 @@ function detectOffAudience(rows: TrafficRow[], vocab: CoherenceVocab): Coherence
           headline: `"${row.assetName}" speaks to ${other}, not its ${audName} audience`,
           why: `"${hit}" is ${other} language. This asset targets ${audName}, so the message drifts off its segment.`,
           from: evidence(row, field, text, hit),
-          after: text.replace(new RegExp(hit, 'ig'), '').replace(/\s{2,}/g, ' ').trim(),
+          // wholeWordPattern, not a bare RegExp built from `hit`: this removed the term as a
+          // SUBSTRING, so cutting "ops" also gutted "operations", and an unescaped metacharacter in
+          // workspace vocabulary was interpolated as syntax. detectContamination always anchored;
+          // this is the same idea and had drifted.
+          after: tidyAfterRemoval(text.replace(wholeWordPattern(hit), '')),
           vocab,
         }),
       )
