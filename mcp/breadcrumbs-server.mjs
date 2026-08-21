@@ -124,7 +124,36 @@ async function dispatchViaDevServer(action, args) {
   return data
 }
 
+/**
+ * WHAT THIS CLIENT CAN ACTUALLY DO, written down once, the first time it asks for anything.
+ *
+ * Whether a client supports elicitation decides whether ask_the_person can put a real chooser in
+ * front of somebody or has to hand the question back as prose — and there is no way to find that out
+ * from outside, because a client declares its capabilities in the initialize params and Claude
+ * Desktop's own logs elide params. So the server writes down what it was told.
+ *
+ * ON FIRST USE, not on `oninitialized`: that fires before the SDK has stored the capabilities, so a
+ * log there reports "(none declared)" for a client that declared plenty — verified against a probe
+ * client that had just sent `elicitation: {}` and was reported as having none. A log that is
+ * confidently wrong about the one thing it exists to answer is worse than no log.
+ *
+ * stderr, because that is what the host captures into its per-server log. Once, because a line per
+ * call is not a log anybody reads.
+ */
+let clientNoted = false
+function noteClient() {
+  if (clientNoted) return
+  clientNoted = true
+  const caps = server.server.getClientCapabilities() ?? {}
+  const named = Object.keys(caps)
+  console.error(
+    `[breadcrumbs] client capabilities: ${named.length ? named.join(', ') : '(none declared)'}` +
+      ` | elicitation: ${caps.elicitation ? 'YES — questions can be asked as a chooser' : 'no — questions fall back to prose'}`,
+  )
+}
+
 async function dispatch(action, args) {
+  noteClient()
   return TOKEN ? dispatchViaWorkspace(action, args) : dispatchViaDevServer(action, args)
 }
 
@@ -185,6 +214,11 @@ the output, ask before you write. Inventing an audience's pain, a claim, a numbe
 a reason a CTA pointed nowhere all read as confident work — nobody can tell by looking which ones
 came from the brand and which from you. review_campaign separates these for you: everything in its
 \`decisions\` is a question to put to the person, not a task to close.
+
+HOW to ask, when the answers are a closed set: ask_the_person puts them up as a chooser instead of
+a sentence in your reply. Which campaign, which brand, which motion, which of three repairs — those
+are picked faster than typed. Anything open — a pain, an objection, a claim — stays in your own
+words, because writing options for it means inventing the answer and asking for it to be ratified.
 
 Ask about those, and only those. Anything the workspace already answers — which components a format
 renders, which motion is set, what a card's fields are called — is a read, not a question, and
@@ -362,6 +396,96 @@ server.registerTool(
     },
   },
   async (a) => text(await dispatch('getNextStep', a)),
+)
+
+/**
+ * PUT THE QUESTION IN FRONT OF THE PERSON, as a thing they can pick.
+ *
+ * This server has spent a lot of words telling a model to ask rather than infer — the goal, the
+ * channels, a card's direction, what a dangling CTA should point at. The asking still arrived as
+ * prose in the middle of a reply, which is the easiest thing in a conversation to skim past, answer
+ * halfway, or quietly drop when the next tool call looks more productive. A chooser is harder to
+ * walk past than a paragraph.
+ *
+ * ONLY WHERE THE ANSWERS ARE ALREADY KNOWN. Which campaign, which brand, which motion, which of
+ * three repairs a dangling CTA wants — those have a real, closed set and picking from it is faster
+ * and more accurate than typing. An audience's pain is not that: offering options for it would mean
+ * writing the options, which is inventing the answer and then asking somebody to ratify the
+ * invention. Those stay prose, and the description below says so.
+ *
+ * DEGRADES RATHER THAN FAILS. A client that does not support elicitation gets the question and the
+ * options handed back with an instruction to ask in the conversation instead — the same question,
+ * one surface worse, which is the right trade against a connector that only works on one client.
+ */
+server.registerTool(
+  'ask_the_person',
+  {
+    title: 'Ask a question with a set of answers',
+    description:
+      "Put a question to the person as a CHOOSER rather than as a sentence in your reply, when the possible answers are a known, closed set — which campaign of the four, which brand, which GTM motion, whether a dangling CTA should be repointed or removed or its target built. Prefer it for those: a question buried in a paragraph is the easiest thing in a conversation to skim past or half-answer, and the answer decides what gets written. DO NOT use it for open questions — an audience's pain, an objection, a claim, what a campaign is announcing. Supplying options for those means writing the answers yourself and asking for them to be ratified, which is the exact failure the rest of this server is built to avoid; ask those in your own words. If the client cannot show a chooser the reply says so and hands the question back for you to ask in the conversation.",
+    inputSchema: {
+      question: z.string().describe('The question, in full, as you would say it out loud.'),
+      options: z
+        .array(z.string())
+        .min(2)
+        .max(10)
+        .describe('The answers to choose between. Real, existing values — campaign names from list_campaigns, brands from list_clients — not invented ones.'),
+      context: z
+        .string()
+        .optional()
+        .describe('One line on why you are asking and what it decides, shown with the question.'),
+    },
+  },
+  async ({ question, options, context }) => {
+    // This tool never reaches dispatch(), so it notes the client itself — and it is the tool the
+    // note is actually about.
+    noteClient()
+    const caps = server.server.getClientCapabilities()
+    if (!caps?.elicitation) {
+      return text({
+        asked: false,
+        reason: 'This client cannot show a chooser (it does not support elicitation).',
+        question,
+        options,
+        note: 'Ask this in the conversation instead, in your own words, and list the options. Do not choose for them.',
+      })
+    }
+    let res
+    try {
+      res = await server.server.elicitInput({
+        mode: 'form',
+        message: context ? `${question}\n\n${context}` : question,
+        requestedSchema: {
+          type: 'object',
+          properties: { choice: { type: 'string', title: question, enum: options } },
+          required: ['choice'],
+        },
+      })
+    } catch (e) {
+      return text({
+        asked: false,
+        reason: `The chooser could not be shown: ${String(e?.message ?? e)}`,
+        question,
+        options,
+        note: 'Ask this in the conversation instead.',
+      })
+    }
+    if (res.action !== 'accept') {
+      return text({
+        asked: true,
+        answered: false,
+        action: res.action,
+        question,
+        // Declining is an answer about the question, not about the work: it means "not this, not
+        // now", and carrying on as though nothing was asked is how a guess gets made anyway.
+        note:
+          res.action === 'decline'
+            ? 'They chose not to answer. Do not pick for them — ask what they would rather do, or move to something that does not depend on this.'
+            : 'The question was dismissed. Do not act on an assumed answer.',
+      })
+    }
+    return text({ asked: true, answered: true, question, answer: res.content?.choice ?? '' })
+  },
 )
 
 server.registerTool(
@@ -1368,4 +1492,16 @@ server.registerTool(
   async (a) => text(await dispatch('promoteBrand', a)),
 )
 
+/**
+ * WHAT THIS CLIENT CAN ACTUALLY DO, written down once at connect.
+ *
+ * Whether a client supports elicitation decides whether ask_the_person can put a real chooser in
+ * front of somebody or has to hand the question back as prose, and there is no way to find out from
+ * the outside: a client's declared capabilities arrive in the initialize params, and Claude Desktop's
+ * own logs elide params. So the server says what it was told. stderr, because that is what the host
+ * captures into its per-server log, and one line, because a log nobody can skim is not a log.
+ *
+ * On `oninitialized` rather than after connect(): connect only starts the transport, and the
+ * capabilities do not exist until the client's initialize has landed.
+ */
 await server.connect(new StdioServerTransport())
