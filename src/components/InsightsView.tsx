@@ -174,20 +174,32 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
         {connected}
         {/* KPI strip */}
         <div className="ins-kpis">
-          <div className="ins-kpi">
-            <span className="ins-kpi-label">Attributed revenue</span>
+          {/* THE FOUR THAT COME FROM ATTRIBUTION, marked while the source is a sample adapter.
+              Un-marked, they were read two ways and both were wrong: in the sample workspace the
+              invented $48k/$72k deals looked measured, and in a real one the zeroes looked like
+              campaigns that had earned nothing rather than a CRM nobody had connected. */}
+          <div className={`ins-kpi${ins.attributionIsSample ? ' ins-kpi-sample' : ''}`}>
+            <span className="ins-kpi-label">
+              Attributed revenue{ins.attributionIsSample && <span className="ins-sample-tag" title="No CRM is connected — this figure comes from sample data.">Sample</span>}
+            </span>
             <span className="ins-kpi-value">{money(ins.kpis.revenue)}</span>
-            <span className="ins-kpi-sub">{ins.kpis.posted} posted of {ins.kpis.rows} rows</span>
+            <span className="ins-kpi-sub">
+              {ins.attributionIsSample ? 'Connect a CRM to attribute revenue' : `${ins.kpis.posted} posted of ${ins.kpis.rows} rows`}
+            </span>
           </div>
-          <div className="ins-kpi">
-            <span className="ins-kpi-label">Open pipeline</span>
+          <div className={`ins-kpi${ins.attributionIsSample ? ' ins-kpi-sample' : ''}`}>
+            <span className="ins-kpi-label">
+              Open pipeline{ins.attributionIsSample && <span className="ins-sample-tag" title="No CRM is connected — this figure comes from sample data.">Sample</span>}
+            </span>
             <span className="ins-kpi-value">{money(ins.kpis.pipeline)}</span>
-            <span className="ins-kpi-sub">first-touch attributed</span>
+            <span className="ins-kpi-sub">{ins.attributionIsSample ? 'not from your CRM' : 'first-touch attributed'}</span>
           </div>
-          <div className="ins-kpi">
-            <span className="ins-kpi-label">Leads</span>
+          <div className={`ins-kpi${ins.attributionIsSample ? ' ins-kpi-sample' : ''}`}>
+            <span className="ins-kpi-label">
+              Leads{ins.attributionIsSample && <span className="ins-sample-tag" title="No CRM is connected — this figure comes from sample data.">Sample</span>}
+            </span>
             <span className="ins-kpi-value">{ins.kpis.leads}</span>
-            <span className="ins-kpi-sub">contacts sourced</span>
+            <span className="ins-kpi-sub">{ins.attributionIsSample ? 'not from your CRM' : 'contacts sourced'}</span>
           </div>
           <div className="ins-kpi">
             <span className="ins-kpi-label">Engagement</span>
@@ -198,7 +210,12 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
             <span className="ins-kpi-label">Spend</span>
             <span className="ins-kpi-value">{ins.kpis.spend > 0 ? money(ins.kpis.spend) : '—'}</span>
             <span className="ins-kpi-sub">
-              {ins.kpis.roas != null ? `${ins.kpis.roas.toFixed(1)}x ROAS` : 'Sync spend to populate'}
+              {/* ROAS divides attributed revenue by spend, so it is only as real as the revenue.
+                  "Sync spend to populate" also pointed at a sync no user can trigger — syncSpend
+                  has no callers — so it promised an action that does not exist. */}
+              {ins.kpis.roas != null
+                ? `${ins.kpis.roas.toFixed(1)}x ROAS${ins.attributionIsSample ? ' (sample)' : ''}`
+                : 'No spend recorded'}
             </span>
           </div>
         </div>

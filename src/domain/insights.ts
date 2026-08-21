@@ -62,6 +62,14 @@ export interface Insights {
   channels: ChannelRoi[]
   icp: IcpPerf
   engagement: Engagement
+  /**
+   * Whether revenue, pipeline, leads and ROAS came from a real CRM or from the sample adapter.
+   *
+   * Carried out of the domain rather than looked up in the view, so every surface that renders
+   * these four gets the same answer from the same place — and so a real adapter turns every mark
+   * off at once instead of leaving one screen still apologising.
+   */
+  attributionIsSample: boolean
 }
 
 interface Opts {
@@ -204,5 +212,5 @@ export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
     routed: cs.filter((c) => c.routed).length,
   }
 
-  return { kpis, rtbRoi, stages, channels, icp, engagement }
+  return { kpis, rtbRoi, stages, channels, icp, engagement, attributionIsSample: mockAttio.isSample }
 }

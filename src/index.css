@@ -4327,6 +4327,28 @@ button.mf-open:focus-visible,
   pointer-events: auto;
 }
 /**
+ * SAMPLE-DATA MARK. Small and quiet, but never absent: the figure it sits beside is rendered in the
+ * same type as the measured ones, so the tag is the only thing distinguishing an invented $72,000
+ * deal from a real one.
+ */
+.ins-sample-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b6660);
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  vertical-align: middle;
+}
+.ins-kpi-sample .ins-kpi-value {
+  /* Held back from the measured figures beside it, so the eye reaches those first. */
+  opacity: 0.72;
+}
+/**
  * ALIGNMENT GUIDES: the line that appears while a card is dragged into line with another.
  *
  * Above the cards, because a guide behind a card is a guide you cannot see at the moment it matters
