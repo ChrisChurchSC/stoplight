@@ -14,6 +14,7 @@ import {
 import {
   describeClipboard, isEmptyClipboard, pasteObjects, pasteRows, type CanvasClipboard,
 } from '../domain/canvasClipboard'
+import { alignSnap, sameGuides, type Guide } from '../domain/alignGuides'
 import { cutForEdge, type EdgeCut } from '../domain/edgeCut'
 import { rimsFor } from '../domain/groupFrame'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
@@ -2264,6 +2265,15 @@ export function FlowsView() {
   // here" and opens the channel picker. Without the distinction one gesture has to mean both.
   const connectStart = useRef<{ x: number; y: number } | null>(null)
   const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
+  /**
+   * ALIGNMENT GUIDES. Card sizes in canvas units, captured at drag start and held for the drag, and
+   * the lines currently being shown. Null sizes mean this drag does not align — a multi-card drag,
+   * or one that began before anything had been measured.
+   */
+  const dragSizes = useRef<Record<string, { x: number; y: number; w: number; h: number }> | null>(null)
+  const [guides, setGuides] = useState<Guide[]>([])
+  /** How close an edge has to come, in SCREEN pixels, before it is treated as meaning to line up. */
+  const SNAP_PX = 6
   // Branch keys whose auto-placement has settled — locked so a later hand drag is respected.
   const placedRef = useRef<Set<string>>(new Set())
   /** Records a card has minted this session, so a burst of edits before re-render makes only one. */
@@ -2378,6 +2388,19 @@ export function FlowsView() {
       start[i] = pos[i] ?? { x: 0, y: 0 }
     })
     const visualIds = [...moveIds, ...carried]
+    /**
+     * BOXES FOR THE ALIGNMENT GUIDES, taken now because `rects` stops being remeasured for the whole
+     * drag (see the layout effect that measures them) — which is exactly what makes them usable:
+     * every card except this one stays where it was measured, so these stay true for the drag.
+     *
+     * Kept in the canvas's own pixels rather than converted. `pos` is an OFFSET from a card's flow
+     * position, not a coordinate — two cards sharing a pos.x are not aligned — so `rects` is the only
+     * space where the cards and the lines drawn between them agree.
+     *
+     * Only for a single card. A multi-card drag has no one box to align, and picking a member to
+     * speak for the rest would move the others to satisfy a line nobody drew against them.
+     */
+    dragSizes.current = moveIds.length === 1 ? { ...rects } : null
     dragging.current = { ids: moveIds, visualIds, visualSet: new Set(visualIds), x: e.clientX, y: e.clientY, start }
     dragSnapRef.current = { ...pos } // layout before this drag, committed to undo history on drop
     dragMovedRef.current = false
@@ -9796,8 +9819,34 @@ export function FlowsView() {
           const d = dragging.current
           if (!d) return
           const scale = zoomRef.current / 100
-          const dx = (px - d.x) / scale
-          const dy = (py - d.y) / scale
+          let dx = (px - d.x) / scale
+          let dy = (py - d.y) / scale
+          /**
+           * ALIGN, then move. The snap is computed against where the pointer says the card is, and
+           * folded into the same dx/dy the connectors are told about below — so the card, its lines
+           * and the guide all describe one position rather than three.
+           *
+           * The card being dragged is excluded from its own comparison set, and so is anything
+           * carried inside it: a child aligning to its parent would snap to a box that is moving
+           * with it, which never settles.
+           */
+          const boxes = dragSizes.current
+          const movingId = d.ids.length === 1 ? d.ids[0] : null
+          if (boxes && movingId && boxes[movingId]) {
+            // Where the card is on screen right now: where it was measured, plus how far it has been
+            // dragged. dx/dy are canvas units, the boxes are canvas pixels, so the pointer delta is
+            // scaled back up to meet them.
+            const start = boxes[movingId]
+            const moving = { ...start, x: start.x + dx * scale, y: start.y + dy * scale }
+            const others = Object.entries(boxes)
+              .filter(([nid]) => !d.visualSet.has(nid))
+              .map(([, b]) => b)
+            const snap = alignSnap(moving, others, SNAP_PX)
+            // Back into canvas units to join the drag delta the cards and connectors both read.
+            dx += snap.dx / scale
+            dy += snap.dy / scale
+            setGuides((prev) => (sameGuides(prev, snap.guides) ? prev : snap.guides))
+          }
           setPos((prev) => {
             const next = { ...prev }
             d.ids.forEach((i) => {
@@ -9945,6 +9994,9 @@ export function FlowsView() {
       dragMovedRef.current = false
       pan.current = null
       dragging.current = null
+      // The guides described a drag that is over. Left up, they would be lines pointing at nothing.
+      dragSizes.current = null
+      setGuides((prev) => (prev.length ? [] : prev))
       // Drag done: clearing dragDelta re-runs the remeasure effect to lock in final geometry.
       if (dragDelta) setDragDelta(null)
     },
@@ -9957,6 +10009,8 @@ export function FlowsView() {
       dropGesture()
       if (dragging.current && dragSnapRef.current) setPos(dragSnapRef.current)
       dragging.current = null
+      dragSizes.current = null
+      setGuides((prev) => (prev.length ? [] : prev))
       dragSnapRef.current = null
       dragMovedRef.current = false
       pan.current = null
@@ -10588,6 +10642,23 @@ export function FlowsView() {
               </div>
             )
           })}
+          {/* ALIGNMENT GUIDES, drawn OUTSIDE the transformed stack and in the canvas's own pixels.
+              Inside it they would have to survive the stack's padding, its auto margin and its flex
+              layout — and `pos` is an offset from a card's flow position rather than a coordinate, so
+              there is no single origin in there to draw against. `rects` already holds every card
+              measured against this element, which is the one space where the cards and the lines
+              agree. No zoom compensation for the same reason: nothing here is scaled. */}
+          {guides.map((g) => (
+            <div
+              key={`${g.axis}-${g.at}-${g.from}`}
+              className={`flow-guide flow-guide-${g.axis}`}
+              style={
+                g.axis === 'x'
+                  ? { left: `${g.at}px`, top: `${g.from}px`, height: `${g.to - g.from}px`, width: '1px' }
+                  : { left: `${g.from}px`, top: `${g.at}px`, width: `${g.to - g.from}px`, height: '1px' }
+              }
+            />
+          ))}
           {/* The outline (a map of the campaign's contents) now lives in the inspector's
               nothing-selected state instead of a floating canvas pill. */}
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>

@@ -4326,6 +4326,24 @@ button.mf-open:focus-visible,
 .flow-node {
   pointer-events: auto;
 }
+/**
+ * ALIGNMENT GUIDES: the line that appears while a card is dragged into line with another.
+ *
+ * Above the cards, because a guide behind a card is a guide you cannot see at the moment it matters
+ * — the edges it is about are the ones it would be hidden by. Never interactive: it exists for the
+ * duration of a drag and the pointer is already busy.
+ *
+ * Sized in the markup, not here, because the thickness has to counteract the canvas zoom.
+ */
+.flow-guide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: var(--accent, #e0533d);
+  opacity: 0.9;
+}
 /* View mode lays out as a left-to-right tree: campaign column, then a deliverables
    column (each branching to its posts), so it doesn't open as one narrow stacked blob. */
 .flow-stack-view {
