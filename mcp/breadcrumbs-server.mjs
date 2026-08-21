@@ -193,6 +193,11 @@ when one of these is outstanding, and phrase the question. A motion setup_client
 outstanding — it is a guess sitting in the field an answer goes in. Put it to the person and record
 what they say with set_strategy, even if they pick the same one.
 
+A PASTED LINK IS A CAMPAIGN. When somebody gives you a Breadcrumbs URL — "I'm working in this one"
+— hand it straight to any tool that takes a campaign; it resolves to the campaign it names, and
+to that campaign's brand when the link carries one. You do not need to parse it, and you should not
+guess at a campaign from surrounding conversation when a link is sitting there.
+
 A NAME YOU CANNOT FIND IS NOT A NAME THAT IS MISSING. list_clients lists BRANDS. Campaigns live in
 list_campaigns, and a campaign made as a blank canvas belongs to the Drafts space rather than to any
 brand — so it is in no brand's list and Drafts is not in list_clients. Look with list_campaigns
@@ -392,7 +397,12 @@ server.registerTool(
       "THE ENTRY POINT — call this first in a session, and again whenever you finish something or are unsure what to do. Reads the real workspace and returns: which rung of the work it is on (brand -> audiences and proof -> goal -> campaign -> direction -> assets -> channels -> filled components -> review -> approval), a one-line headline about THIS workspace, why that rung matters, the exact calls that would finish it, and the whole ladder with each rung's state. When the rung needs an answer only the person can give — what the goal is, which channels to run, a motion setup only guessed — it returns the question to ask them rather than an action to take. WITHOUT a campaign the answer is about the brand as a whole and stops at 'which campaign'; pass one to get the rungs below it (direction, assets, review, approval), which are all per-campaign.",
     inputSchema: {
       brand: z.string().optional().describe('The brand to ask about (defaults to the one the app is scoped to)'),
-      campaign: z.string().optional().describe('The campaign to ask about. Without it, the answer is about the brand as a whole.'),
+      campaign: z
+        .string()
+        .optional()
+        .describe(
+          'The campaign to ask about — its name, or a Breadcrumbs link somebody pasted (the link also supplies the brand). Without it, the answer is about the brand as a whole.',
+        ),
     },
   },
   async (a) => text(await dispatch('getNextStep', a)),

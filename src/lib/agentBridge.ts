@@ -10,6 +10,7 @@ import { newDescriptor } from '../domain/descriptors'
 import { newLibraryCta } from '../domain/library'
 import { DRAFTS_SPACE, UNASSIGNED, clientForCampaign, liveCampaignNames } from '../domain/clients'
 import { brandFromBoard, isBrandless } from '../domain/brand'
+import { readCampaignLink } from '../domain/campaignLink'
 import { funnelStageFor } from '../domain/funnel'
 import { GENERIC_CTA_KEY, IN_CREATIVE_KEY, applyCopyFields, describeAssetFields, fieldCoverage, messagingKeys, rendersInCreative } from '../domain/assetFields'
 import { isCtaField } from '../domain/messaging'
@@ -2261,11 +2262,32 @@ let es: EventSource | null = null
  * handler, run it, shape the error" is how one of them ends up with a slightly different idea of
  * what an unknown action does.
  */
+/**
+ * A PASTED LINK IS A CAMPAIGN, wherever a campaign was expected.
+ *
+ * The way somebody actually tells a model which campaign they mean is to paste its link and say
+ * "this one" — so the link has to work as an argument, not just as a URL. Doing that per tool would
+ * mean editing sixty schemas and remembering the sixty-first; doing it HERE means every tool that
+ * takes a campaign takes a link, including the ones written after this.
+ *
+ * A bare name falls straight through unchanged, so nothing that already worked changes. The brand
+ * rides along when the link carries one and the caller named none: campaign titles are unique across
+ * the workspace only by convention, and the pair is what makes a link self-describing.
+ */
+function resolveLinkArgs(args: Args): Args {
+  const raw = typeof args.campaign === 'string' ? args.campaign : ''
+  const link = raw ? readCampaignLink(raw) : null
+  if (!link) return args
+  const next: Args = { ...args, campaign: link.campaign }
+  if (link.brand && !str(args.brand).trim()) next.brand = link.brand
+  return next
+}
+
 export async function runAgentAction(action: string, args?: Args): Promise<{ result?: unknown; error?: string }> {
   try {
     const h = handlers[action]
     if (!h) throw new Error(`unknown action: ${action}`)
-    return { result: await h(args ?? {}) }
+    return { result: await h(resolveLinkArgs(args ?? {})) }
   } catch (err) {
     return { error: String((err as Error)?.message ?? err) }
   }
