@@ -20,6 +20,7 @@ import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } fro
 import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, identityCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
 import { makeObjectReference, titleFromDoc } from '../domain/objectReference'
 import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
+import { copyBreakSuggestions } from '../domain/copyBreakSuggestions'
 import { nextStep } from '../domain/nextStep'
 import { brandPresence } from '../domain/presence'
 import { breakScopeKey, coherenceContentHash, detectBreaks } from '../domain/breaks'
@@ -799,7 +800,24 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       breakCount: breaks.length,
       // The full check result (incl. compliance/structural breaks — remediated by editing,
       // rejecting, or deleting the asset).
-      breaks: breaks.map((b) => ({ axis: b.axis, severity: b.severity, headline: b.headline })),
+      /**
+       * THE ID TRAVELS WITH THE FINDING. It was dropped here, and a headline was all a caller had
+       * left to identify a break by — which is not an identity: VOICE_RULES headlines are static
+       * strings, so nineteen em-dash findings across nineteen assets are nineteen copies of "This
+       * copy uses an em dash." Anything keying on that keeps one and loses eighteen.
+       *
+       * `asset` and `field` come too, so a caller can say WHICH asset a break is about without
+       * having to find a matching fix first — which never worked for the breaks that have no
+       * mechanical fix, and silently mislabelled the ones that do.
+       */
+      breaks: breaks.map((b) => ({
+        id: b.id,
+        axis: b.axis,
+        severity: b.severity,
+        headline: b.headline,
+        asset: b.from?.assetName ?? '',
+        field: b.from?.field ?? '',
+      })),
       // The mechanically fixable subset — call apply_fix(breakId) on each.
       fixable,
     }
@@ -1598,25 +1616,13 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     let fixable: unknown[] = []
     if (a.includeCopyCheck !== false) {
       const res = (await handlers.runCoherenceCheck({ client: brand, campaign })) as {
-        breaks: { axis: string; severity: string; headline: string }[]
+        breaks: { id: string; axis: string; severity: string; headline: string; asset: string; field: string }[]
         fixable: { id: string; headline: string; asset: string; severity: string }[]
       }
       checked = true
       fixable = res.fixable
-      const fixableByHeadline = new Map(res.fixable.map((f) => [f.headline, f]))
-      breaks = res.breaks.map((b) => {
-        const fix = fixableByHeadline.get(b.headline)
-        return {
-          kind: 'copy-break' as never,
-          severity: (['high', 'medium', 'low'].includes(b.severity) ? b.severity : 'medium') as 'high' | 'medium' | 'low',
-          what: b.headline,
-          why: `A ${b.axis} break in the campaign's copy.`,
-          where: fix?.asset ? { assetName: fix.asset } : {},
-          // A break with a mechanical fix says so; the rest need a real edit, and saying "apply_fix"
-          // for those would be promising a button that does nothing.
-          fix: fix ? `apply_fix(breakId: "${fix.id}")` : 'Edit, reject or delete the asset — no mechanical fix for this one.',
-        }
-      })
+      // Matched on id, not on headline text — see copyBreakSuggestions for what that cost.
+      breaks = copyBreakSuggestions(res.breaks, res.fixable)
     }
 
     const suggestions = rankSuggestions([...review.suggestions, ...breaks])
