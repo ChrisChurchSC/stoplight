@@ -155,7 +155,7 @@ import { indexRecordDocs } from '../domain/recordDocs'
 import { type BrandDataset, type DatasetSource, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { isLinkedExternal } from '../domain/assetKind'
-import { assetRtbIds, isApprovedProof, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
+import { assetRtbIds, isApprovedProof, proofLabelKey, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
 import { MockIcpSource, MockIcpReviewer, flagResolved } from '../adapters/icp/mockIcp'
 import { type CoherenceDecision, freshDecisionId } from '../domain/coherence'
@@ -540,13 +540,16 @@ function mergeChannelProof(campaign: string, proof: { label: string; detail: str
   if (!proof.length) return
   const persisted = loadCampaignRtbs()
   const existing = persisted[campaign] ?? []
-  const seen = new Set(existing.map((r) => r.label.toLowerCase()))
+  const seen = new Set(existing.map((r) => proofLabelKey(r.label)))
   const additions: Rtb[] = []
   proof.forEach((p, i) => {
-    const key = p.label.toLowerCase()
+    // A proof with no label is not a proof — it would key on the empty string and swallow the next
+    // unlabelled one, while showing up in the library as a blank chip.
+    if (!p.label.trim()) return
+    const key = proofLabelKey(p.label)
     if (seen.has(key)) return
     seen.add(key)
-    additions.push({ id: `rtb-live-${campaign}-${Date.now().toString(36)}-${i}`, label: p.label, detail: p.detail })
+    additions.push({ id: `rtb-live-${campaign}-${Date.now().toString(36)}-${i}`, label: p.label.trim(), detail: p.detail })
   })
   if (!additions.length) return
   const next = [...existing, ...additions]

@@ -64,6 +64,26 @@ export interface Rtb {
 /** A proof is a vetted library master unless explicitly marked an unapproved draft. */
 export const isApprovedProof = (r: Rtb): boolean => r.approved !== false
 
+/**
+ * The identity of a proof point, for deduplication.
+ *
+ * mergeChannelProof keyed on `label.toLowerCase()`, so one proof arriving from a second channel
+ * with a trailing space, a doubled space, a curly apostrophe or a full stop read as a NEW proof and
+ * was added again under a fresh id. Two ids for one fact is not a cosmetic duplicate: assets attach
+ * to one id or the other, and everything that groups by proof — rtbRoi, rtbCoverage, the proof-gap
+ * check, a proof's own outcome history — then reports one proof's record split in half.
+ *
+ * Normalises the noise a channel's formatting introduces and nothing more: labels that differ in
+ * wording stay two proofs.
+ */
+export function proofLabelKey(label: string): string {
+  const key = label.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  // A label with no Latin alphanumerics at all — another script, or pure punctuation — normalises
+  // to the empty string, and every such label would collapse into one. Fall back to the label
+  // itself so those stay distinct.
+  return key || label.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
 let rtbSeq = 0
 /** A fresh owned RTB. Pass the owning audience so proof is audience-scoped. */
 export function newRtb(patch: Partial<Rtb> & { audienceId: string }): Rtb {
