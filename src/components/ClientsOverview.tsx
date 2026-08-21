@@ -1,5 +1,6 @@
 import { type DragEvent as ReactDragEvent, useEffect, useMemo, useState } from 'react'
 import { DRAFTS, folderDepth, folderName, withAncestors } from '../domain/campaignFolders'
+import { collapseToBrand } from '../domain/homeScope'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { useHomeCanvases, type CanvasCard } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
@@ -87,6 +88,9 @@ export function ClientsOverview() {
   const { canvases } = useHomeCanvases()
   const filter = useTrafficStore((s) => s.homeFilter)
   const setHomeFilter = useTrafficStore((s) => s.setHomeFilter)
+  /** The workspace's brands, and whether it has finished being read — see the collapse below. */
+  const clientList = useTrafficStore((s) => s.clientList)
+  const boardsHydrated = useTrafficStore((s) => s.boardsHydrated)
   const openCampaign = useTrafficStore((s) => s.openCampaign)
   const openClientWizard = useTrafficStore((s) => s.openClientWizard)
   const loadSample = useTrafficStore((s) => s.loadSample)
@@ -120,16 +124,29 @@ export function ClientsOverview() {
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
   const [folderTab, setFolderTab] = useState<'canvases' | 'grid' | 'calendar'>('canvases')
 
-  // With a single brand, "All canvases" (filter 'all') and that brand's gallery are the
-  // same set of campaigns under two titles. Collapse them: coerce 'all' to the brand so
-  // there is one campaigns page, always titled by the brand.
-  const brandNames = useMemo(
-    () => [...new Set(canvases.map((c) => c.client).filter((b) => b && b !== DRAFTS_SPACE))],
-    [canvases],
-  )
+  /**
+   * With a single brand, "All canvases" (filter 'all') and that brand's gallery are the same set of
+   * campaigns under two titles. Collapse them: coerce 'all' to the brand so there is one campaigns
+   * page, always titled by the brand.
+   *
+   * COUNTED OFF THE WORKSPACE'S BRANDS, NOT OFF THE CAMPAIGNS ON SCREEN, and not until the workspace
+   * has been read. Both halves of that are the same bug, reported as "sometimes it only shows one
+   * project's campaigns".
+   *
+   * Deriving the count from `canvases` meant counting the brands whose campaigns had ARRIVED. During
+   * the load that is briefly one, so this latched `brand:<whichever loaded first>` — and because the
+   * latch only fires while the filter is 'all', it never let go once it had. A race, so it happened
+   * some loads and not others, and looked like the gallery losing campaigns.
+   *
+   * clientList is the workspace's brands and is what the collapse was always about; boardsHydrated
+   * is the flag the rest of the app uses for "the read has landed". A brand with no campaigns yet
+   * still counts, which is correct: it is still the only brand there is.
+   */
+  const brandNames = useMemo(() => clientList.filter((b) => b && b !== DRAFTS_SPACE), [clientList])
   useEffect(() => {
-    if (brandNames.length === 1 && filter === 'all') setHomeFilter(`brand:${brandNames[0]}`)
-  }, [brandNames, filter, setHomeFilter])
+    const next = collapseToBrand({ hydrated: boardsHydrated, brands: brandNames, filter })
+    if (next) setHomeFilter(next)
+  }, [boardsHydrated, brandNames, filter, setHomeFilter])
   // Leaving a brand folder (or switching brands) snaps back to Canvases and clears any
   // folder scoping so the new brand shows all its folders.
   useEffect(() => {

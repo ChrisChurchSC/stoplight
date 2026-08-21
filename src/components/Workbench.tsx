@@ -11,6 +11,7 @@ import { AccountSettings } from './AccountSettings'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
 import { buildCampaignLink, readCampaignLink } from '../domain/campaignLink'
+import { WorkspaceLoading } from './WorkspaceLoading'
 import { IngestTray } from './IngestTray'
 import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { ViewToggle } from './ViewToggle'
@@ -107,6 +108,8 @@ export function Workbench() {
   const contributeAggregate = useTrafficStore((s) => s.contributeAggregate)
   const homeFilter = useTrafficStore((s) => s.homeFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  /** True once the workspace has been read — see the hold before this component's render. */
+  const boardsHydrated = useTrafficStore((s) => s.boardsHydrated)
   const { brands } = useHomeCanvases()
   const wizardOpen = useTrafficStore((s) => s.wizardOpen)
   const wizardClient = useTrafficStore((s) => s.wizardClient)
@@ -287,6 +290,23 @@ export function Workbench() {
   }
 
   if (page === 'account') return <AccountSettings />
+
+  /**
+   * DO NOT SHOW AN EMPTY WORKSPACE THAT IS MERELY UNREAD.
+   *
+   * Every slice starts empty and fills when the read lands, so the shell rendered against nothing
+   * for the whole of it — no brands, no campaigns, an empty canvas — which looks exactly like a
+   * workspace that has lost everything. Held until `boardsHydrated`, the flag the rest of the app
+   * already uses to mean "the workspace has been read", so this cannot disagree with the gates on
+   * saving and healing that read the same flag.
+   *
+   * It cannot hang: markBoardsHydrated runs in a `finally`, so a read that throws still opens the
+   * gate and the person gets the app plus whatever this device had, rather than a spinner forever.
+   *
+   * With no backend it is already true at init (localDataMode), so a local-only session never sees
+   * this — there is nothing to wait for.
+   */
+  if (!boardsHydrated) return <WorkspaceLoading />
 
   return (
     <div className={`workspace${canvasMode ? ` canvas-mode view-${view}` : ''}`}>
