@@ -122,6 +122,52 @@ Two tabs open on one workspace do not double-run anything: a command is claimed 
 update and only the tab that wins it executes. A tab that dies mid-command releases its claim after
 90 seconds so the next one can pick it up.
 
+## From Claude Code
+
+The same server, reached from the terminal instead of Desktop. `.mcp.json` in the repo root
+configures it, so a Claude Code session started anywhere in this project has the tools without
+anyone running a setup command:
+
+```json
+{
+  "mcpServers": {
+    "breadcrumbs": { "command": "node", "args": ["mcp/breadcrumbs-server.mjs"] }
+  }
+}
+```
+
+Claude Code asks once per project before it will connect to a `.mcp.json` server — until you
+approve it, `claude mcp list` shows it as ⏸ Pending approval. `claude mcp reset-project-choices`
+takes the answer back if you approve it and change your mind.
+
+**No credentials in that file, deliberately.** It is committed, and a token in a committed file is
+a token in everyone's clone. With no `BREADCRUMBS_TOKEN` the server takes the local path: it posts
+to `http://localhost:5173`, so `npm run dev` has to be running with a tab open, exactly as above.
+That is also the honest default for a repo config — the deployed path is *your* workspace, and a
+checkout should not arrive pointed at it.
+
+To drive the deployed site from Claude Code, add it for yourself instead of for the repo. `--scope
+local` keeps it in your own config rather than in git:
+
+```
+claude mcp add breadcrumbs-live \
+  -e BREADCRUMBS_TOKEN=… \
+  -e BREADCRUMBS_SUPABASE_URL=… \
+  -e BREADCRUMBS_SUPABASE_ANON_KEY=… \
+  --scope local \
+  -- node mcp/breadcrumbs-server.mjs
+```
+
+Mint the token in the app the same way (Settings → Connections), and give it a different server
+name from the project one so it is obvious which of the two a session is talking to.
+
+**One thing Claude Code gets for free that Desktop does not.** Desktop launches the server from a
+working copy that only changes when somebody runs `git pull`, so a merged connector change can sit
+unused for hours — its schema, its tools and its instructions all frozen at whatever commit that
+checkout is on. Claude Code runs the server from the repo you are working in, so it is whatever you
+have checked out. Both still need restarting to pick a change up: Desktop needs a full quit AND a
+new conversation, because tool definitions are fixed when a conversation starts.
+
 ## The shape of a session
 
 Sixty-odd tools with no stated order is why a session used to start wherever the first sentence

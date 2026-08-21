@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "breadcrumbs": {
+      "command": "node",
+      "args": ["mcp/breadcrumbs-server.mjs"]
+    }
+  }
+}
