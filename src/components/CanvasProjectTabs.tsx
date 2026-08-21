@@ -66,9 +66,16 @@ export function CanvasProjectTabs() {
     [campaignList],
   )
 
+  /**
+   * Live rows only. `archivedAt` is the soft-delete marker, and every other count in the app
+   * respects it — the campaign card (FlowsHome), the brief node (FlowsView) and list_assets all
+   * filter it out. This tab did not, so one campaign read 47 here and 13 everywhere else, the
+   * difference being 34 assets the user had already deleted.
+   */
   const assetCounts = useMemo(() => {
     const m = new Map<string, number>()
     for (const r of rows) {
+      if (r.archivedAt) continue
       const c = (r.campaign ?? '').trim()
       if (c) m.set(c, (m.get(c) ?? 0) + 1)
     }

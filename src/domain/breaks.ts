@@ -1,4 +1,5 @@
 import { isCtaField, messagingFields } from './messaging'
+import { tidyAfterRemoval } from './tidyCopy'
 import { rtbsForCampaign } from './rtb'
 import type { ChannelId, TrafficRow } from './types'
 
@@ -296,10 +297,9 @@ const VOICE_RULES: VoiceRule[] = [
     why: 'Your ICP discounts superlatives and wants proof. An unbackable claim reads as marketing noise.',
     brandRule: 'No hype or superlatives you cannot back up.',
     fix: (t) =>
-      t
-        .replace(/\b(best ever|#1|number one|revolutionary|game[- ]?changing|world[- ]?class|unbeatable|guaranteed|the ultimate)\b/i, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim(),
+      tidyAfterRemoval(
+        t.replace(/\b(best ever|#1|number one|revolutionary|game[- ]?changing|world[- ]?class|unbeatable|guaranteed|the ultimate)\b/i, ''),
+      ),
   },
 ]
 
@@ -400,11 +400,9 @@ export function detectProofGaps(rows: TrafficRow[]): CoherenceBreak[] {
       if ((r.rtbMap?.[field] ?? []).length > 0) continue // already backed by proof
       const highlight = m[0].trim()
       const rtb = bestRtbForClaim(campaign, v)
-      const softened = v
-        .replace(m[0], '')
-        .replace(/\s{2,}/g, ' ')
-        .replace(/\s+([.,!?])/g, '$1')
-        .trim()
+      // This site already had the punctuation half right; tidyAfterRemoval is that, generalised,
+      // with the newlines it was collapsing left intact.
+      const softened = tidyAfterRemoval(v.replace(m[0], ''))
       out.push({
         id: `proofgap-${r.id}-${field}`,
         axis: 'proof',
