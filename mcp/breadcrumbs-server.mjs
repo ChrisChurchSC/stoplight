@@ -931,6 +931,23 @@ server.registerTool(
 )
 
 server.registerTool(
+  'regenerate_assets',
+  {
+    title: 'Write specific assets again',
+    description:
+      "Rewrite the copy of assets that already exist — one card, a few, or a whole campaign — from what the campaign knows NOW. This is the tool for 'write that one again': generate_assets seeds a motion's deliverable set and APPENDS, so using it to redo a single asset leaves you with a second copy of everything, and edit_asset only writes words you already have. It clears each target's components and re-drafts them, so the result is a real rewrite rather than a top-up. Refuses BEFORE clearing anything if the campaign cannot generate (no brand bound, nothing wired), because a refusal after the clear would leave the assets empty. Posted and failed assets are skipped: their copy is already out in the world. The reply names who wrote, and which components are still empty per asset.",
+    inputSchema: {
+      assets: z
+        .array(z.string())
+        .optional()
+        .describe('The assets to rewrite — ids from list_assets, or their exact names. Omit to rewrite every asset in `campaign`.'),
+      campaign: z.string().optional().describe('Rewrite every asset in this campaign. Ignored when `assets` is given.'),
+    },
+  },
+  async (a) => text(await dispatch('regenerateAssets', a)),
+)
+
+server.registerTool(
   'apply_fix',
   {
     title: 'Apply a coherence check’s suggested fix',
