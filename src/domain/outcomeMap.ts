@@ -230,11 +230,22 @@ export function summarizeByAudience(map: OutcomeRow[]): AudienceOutcome[] {
       const impressions = rs.reduce((a, r) => a + r.outcomes.impressions, 0)
       const clicks = rs.reduce((a, r) => a + r.outcomes.clicks, 0)
       // Top proof + channel by credited revenue within the audience.
+      /**
+       * KEYED ON THE PROOF POINT'S ID, DISPLAYED BY ITS LABEL.
+       *
+       * This aggregated on the label, which is neither unique nor stable. Two proof points worded
+       * the same way merged into one line and reported their combined revenue as either's; and
+       * renaming a proof point split its own history in half, so the thing you renamed appeared to
+       * have earned nothing since. A label is what a person reads, not what a record IS.
+       */
       const rtbRev = new Map<string, number>()
+      const rtbLabel = new Map<string, string>()
       const chanRev = new Map<ChannelId, number>()
       for (const r of rs) {
-        for (const rtb of r.attributes.rtbs)
-          rtbRev.set(rtb.label, (rtbRev.get(rtb.label) ?? 0) + r.outcomes.revenue)
+        for (const rtb of r.attributes.rtbs) {
+          rtbRev.set(rtb.id, (rtbRev.get(rtb.id) ?? 0) + r.outcomes.revenue)
+          rtbLabel.set(rtb.id, rtb.label)
+        }
         chanRev.set(r.attributes.channel, (chanRev.get(r.attributes.channel) ?? 0) + r.outcomes.revenue)
       }
       const top = <T,>(m: Map<T, number>): T | null =>
@@ -248,7 +259,11 @@ export function summarizeByAudience(map: OutcomeRow[]): AudienceOutcome[] {
         leads: rs.reduce((a, r) => a + r.outcomes.leads, 0),
         revenue: rs.reduce((a, r) => a + r.outcomes.revenue, 0),
         spend: rs.reduce((a, r) => a + r.outcomes.spend, 0),
-        topRtb: top(rtbRev),
+        // Back to a label for display — the aggregation was by id, the reader sees words.
+        topRtb: (() => {
+          const id = top(rtbRev)
+          return id ? (rtbLabel.get(id) ?? id) : null
+        })(),
         topChannel: top(chanRev),
       }
     })
