@@ -31,7 +31,44 @@ export interface WorkspaceSetup {
   /** B2C / B2B / freemium / ad-supported, as inferred. */
   businessModel?: string
   campaign: { name: string; durationWeeks: number; monthlyVolume: number; overallBudget: number }
+  /**
+   * WHERE THIS CAME FROM, and the reason it is here at all.
+   *
+   * 'crawl' means the site was read. 'heuristic' means it was not — and every field below that a
+   * crawl would have OBSERVED is empty, because the alternative is what this used to do: return a
+   * template ICP, a template voice and three template proof points (one of them the literal string
+   * "Add a real customer outcome here.") in exactly the shape a real crawl returns, with nothing
+   * anywhere to tell the two apart. In production /api/setup is not registered, so the heuristic is
+   * the only path that ever runs, and the fabrication was the entire product of onboarding.
+   *
+   * The same idiom the copy writer already uses — it returns source: 'claude' | 'heuristic' so
+   * callers can badge it — rather than a new vocabulary for the same idea.
+   */
+  source: 'crawl' | 'heuristic'
+  /** Why the crawl did not happen or was not believed. Present whenever source is 'heuristic'. */
+  crawlReason?: string
+  /**
+   * What the motion profile WOULD have suggested, kept apart from the observed fields so it can be
+   * offered as a starting point without being persisted as though somebody had checked it.
+   */
+  suggestedDefaults?: {
+    industry: string
+    voice: string
+    icpName: string
+    segment: string
+    pains: string[]
+    rtbs: Rtb[]
+  }
 }
+
+/**
+ * Titles a bot wall serves instead of a homepage. delete_client's own doc comment exists to clear
+ * junk brands named "Just a moment..." — a Cloudflare interstitial — which means these have been
+ * reaching the workspace as brand names. A crawl that returns one of these did not read the site.
+ */
+const INTERSTITIAL = /^\s*(just a moment|attention required|checking your browser|please wait|one moment|access denied|are you a robot|verify you are human|403 forbidden|security check)/i
+
+export const looksLikeInterstitial = (name: string): boolean => INTERSTITIAL.test(name ?? '')
 
 export interface SetupInput {
   url: string
@@ -45,19 +82,36 @@ export interface SetupGenerator {
 export class ClaudeSetupGenerator implements SetupGenerator {
   constructor(private fallback: SetupGenerator) {}
   async generate(input: SetupInput): Promise<WorkspaceSetup> {
+    /**
+     * THE FALLBACK IS NOT SILENT ANY MORE.
+     *
+     * `catch { return this.fallback.generate(input) }` swallowed everything — a 404 from an
+     * unregistered route, a timeout, a bot wall — and returned a fabricated profile in the shape of
+     * an observed one. /api/setup is registered in devApiManifest and NOT in the production
+     * manifest (it needs Playwright), so in every deployed environment this catch is the ONLY path
+     * taken, and the reason was thrown away every time.
+     */
+    let reason = ''
     try {
       const res = await apiFetch('/api/setup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(input),
       })
-      if (!res.ok) throw new Error(`setup ${res.status}`)
+      if (!res.ok) throw new Error(res.status === 404 ? 'The site crawler is not available in this environment.' : `The crawler returned ${res.status}.`)
       const out = (await res.json()) as WorkspaceSetup
-      if (!out?.brand?.name) throw new Error('empty setup')
-      return out
-    } catch {
-      return this.fallback.generate(input)
+      if (!out?.brand?.name) throw new Error('The crawler returned nothing about this site.')
+      // A bot wall is a failure wearing a brand name. Reading its title as the company is how a
+      // workspace ends up with a client called "Just a moment...".
+      if (looksLikeInterstitial(out.brand.name)) {
+        throw new Error(`The site answered with a bot check ("${out.brand.name.trim()}"), so nothing was read.`)
+      }
+      return { ...out, source: 'crawl' }
+    } catch (e) {
+      reason = String((e as Error)?.message ?? e)
     }
+    const fallback = await this.fallback.generate(input)
+    return { ...fallback, crawlReason: reason }
   }
 }
 
@@ -178,20 +232,39 @@ export class HeuristicSetupGenerator implements SetupGenerator {
     const inf = inferStrategy(`${name} ${host} ${notes ?? ''}`)
     const p = MOTION_PROFILES[inf.strategy] ?? MOTION_PROFILES['demand-gen']
     const motionName = GTM_STRATEGIES.find((s) => s.key === inf.strategy)?.name ?? 'Demand Gen'
+    /**
+     * NOTHING HERE WAS OBSERVED, so nothing here is asserted.
+     *
+     * This used to return the motion profile's industry, voice, ICP name, segment, firmographics
+     * and pains — plus three proof points, one of which was the literal placeholder "Add a real
+     * customer outcome here." — in the identical shape a real crawl returns. setup_client then
+     * reported them to the caller as findings about the brand, and provisionWorkspace persisted
+     * them. On a domain nobody had read, an entire brand profile was invented and stored.
+     *
+     * What survives is only what genuinely derives from the input: the NAME and host from the
+     * domain, and the strategy inference, which reports its own confidence honestly (inferStrategy
+     * returns 'low' with an empty signal list when it has nothing to go on).
+     *
+     * The profile is still useful as a STARTING POINT, so it moves to suggestedDefaults where a
+     * caller can offer it as a suggestion and a person can accept it. What it can no longer do is
+     * arrive pre-accepted.
+     */
     return {
-      brand: { name, website: host, industry: p.industry, voice: p.voice },
-      icp: {
-        name: p.icpName,
+      brand: { name, website: host, industry: '', voice: '' },
+      icp: { name: '', segment: '', summary: '', firmographics: [], pains: [] },
+      rtbs: [],
+      suggestedDefaults: {
+        industry: p.industry,
+        voice: p.voice,
+        icpName: p.icpName,
         segment: p.segment,
-        summary: `Likely buyers for ${name}: ${p.summary}`,
-        firmographics: p.firmographics,
         pains: p.pains,
+        rtbs: [
+          { id: 'proof-1', label: 'Fast time-to-value', detail: 'Live in days, not quarters.' },
+          { id: 'proof-2', label: 'Cuts manual work', detail: 'Automates the busywork teams hate.' },
+        ],
       },
-      rtbs: [
-        { id: 'proof-1', label: 'Fast time-to-value', detail: 'Live in days, not quarters.' },
-        { id: 'proof-2', label: 'Cuts manual work', detail: 'Automates the busywork teams hate.' },
-        { id: 'proof-3', label: 'Proven results', detail: 'Add a real customer outcome here.' },
-      ],
+      source: 'heuristic',
       channelMix: p.channelMix,
       strategy: inf.strategy,
       secondaryStrategy: inf.secondaryStrategy,

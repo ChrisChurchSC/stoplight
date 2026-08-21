@@ -742,6 +742,26 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       signalsUsed: setup.signalsUsed ?? [],
       campaign: setup.campaign?.name,
       proofPoints: setup.rtbs?.length ?? 0,
+      /**
+       * WHETHER THE SITE WAS ACTUALLY READ. Reported first-class because everything above reads as
+       * a finding about the brand, and on the heuristic path most of it is now empty — which is
+       * only interpretable if the caller is told why. Before this, the empty case did not exist:
+       * a failed crawl returned a template ICP, voice and industry in the same shape as a real one.
+       */
+      crawled: setup.source === 'crawl',
+      ...(setup.source === 'crawl'
+        ? {}
+        : {
+            crawlFailed: true,
+            crawlReason: setup.crawlReason ?? 'The site was not read.',
+            // Offered, never applied. A person can accept these; nothing here has been stored.
+            suggestedDefaults: setup.suggestedDefaults ?? null,
+            note:
+              'The site was NOT read, so industry, voice, ICP and proof are empty rather than guessed — ' +
+              'nothing about them has been stored. `suggestedDefaults` is a starting point from the inferred ' +
+              'GTM motion, not an observation: put it to the person before writing any of it with set_brand_info, ' +
+              'add_audience or add_proof_point.',
+          }),
     }
   },
 
