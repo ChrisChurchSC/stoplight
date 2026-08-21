@@ -1377,6 +1377,73 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     return { cleared, note: `${cleared.length} link(s) removed.` }
   },
 
+  /**
+   * WRITE THESE ASSETS AGAIN — the smallest unit generation could be asked for, and the one the
+   * connector could not ask for.
+   *
+   * generate_assets seeds a motion's deliverable set and APPENDS, so "rewrite this one" through it
+   * means a second copy of everything. edit_asset writes words the caller already has. Between them
+   * there was no way to say: this card, again, from what the campaign now knows. The canvas has had
+   * that button on the inspector for a while (regenerateFlow([selPost.id])); this is the same act,
+   * reachable from outside.
+   *
+   * REFUSE BEFORE THE WIPE. draftCopy only fills components that are EMPTY, so a rewrite has to
+   * clear the old copy first — and if the refusal comes after that, the copy is gone and nothing
+   * replaced it. FlowsView carries the same comment for the same reason, having shipped exactly that
+   * bug: Generate as a delete button with an explanation attached. copyBlockerFor is asked about
+   * every campaign in the target set BEFORE a single field is cleared.
+   */
+  async regenerateAssets(a) {
+    const st = useTrafficStore.getState()
+    const refs = list(a.assets)
+    const campaign = str(a.campaign).trim()
+    if (!refs.length && !campaign) throw new Error('Pass `assets` (ids or exact names) or a `campaign` to rewrite all of its assets.')
+    const live = st.rows.filter((r) => !r.archivedAt)
+    const picked = refs.length
+      ? refs.map((ref) => resolveAsset(live, ref))
+      : live.filter((r) => (r.campaign ?? '').trim() === campaign)
+    if (!picked.length) throw new Error(`No assets to rewrite${campaign ? ` in "${campaign}"` : ''}.`)
+    /**
+     * A POSTED asset is out in the world; rewriting its copy here would leave the record disagreeing
+     * with what people actually saw. draftCopy's own unscoped path skips these, and passing ids is
+     * the one route that gets round that — so skip them here rather than inherit the loophole.
+     */
+    const shippable = picked.filter((r) => r.status !== 'posted' && r.status !== 'failed')
+    const skipped = picked.filter((r) => r.status === 'posted' || r.status === 'failed').map((r) => `${r.assetName} (${r.status})`)
+    if (!shippable.length) {
+      throw new Error(`Nothing to rewrite: every asset named is posted or failed (${skipped.join(', ')}).`)
+    }
+    const campaigns = [...new Set(shippable.map((r) => (r.campaign ?? '').trim()))]
+    for (const c of campaigns) {
+      const blocked = st.copyBlockerFor(c)
+      if (blocked) throw new Error(`${blocked} Nothing was changed.`)
+    }
+    const ids = shippable.map((r) => r.id)
+    // Clear first: draftCopy fills blanks, so without this it would find nothing to do and the
+    // "rewrite" would return the copy that was already there.
+    await Promise.all(ids.map((id) => useTrafficStore.getState().updateRow(id, { messaging: {} })))
+    const source = await useTrafficStore.getState().draftCopy(ids)
+    const after = useTrafficStore.getState().rows
+    const written = ids.map((id) => {
+      const r = after.find((x) => x.id === id)
+      const cover = r ? fieldCoverage(r.channel, r.assetType, r.messaging, r) : null
+      return { id, assetName: r?.assetName ?? '', filled: cover?.filled ?? [], stillEmpty: cover?.missing ?? [] }
+    })
+    return {
+      campaigns,
+      rewritten: ids.length,
+      // Who actually wrote. null means no writer ran at all — worth reporting rather than implying
+      // a rewrite happened because the call returned.
+      writer: source,
+      assets: written,
+      ...(skipped.length ? { skipped } : {}),
+      note:
+        source === null
+          ? 'No writer ran, so these assets are now EMPTY. Re-run once the campaign can generate, or fill them with edit_asset.'
+          : `Rewritten by ${source}. Components still empty are listed per asset — fill those with edit_asset.`,
+    }
+  },
+
   // Apply a coherence check's suggested fix to the flagged asset (the repair payoff).
   // Handles both break systems: the proof/cta/journey detectors (via applyBreakFix) and
   // the structural detectors (casing/leak) whose fix is a real rewrite. Breaks with no
