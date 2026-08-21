@@ -1,5 +1,5 @@
 import { isCtaField, messagingFields } from './messaging'
-import { tidyAfterRemoval } from './tidyCopy'
+import { tidyAfterRemoval, wholeWordPattern } from './tidyCopy'
 import { rtbsForCampaign } from './rtb'
 import type { ChannelId, TrafficRow } from './types'
 
@@ -366,23 +366,54 @@ function ctaEntry(r: TrafficRow): { field: string; value: string } | null {
   return null
 }
 
-/** Best-matching campaign RTB for a claim, by word overlap — the proof to attach. */
+/**
+ * Words that overlap between any two sentences in English and say nothing about whether a proof
+ * point supports a claim. Without them a single "with" was enough to attach one.
+ */
+const CLAIM_STOP = new Set(
+  ('the and for our you your with that this from are was all can will more most than into over under out off not but its '
+    + 'their they has have had been who how why what when where new now get got make made use using very just also each every'
+  ).split(' '),
+)
+
+/** How many meaningful words must overlap before a proof point counts as matching a claim. */
+const MIN_CLAIM_OVERLAP = 2
+
+/**
+ * The proof point that actually backs this claim, or nothing.
+ *
+ * NOTHING IS AN ANSWER HERE, and it used not to be. This scored an rtb by how many claim words
+ * appeared anywhere in its label or detail — as SUBSTRINGS, with no stopword filter, returning the
+ * best score above ZERO. So one incidental "with" attached a proof point, and "art" matched
+ * "start", "chart" and "quarter".
+ *
+ * What that feeds is not a suggestion in a list. detectProofGaps puts the winner in `attachRtb`,
+ * and apply_fix ATTACHES it — so an unsupported claim came away carrying real, approved proof that
+ * says something else, the card rendered as evidenced, and the coherence check went quiet about it.
+ * A dangling reference is a visible fault; this is a plausible one, which is worse.
+ *
+ * Three changes, each of which alone still guesses:
+ *   - whole words, not substrings, through the same matcher the contamination checks use
+ *   - stopwords dropped, and the length floor raised from three characters to four
+ *   - a real overlap required, and a TIE returns nothing: if two proof points match a claim equally
+ *     well, which one backs it is exactly the question, and picking either is answering it by
+ *     position in an array.
+ */
 function bestRtbForClaim(campaign: string, claim: string): string | undefined {
   const rtbs = rtbsForCampaign(campaign)
   if (!rtbs.length) return undefined
-  const words = new Set(claim.toLowerCase().match(/[a-z]{3,}/g) ?? [])
-  let best: string | undefined
-  let bestScore = 0
-  for (const rtb of rtbs) {
-    const hay = `${rtb.label} ${rtb.detail}`.toLowerCase()
-    let score = 0
-    for (const w of words) if (hay.includes(w)) score++
-    if (score > bestScore) {
-      bestScore = score
-      best = rtb.id
-    }
-  }
-  return bestScore > 0 ? best : undefined
+  const words = [...new Set(claim.toLowerCase().match(/[a-z]{4,}/g) ?? [])].filter((w) => !CLAIM_STOP.has(w))
+  if (words.length < MIN_CLAIM_OVERLAP) return undefined
+  const scored = rtbs
+    .map((rtb) => {
+      const hay = `${rtb.label} ${rtb.detail ?? ''}`
+      return { id: rtb.id, score: words.filter((w) => wholeWordPattern(w).test(hay)).length }
+    })
+    .sort((a, b) => b.score - a.score)
+  const [top, runnerUp] = scored
+  if (!top || top.score < MIN_CLAIM_OVERLAP) return undefined
+  if (runnerUp && runnerUp.score === top.score) return undefined
+  return top.id
 }
 
 /** Unsupported claims: a measurable claim in a component with no RTB attached.
