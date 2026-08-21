@@ -4344,6 +4344,62 @@ button.mf-open:focus-visible,
   background: var(--accent, #e0533d);
   opacity: 0.9;
 }
+/**
+ * THE WORKSPACE LOAD. Centred and quiet on purpose: it is on screen for a second or two on a good
+ * connection, so it should read as the app arriving rather than as an event.
+ */
+.ws-loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg, #faf9f7);
+  z-index: 60;
+}
+.ws-loading-inner {
+  text-align: center;
+  max-width: 320px;
+  padding: 0 24px;
+}
+.ws-loading-mark {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.ws-loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, #e0533d);
+  opacity: 0.35;
+  animation: ws-loading-pulse 1.1s ease-in-out infinite;
+}
+.ws-loading-dot:nth-child(2) { animation-delay: 0.15s; }
+.ws-loading-dot:nth-child(3) { animation-delay: 0.3s; }
+.ws-loading-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text, #1c1a17);
+}
+.ws-loading-sub {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted, #6b6660);
+}
+@keyframes ws-loading-pulse {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+/**
+ * A moving thing on screen is a cost to some people, and this one carries no information the words
+ * do not. Held still rather than hidden, so the mark still reads as part of the message.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ws-loading-dot { animation: none; opacity: 0.55; }
+}
 /* View mode lays out as a left-to-right tree: campaign column, then a deliverables
    column (each branching to its posts), so it doesn't open as one narrow stacked blob. */
 .flow-stack-view {
