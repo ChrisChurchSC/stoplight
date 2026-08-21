@@ -10,6 +10,7 @@ import { HomeShell } from './HomeShell'
 import { AccountSettings } from './AccountSettings'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
+import { buildCampaignLink, readCampaignLink } from '../domain/campaignLink'
 import { IngestTray } from './IngestTray'
 import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { ViewToggle } from './ViewToggle'
@@ -115,6 +116,30 @@ export function Workbench() {
   // All channel/status/time filtering lives behind a bottom-left "Filters" button —
   // a popover — so the canvas gets the full width. Closed by default.
   const [filtersOpen, setFiltersOpen] = useState(false)
+  /**
+   * THE ADDRESS BAR SAYS WHAT IS OPEN, so there is something to copy.
+   *
+   * The URL read `/` whatever you were looking at, which meant a campaign could not be linked to,
+   * bookmarked, or handed to anything outside the app — and the way people actually want to tell a
+   * model which campaign they mean is to paste its link and say "this one".
+   *
+   * replaceState, not pushState: opening a campaign is a change of scope inside one screen, not a
+   * new page, and stacking history entries would turn Back into an undo for a filter nobody thinks
+   * of as navigation. Same reasoning AuthGate gives for its own replaceState.
+   *
+   * The invite/share tokens are deliberately not preserved here — both are redeemed and stripped on
+   * the way in, and re-attaching a spent token to every subsequent URL is how a one-time link ends
+   * up pasted somewhere it should never have gone.
+   */
+  useEffect(() => {
+    const open = campaignFilter !== 'all' ? campaignFilter : ''
+    const brand = clientFilter !== 'all' ? clientFilter : ''
+    const next = open ? new URL(buildCampaignLink(window.location.origin, open, brand)) : null
+    const target = next ? `${next.pathname}${next.search}` : window.location.pathname
+    if (`${window.location.pathname}${window.location.search}` === target) return
+    window.history.replaceState(null, '', target)
+  }, [campaignFilter, clientFilter])
+
   const overview = clientFilter === 'all'
   // Level 1: a brand is open but no campaign is selected — show the campaign-states
   // home (campaigns by lifecycle). Picking a campaign drops to Level 2 (the canvas).
@@ -151,6 +176,20 @@ export function Workbench() {
           const qs = params.toString()
           window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
         }
+      }
+      /**
+       * A LINK THAT OPENS THE CAMPAIGN IT NAMES. Read before the data loads so the scope is already
+       * set when it arrives, and cleared from the URL only by the mirror below — which rewrites it
+       * from the live scope, so a link that opened something keeps working as a link to it.
+       *
+       * Tolerated rather than required: a link naming a campaign this workspace does not have leaves
+       * the scope alone rather than dropping the person into an empty canvas that looks like loss.
+       */
+      const link = readCampaignLink(window.location.href)
+      if (link) {
+        if (link.brand) useTrafficStore.getState().setClientFilter(link.brand)
+        useTrafficStore.getState().setCampaignFilter(link.campaign)
+        useTrafficStore.getState().openCampaign(link.campaign)
       }
       await refresh()
       try {
