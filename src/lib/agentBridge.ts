@@ -204,12 +204,37 @@ function firstFilled(messaging: Record<string, string>, channel: TrafficRow['cha
   return value.length > 60 ? `${value.slice(0, 60).trimEnd()}…` : value
 }
 
-/** Resolve proofPoints (rtb ids OR labels) to rtb ids for a brand. */
+/**
+ * Resolve proofPoints (rtb ids OR labels) to rtb ids for a brand.
+ *
+ * AN UNRESOLVABLE PROOF POINT IS AN ERROR, NOT A WRITE. This used to end `?? p` — so a proof point
+ * that matched no id and no label was returned AS ITSELF and written into rtbMap, where nothing but
+ * ids belong. The asset then carried a reference resolving to nothing, for good: rtbById finds no
+ * such proof, the coherence check sees a claim that IS backed, and the card renders as evidenced.
+ *
+ * Which is the precise failure this product exists to prevent — a claim wearing proof that is not
+ * there — reached by passing a label with a typo in it. Both callers are MCP writes (edit_asset,
+ * add_asset), so a model inventing a plausible proof label silently produced one.
+ *
+ * The label lookup trims, because a pasted label carrying whitespace missed and became one of these.
+ */
 function resolveProofIds(brand: string, proofPoints: string[]): string[] {
   const rtbs = useTrafficStore.getState().brandSystems[brand]?.rtbs ?? []
   const byId = new Set(rtbs.map((r) => r.id))
-  const byLabel = new Map(rtbs.map((r) => [r.label.toLowerCase(), r.id]))
-  return proofPoints.map((p) => (byId.has(p) ? p : byLabel.get(p.toLowerCase()) ?? p)).filter(Boolean)
+  const byLabel = new Map(rtbs.map((r) => [r.label.trim().toLowerCase(), r.id]))
+  return proofPoints
+    .filter((p) => str(p).trim())
+    .map((p) => {
+      const raw = str(p).trim()
+      const hit = byId.has(raw) ? raw : byLabel.get(raw.toLowerCase())
+      if (!hit) {
+        throw new Error(
+          `No proof point "${raw}" on ${brand}. Pass an id or the exact label from get_brand, or add it first with add_proof_point — ` +
+            `attaching one that does not exist would leave the asset claiming proof it has not got.`,
+        )
+      }
+      return hit
+    })
 }
 const ASSET_STATUSES: RowStatus[] = ['draft', 'in_review', 'approved', 'rejected', 'scheduled', 'posted', 'failed']
 
