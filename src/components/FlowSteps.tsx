@@ -1,3 +1,5 @@
+import { useTrafficStore } from '../store/useTrafficStore'
+
 /**
  * WHERE YOU ARE IN SETTING A CAMPAIGN UP, in the corner, while you are still setting it up.
  *
@@ -37,7 +39,14 @@ export function FlowSteps({
   /** Done with the whole thing. Takes the list and its cards away for good. */
   onComplete?: () => void
 }) {
-  if (!current) return null
+  /**
+   * NOT FOR SOMEBODY VISITING. This is a progress bar through work the viewer cannot do: a share
+   * link is read-only, so every step it counts is a step they have no control to take. Same rule
+   * and same reason as Hint, which suppresses the cards this list keeps the count for — the two
+   * are driven by one array and would look ridiculous disagreeing about who they are talking to.
+   */
+  const shared = useTrafficStore((s) => !!s.sharedSession)
+  if (shared || !current) return null
   const at = steps.findIndex((s) => s.id === current)
   return (
     <div className="setup-steps" role="group" aria-label="Setting up this campaign">
