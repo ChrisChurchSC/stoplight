@@ -36,7 +36,7 @@ import { type BrandObject } from '../domain/brandObject'
 import { AI_MODELS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
-import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
+import { type SmartObject, describeSmartObject, scopeOf, visibleOn } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverableGroup, type DeliverablePreset, type FlowDeliverable, freshNodeId, GROUP_TONE, nodeAssetCount, presetByKey, toneForPreset } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
@@ -1285,7 +1285,7 @@ export function FlowsView() {
   const addSmartObject = useTrafficStore((s) => s.addSmartObject)
   const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
-  const promoteSmartObject = useTrafficStore((s) => s.promoteSmartObject)
+  const setSmartObjectScope = useTrafficStore((s) => s.setSmartObjectScope)
   const setSmartObjectFolder = useTrafficStore((s) => s.setSmartObjectFolder)
   // Record-create actions, so a card can make the thing it needs instead of dead-ending on
   // "No audiences established yet".
@@ -8785,18 +8785,61 @@ export function FlowsView() {
           {(() => {
             const so = smartObjectFor(g)
             if (!so) return null
-            return scopeOf(so) === 'brand' ? (
-              <div className="flow-inspect-note">
-                In the brand library{so.campaign ? `, promoted from ${shortCampaignName(so.campaign)}` : ''}. Editing it
-                changes every campaign using it, not just this one.
-              </div>
-            ) : (
+            /**
+             * ONE RUNG AT A TIME, and every rung says what it costs before you take it.
+             *
+             * The step from a brand's library to every brand's is the one worth being slow about.
+             * Every record list in this app is filtered to the brand in view on purpose, so an object
+             * that crosses is the exception — and it should be reached by choosing it here, on the
+             * object, after it has already earned a place in one library. Never from ⌘G, which is
+             * how the brand library filled with one-offs the first time.
+             *
+             * The way back down is offered beside it. A rung you cannot step off is a decision you
+             * have to be sure about before you can try it.
+             */
+            const scope = scopeOf(so)
+            const from = so.campaign ? `, promoted from ${shortCampaignName(so.campaign)}` : ''
+            if (scope === 'shared') {
+              return (
+                <>
+                  <div className="flow-inspect-note">
+                    Shared with every brand{so.brand ? `, made for ${so.brand}` : ''}. Editing it changes every campaign
+                    that uses it, whoever it belongs to.
+                  </div>
+                  <button
+                    className="flow-obj-promote"
+                    title={brand ? `Keep it to ${brand} only` : 'Keep it to one brand only'}
+                    onClick={() => setSmartObjectScope(so.id, 'brand', so.brand || brand)}
+                    disabled={!so.brand && !brand}
+                  >
+                    Keep it to one brand
+                  </button>
+                </>
+              )
+            }
+            if (scope === 'brand') {
+              return (
+                <>
+                  <div className="flow-inspect-note">
+                    In the brand library{from}. Editing it changes every campaign using it, not just this one.
+                  </div>
+                  <button
+                    className="flow-obj-promote"
+                    title="Share it with every brand: any campaign, whoever it belongs to, can use it"
+                    onClick={() => setSmartObjectScope(so.id, 'shared')}
+                  >
+                    Share with every brand
+                  </button>
+                </>
+              )
+            }
+            return (
               <>
                 <div className="flow-inspect-note">Only on this campaign. Edit it freely: nothing else uses it.</div>
                 <button
                   className="flow-obj-promote"
                   title="Move to the brand library: every campaign can use it"
-                  onClick={() => promoteSmartObject(so.id, brand)}
+                  onClick={() => setSmartObjectScope(so.id, 'brand', brand)}
                   disabled={!brand}
                 >
                   Add to the brand library
@@ -10175,7 +10218,7 @@ export function FlowsView() {
                     means. Brand folders below hold the promoted ones, which every campaign can reach. */}
                 {(() => {
                   const here = smartObjects
-                    .filter((o) => scopeOf(o) === 'campaign' && o.campaign === boardKey)
+                    .filter((o) => scopeOf(o) === 'campaign' && visibleOn(o, { campaign: boardKey }))
                     .filter((o) => !q || o.name.toLowerCase().includes(q))
                     .sort((x, y) => x.name.localeCompare(y.name))
                   return (
@@ -10193,6 +10236,26 @@ export function FlowsView() {
                       ) : (
                         <div className="flow-lib-objects">{renderObjectShelf(here)}</div>
                       )}
+                    </>
+                  )
+                })()}
+                {/* SHARED, ABOVE THE BRANDS, because that is where it is on the ladder: reachable from
+                    every campaign of every brand. Listed even when empty is wrong — an empty shelf is
+                    a promise nobody kept, the same argument the folders make — so it appears once
+                    something is on it. */}
+                {(() => {
+                  const shared = smartObjects
+                    .filter((o) => scopeOf(o) === 'shared')
+                    .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
+                    .sort((x, y) => x.name.localeCompare(y.name))
+                  if (!shared.length) return null
+                  return (
+                    <>
+                      <div className="flow-lib-brandshead">
+                        <span className="flow-library-secttl">Shared with every brand</span>
+                        <span className="flow-lib-folder-count">{shared.length}</span>
+                      </div>
+                      <div className="flow-lib-objects">{renderObjectShelf(shared)}</div>
                     </>
                   )
                 })()}
@@ -10224,7 +10287,7 @@ export function FlowsView() {
                     // canvas from — a duplicate of the Campaigns page and the tab strip, both of
                     // which open a campaign already. Nothing was reachable only from here.
                     const shelf = smartObjects
-                      .filter((o) => o.brand === b.name && scopeOf(o) === 'brand')
+                      .filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand: b.name }))
                       .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
                       .sort((x, y) => x.name.localeCompare(y.name))
                     if (q && shelf.length === 0 && !b.name.toLowerCase().includes(q)) return null
@@ -10243,7 +10306,7 @@ export function FlowsView() {
                             <span className="flow-lib-folder-name">{b.name}</span>
                             {/* Objects, not campaigns: the folder holds objects, so a campaign count
                                 here described something that is no longer in it. */}
-                            <span className="flow-lib-folder-count">{smartObjects.filter((o) => o.brand === b.name && scopeOf(o) === 'brand').length}</span>
+                            <span className="flow-lib-folder-count">{smartObjects.filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand: b.name })).length}</span>
                           </button>
                         </div>
                         {open && (
