@@ -1,6 +1,7 @@
 import type { Role } from '../domain/access'
 import { brandFromBoard, isBrandless } from '../domain/brand'
 import { DRAFTS_SPACE, clientForCampaign } from '../domain/clients'
+import { decideShareView } from '../domain/shareAccess'
 import { decodeShareToken } from './shareLink'
 import { getActiveWorkspaceId } from './session'
 import { isSupabaseConfigured, supabase } from './supabase'
@@ -264,15 +265,70 @@ export async function publishShareSnapshot(
       .from('share_snapshots')
       .upsert({ id: grantId, workspace_id: ws, client, role, data, updated_at: new Date().toISOString() })
   } catch {
-    /* table not migrated yet, or offline — the link still works for signed-in users */
+    /* table not migrated yet, or offline — the link still opens, with nothing in it to show */
   }
 }
 
 /**
- * For an anonymous viewer opening a ?share= link: fetch the snapshot by grant id and seed
- * localStorage so the store renders it. Signed-in users skip this and use their own live data.
- * Called from main.tsx BEFORE the store module loads. Safe to overwrite localStorage: a later
- * sign-in re-hydrates from the workspace backend.
+ * SEEDED KEYS ARE BORROWED, NOT THE VIEWER'S OWN.
+ *
+ * Seeding writes another workspace's brand into this browser's localStorage under the same keys the
+ * app's own local data uses. That is fine while the share link is open — it IS the data being
+ * viewed — but it must not outlive the visit. The person who opens a share link and then signs up
+ * is the ordinary case, and leaving the snapshot behind would carry someone else's brand into the
+ * first session of their own account. So record what was written, and clear it on the next load
+ * that is not a share view.
+ */
+const SEEDED_KEYS = 'stoplight.shareSeeded.v1'
+
+function forgetSeededSnapshot(): void {
+  try {
+    const raw = localStorage.getItem(SEEDED_KEYS)
+    if (!raw) return
+    const keys = JSON.parse(raw)
+    if (Array.isArray(keys)) for (const k of keys) if (typeof k === 'string') localStorage.removeItem(k)
+    localStorage.removeItem(SEEDED_KEYS)
+  } catch {
+    /* nothing to clean up, or storage is unavailable — either way the app still opens */
+  }
+}
+
+/** Every workspace this viewer belongs to. Empty on any failure, which decideShareView reads as "not a member". */
+async function viewerWorkspaces(): Promise<string[]> {
+  if (!supabase) return []
+  try {
+    const { data: u } = await supabase.auth.getUser()
+    const uid = u.user?.id
+    if (!uid) return []
+    const { data, error } = await supabase.from('workspace_members').select('workspace_id').eq('user_id', uid)
+    if (error) return []
+    return (data ?? []).map((m) => m.workspace_id as string)
+  } catch {
+    return []
+  }
+}
+
+/** The workspace that published this snapshot, or null if it cannot be determined. */
+async function snapshotOwner(grantId: string): Promise<string | null> {
+  if (!supabase) return null
+  try {
+    const { data, error } = await supabase.rpc('get_share_snapshot_owner', { share_id: grantId })
+    return error || typeof data !== 'string' ? null : data
+  } catch {
+    // The function may not be migrated yet. Null means "unknown", which resolves to live data —
+    // the same behaviour this had before the function existed.
+    return null
+  }
+}
+
+/**
+ * For a viewer opening a ?share= link: serve the published snapshot unless they can already read
+ * the shared workspace themselves. Called from main.tsx BEFORE the store module loads, because the
+ * store reads localStorage at import and decides there whether to run its data layer locally.
+ *
+ * Note this turns on ACCESS, not on having an account — see domain/shareAccess.ts for why. A member
+ * of the owning workspace gets their live backend; everyone else gets the snapshot, signed in or
+ * not, because for them the snapshot is the only copy of this work they are allowed to see.
  */
 export async function maybeHydrateShare(): Promise<void> {
   let token: string | null = null
@@ -281,26 +337,43 @@ export async function maybeHydrateShare(): Promise<void> {
   } catch {
     return
   }
-  if (!token) return
+  // Not a share view: drop any snapshot a previous one left in this browser.
+  if (!token) {
+    forgetSeededSnapshot()
+    return
+  }
   const grant = decodeShareToken(token)
   if (!grant?.id) return
   if (!isSupabaseConfigured || !supabase) return
+
+  let signedIn = false
   try {
     const { data: sess } = await supabase.auth.getSession()
-    if (sess.session) {
-      // Signed in → use live data, not the snapshot. Clear any stale share-view flag.
-      try {
-        sessionStorage.removeItem('stoplight.shareView')
-      } catch {
-        /* ignore */
-      }
-      return
-    }
+    signedIn = !!sess.session
   } catch {
     /* treat as anonymous */
   }
-  // Anonymous viewer → the store must read data from the seeded localStorage, not the backend it
-  // has no session for. This flag tells the store to run its data layer in localStorage mode.
+
+  const source = decideShareView({
+    signedIn,
+    // Only worth two round trips when there is a session to disqualify; anonymous is always the snapshot.
+    ownerWorkspaceId: signedIn ? await snapshotOwner(grant.id) : null,
+    viewerWorkspaceIds: signedIn ? await viewerWorkspaces() : [],
+  })
+
+  if (source === 'live') {
+    // Their own workspace already holds this work. Clear any stale share-view flag so the store
+    // runs against the backend rather than localStorage.
+    try {
+      sessionStorage.removeItem('stoplight.shareView')
+    } catch {
+      /* ignore */
+    }
+    return
+  }
+
+  // Snapshot view → the store must read the seeded localStorage, not a backend scoped to a
+  // workspace that does not contain any of this. This flag puts its data layer in localStorage mode.
   try {
     sessionStorage.setItem('stoplight.shareView', '1')
   } catch {
@@ -309,12 +382,19 @@ export async function maybeHydrateShare(): Promise<void> {
   try {
     const { data, error } = await supabase.rpc('get_share_snapshot', { share_id: grant.id })
     if (error || !data || typeof data !== 'object') return
+    const written: string[] = []
     for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
       try {
         localStorage.setItem(k, JSON.stringify(v))
+        written.push(k)
       } catch {
         /* ignore quota */
       }
+    }
+    try {
+      localStorage.setItem(SEEDED_KEYS, JSON.stringify(written))
+    } catch {
+      /* ignore */
     }
   } catch {
     /* ignore; the app still opens (empty) rather than dead-ending */

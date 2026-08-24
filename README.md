@@ -84,7 +84,10 @@ in both directions so handlers never know which answered.
 Supabase provides auth and sync; `supabase/schema.sql` plus `supabase/migrations/` define
 the schema, and RLS scopes every row to a workspace. With Supabase unconfigured the app
 falls back to `localStorage`, which is also how share links work — a `?share=` token is a
-self-contained grant that needs no account.
+self-contained grant that needs no account. The published snapshot behind that token is served to
+anyone who is not a member of the workspace that published it, signed in or not: having an account
+is not having access, and someone who signs up *from* the link lands in an empty workspace of their
+own (see `src/domain/shareAccess.ts`).
 
 ## Also here
 
