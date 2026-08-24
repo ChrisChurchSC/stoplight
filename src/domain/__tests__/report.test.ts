@@ -251,6 +251,26 @@ describe('planned versus actual', () => {
   })
 })
 
+describe('a report is on a campaign, not on a brand', () => {
+  it('names the brand when the campaign is filed under one', () => {
+    const r = buildCampaignReport(input({ brand: 'Enid Blythe' }))
+    expect(r.brand).toBe('Enid Blythe')
+    expect(r.campaign).toBe('Launch')
+  })
+
+  it('reports no brand at all for a campaign that is not filed under one', () => {
+    // A blank-canvas campaign lives in Drafts and belongs to nobody. Null, not a placeholder.
+    const r = buildCampaignReport(input({ brand: null }))
+    expect(r.brand).toBeNull()
+    expect(r.campaign).toBe('Launch')
+  })
+
+  it('treats an empty brand as no brand rather than an empty heading', () => {
+    expect(buildCampaignReport(input({ brand: '   ' })).brand).toBeNull()
+    expect(buildCampaignReport(input({ brand: undefined })).brand).toBeNull()
+  })
+})
+
 describe('purity', () => {
   it('reports the same thing twice for the same input', () => {
     const a = buildCampaignReport(input())
