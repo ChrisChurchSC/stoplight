@@ -1125,6 +1125,24 @@ server.registerTool(
 )
 
 server.registerTool(
+  'get_campaign_report',
+  {
+    title: 'Report on a campaign',
+    description:
+      'The report you hand a client: what this campaign SAID it would do, and what happened. It opens with the promise — the GTM motion somebody chose, the goal, the audiences, the proof points it leans on — and lists under `promise.unanswered` any rung nobody ever answered, because a report cannot check a campaign against a goal it was never given. ' +
+      'Then what shipped against it (by stage and channel, the journey and its gaps), then what was MEASURED — reach and engagement the channel actually reported, never a projection. ' +
+      'MONEY IS WITHHELD, NOT ZEROED, when no CRM is connected: the figures available without one are sample data, and a sample number in a money column reads as a result. `money.shown` is false with the reason in `money.reason`. ' +
+      'Proof points are ranked by measured engagement and say so in `basis`, so a reader never mistakes attention for revenue. ' +
+      '`timing` compares planned against actual, excluding imported posts, whose intent equals their fact by construction and would report a perfect zero slip. ' +
+      'Use review_campaign to find and fix what is unfinished; use this to report on what is done.',
+    inputSchema: {
+      campaign: z.string().describe('The campaign to report on'),
+    },
+  },
+  async (a) => text(await dispatch('getCampaignReport', a)),
+)
+
+server.registerTool(
   'get_object_fields',
   {
     title: 'What an object card asks for',

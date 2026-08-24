@@ -20,6 +20,9 @@ import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } fro
 import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, identityCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
 import { makeObjectReference, titleFromDoc } from '../domain/objectReference'
 import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
+import { buildCampaignReport } from '../domain/report'
+import { rtbsForCampaign } from '../domain/rtb'
+import { mockAttio } from '../adapters/attio/mockAttio'
 import { copyBreakSuggestions } from '../domain/copyBreakSuggestions'
 import { nextStep } from '../domain/nextStep'
 import { brandPresence } from '../domain/presence'
@@ -1736,6 +1739,58 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
    * them as one ordered list, because two tools reporting on the same campaign in two vocabularies
    * is how half of it goes unread.
    */
+
+  /**
+   * THE CAMPAIGN REPORT: the artifact that leaves the building.
+   *
+   * Everything it needs is gathered HERE and handed to a pure function, rather than the function
+   * reaching for it. That is what lets the one rule this whole thing exists for be tested without a
+   * browser: money is withheld, not zeroed, when the figures would be sample data. A report that
+   * looked up `mockAttio.isSample` itself would be the one surface entitled to its own answer.
+   *
+   * The structural review runs by default and the copy check does not. review_campaign is the tool
+   * for a full pass; a report wants the findings that change what somebody does next, and the copy
+   * check calls the model, which is the slow half.
+   */
+  async getCampaignReport(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const st = useTrafficStore.getState()
+    const rows = st.rows.filter((r) => (r.campaign ?? '').trim() === campaign && !r.archivedAt)
+    if (!rows.length && !st.campaignList.some((c) => c.name === campaign))
+      throw new Error(`campaign not found: ${campaign}. list_campaigns shows every one, including the Drafts space.`)
+
+    const brand = brandForCampaignName(campaign)
+    const record = st.campaignList.find((c) => c.name === campaign)
+    const board = boardFor(st.flowBoards, campaign)
+    const suggestions = rankSuggestions(reviewCampaign({ campaign, rows, objects: board.objects }).suggestions)
+
+    const report = buildCampaignReport({
+      brand,
+      campaign,
+      rows,
+      strategy: record?.strategy,
+      goal: { message: record?.goalMessage, kpi: record?.goalKpi, target: record?.goalTarget },
+      proofPoints: rtbsForCampaign(campaign).map((p) => ({ id: p.id, label: p.label })),
+      // The sample flag comes from the adapter, once, so every surface marks it the same way.
+      attributionIsSample: mockAttio.isSample,
+      crm: mockAttio.isSample ? null : 'the connected CRM',
+      suggestions,
+    })
+
+    return {
+      ...report,
+      note:
+        (report.money.shown
+          ? ''
+          : 'Money is not in this report: ' + report.money.reason + ' ') +
+        (report.promise.unanswered.length
+          ? `${report.promise.unanswered.length} thing(s) nobody answered are listed under promise.unanswered — a report cannot check a campaign against a goal it was never given. `
+          : '') +
+        'Measured figures are what the channel reported; nothing here is projected.',
+    }
+  },
+
   async runCampaignReview(a) {
     const campaign = str(a.campaign).trim()
     if (!campaign) throw new Error('campaign is required')
