@@ -237,6 +237,10 @@ FILL EVERY FIELD. An asset card renders every component its format defines (a we
 an object card contributes only the direction it carries. Every write returns which components are
 still empty — act on that rather than treating a successful write as a finished card.
 
+WHEN IT GOES OUT IS THE PERSON'S CALL. schedule_asset sets an asset's date, and a date chosen
+because the field wanted one is a guess wearing a timestamp — invisible afterwards, because every
+card looks scheduled either way. Ask for the window, then set it.
+
 REVIEW BEFORE YOU CALL IT DONE. review_campaign returns everything worth doing on a campaign,
 ranked, each finding carrying the call that fixes it.
 
@@ -1262,6 +1266,34 @@ server.registerTool(
     },
   },
   async (a) => text(await dispatch('setAssetStatus', a)),
+)
+
+server.registerTool(
+  'schedule_asset',
+  {
+    title: 'Set when an asset goes out',
+    description:
+      'Set the DATE an asset goes out — one asset (assetId), several (assetIds), or a whole campaign (campaign). ' +
+      '`date` is YYYY-MM-DD read in the timezone of the browser tab running Breadcrumbs, not Desktop’s; the reply names the zone it used, so say the day you mean rather than an offset. ' +
+      'Each asset KEEPS its own time of day unless you pass `time` (HH:MM, 24-hour) — re-dating a campaign therefore does not restack a carefully staggered day onto one instant. ' +
+      '`everyDays` spreads a batch instead of dumping it on a single day: the assets are walked in the order they already run in and placed that many days apart, so it re-spaces rather than reorders. ' +
+      '`until` (YYYY-MM-DD) sets a run-until for assets that flight rather than fire once (always-on ads, landing pages, nurture); with no `until`, a row that already has an end moves both ends together and keeps its length. ' +
+      'Posted assets are skipped and named in the reply: when something actually went out is a fact, not a plan. ' +
+      'It does NOT change status — a draft with a date is still a draft, and set_asset_status is what marks it scheduled once a publisher has it.',
+    inputSchema: {
+      assetId: z.string().optional().describe('One asset id'),
+      assetIds: z.array(z.string()).optional().describe('Several asset ids (beats assetId)'),
+      campaign: z.string().optional().describe('Every live asset in this campaign (used when no ids are given)'),
+      date: z.string().describe('The day it goes out, YYYY-MM-DD, in the app tab’s local timezone'),
+      time: z.string().optional().describe('Time of day, HH:MM on a 24-hour clock. Omit to keep each asset’s existing time'),
+      until: z.string().optional().describe('For assets that run over a period: the day they stop, YYYY-MM-DD'),
+      everyDays: z
+        .number()
+        .optional()
+        .describe('Spread a batch: place each successive asset this many days after the one before it (1 = consecutive days)'),
+    },
+  },
+  async (a) => text(await dispatch('scheduleAsset', a)),
 )
 
 server.registerTool(

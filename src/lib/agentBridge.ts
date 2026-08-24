@@ -25,6 +25,7 @@ import { nextStep } from '../domain/nextStep'
 import { brandPresence } from '../domain/presence'
 import { breakScopeKey, coherenceContentHash, detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
+import { reschedulePatch } from './assetTasks'
 import type { MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { type AssetFilter, type ViewGroupBy, assetMatchesFilter, assetDate, groupKeyFor, resolveWindow } from '../domain/savedViews'
 import { GTM_STRATEGIES, resolveStrategyKey } from '../domain/strategies'
@@ -1903,6 +1904,128 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!ASSET_STATUSES.includes(status)) throw new Error(`status must be one of: ${ASSET_STATUSES.join(', ')}`)
     await useTrafficStore.getState().setRowStatus(id, status, str(a.note).trim() || undefined)
     return { id, status }
+  },
+
+  /**
+   * SET WHEN AN ASSET GOES OUT — the field Desktop could read and never write.
+   *
+   * Every other thing on a card was reachable from the connector; the date was not, so a campaign
+   * built entirely through Desktop shipped on whatever moments the seeder happened to propose, and
+   * the only way to move one was to open the tab and drag it. Scheduling is the last rung before
+   * approval, and a rung you cannot reach from where the work is being done is a rung people skip.
+   *
+   * THE MOVE IS `reschedulePatch`, NOT A DATE WRITTEN HERE. It is the same function the Tasks
+   * drawer's date input calls, and it is careful about the two things this is easy to get wrong: the
+   * day has to land in the LOCAL calendar it will be read back in (a UTC write reads a day early
+   * west of Greenwich), and a row with an `endsAt` has to move both ends together or the start
+   * eventually overtakes the end. Local means THIS TAB's zone — the executor's, not Desktop's — so
+   * the reply names the zone it used rather than leaving the caller to assume its own.
+   *
+   * POSTED ASSETS ARE SKIPPED, not moved. Their moment is a fact about the world now, and rewriting
+   * it would quietly relabel when something actually went out. They are named in the reply so a
+   * caller sees the refusal instead of counting them as done.
+   *
+   * SETTING A DATE DOES NOT SET A STATUS. A draft with a date is still a draft; `scheduled` means a
+   * publisher accepted it, which is set_asset_status's business, not this one's.
+   */
+  async scheduleAsset(a) {
+    const DAY = /^\d{4}-\d{2}-\d{2}$/
+    // A date JS would silently roll over (Feb 31 -> Mar 3) is a typo, not an instruction.
+    const realDay = (v: string): boolean => {
+      const [y, m, d] = v.split('-').map(Number)
+      const dt = new Date(y, m - 1, d)
+      return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d
+    }
+    const dayPlus = (base: string, days: number): string => {
+      const [y, m, d] = base.split('-').map(Number)
+      const dt = new Date(y, m - 1, d + days)
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+    }
+
+    const day = str(a.date).trim()
+    if (!DAY.test(day) || !realDay(day)) throw new Error('date is required, as YYYY-MM-DD (a real calendar day)')
+    const time = str(a.time).trim()
+    if (time) {
+      const [hh, mm] = time.split(':').map(Number)
+      if (!/^\d{1,2}:\d{2}$/.test(time) || !(hh >= 0 && hh < 24) || !(mm >= 0 && mm < 60))
+        throw new Error('time must be HH:MM on a 24-hour clock')
+    }
+    const until = str(a.until).trim()
+    if (until && (!DAY.test(until) || !realDay(until))) throw new Error('until must be YYYY-MM-DD (a real calendar day)')
+    if (until && until < day)
+      throw new Error(`until (${until}) is before date (${day}) — an asset cannot stop running before it starts`)
+    const everyRaw = Number(a.everyDays)
+    const every = Number.isFinite(everyRaw) && everyRaw > 0 ? Math.floor(everyRaw) : 0
+
+    const st = useTrafficStore.getState()
+    const ids = [str(a.assetId).trim() || str(a.id).trim(), ...list(a.assetIds)].filter(Boolean)
+    const campaign = str(a.campaign).trim()
+    // Rows with no readable date sort last rather than scrambling the order a NaN comparator returns.
+    const at = (r: TrafficRow): number => {
+      const t = Date.parse(r.scheduledAt ?? '')
+      return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t
+    }
+    let targets: TrafficRow[]
+    if (ids.length) {
+      const byId = new Map(st.rows.map((r) => [r.id, r]))
+      const missing = ids.filter((id) => !byId.has(id))
+      if (missing.length) throw new Error(`asset not found: ${missing.join(', ')}`)
+      targets = ids.map((id) => byId.get(id)!)
+    } else if (campaign) {
+      // Spacing walks the campaign in the order it already runs in, so it re-spaces rather than reorders.
+      targets = st.rows
+        .filter((r) => !r.archivedAt && (r.campaign ?? '').trim() === campaign)
+        .sort((x, y) => at(x) - at(y))
+      if (!targets.length) throw new Error(`no assets in campaign: ${campaign}`)
+    } else {
+      throw new Error('assetId, assetIds or campaign is required')
+    }
+
+    const skipped = targets.filter((r) => r.status === 'posted')
+    const movable = targets.filter((r) => r.status !== 'posted')
+    const refused = skipped.map((r) => ({ id: r.id, name: r.assetName, reason: 'already posted' }))
+    if (!movable.length) {
+      return {
+        scheduled: 0,
+        skipped: refused,
+        note: 'Nothing moved: every asset in scope has already been posted, and when it went out is a fact, not a plan.',
+      }
+    }
+
+    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    const moved: { id: string; name: string; from: string; to: string; endsAt?: string }[] = []
+    movable.forEach((row, i) => {
+      const onDay = every ? dayPlus(day, i * every) : day
+      const patch = reschedulePatch(row, onDay, time || undefined)
+      if (!patch) return
+      // An explicit run-until replaces the carried length; it moves with the start so a spaced
+      // batch keeps flights the same length instead of fanning them out.
+      if (until) {
+        const end = reschedulePatch(
+          { scheduledAt: row.endsAt || patch.scheduledAt },
+          every ? dayPlus(until, i * every) : until,
+        )
+        if (end) patch.endsAt = end.scheduledAt
+      }
+      updates.push({ id: row.id, patch })
+      moved.push({ id: row.id, name: row.assetName, from: row.scheduledAt, to: patch.scheduledAt, endsAt: patch.endsAt })
+    })
+
+    await useTrafficStore.getState().updateRows(updates)
+    assertRowsLanded(updates.map((u) => u.id))
+
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return {
+      scheduled: moved.length,
+      timezone: zone,
+      assets: moved.slice(0, 25),
+      truncated: moved.length > 25 ? moved.length - 25 : undefined,
+      skipped: refused,
+      note:
+        `Dates are local to the browser tab running Breadcrumbs (${zone}), not to Claude Desktop.` +
+        (time ? '' : ' Each asset kept its own time of day — pass `time` to set one.') +
+        ' Status is unchanged: a dated draft is still a draft, and set_asset_status is what marks it scheduled.',
+    }
   },
 
   // Bulk-approve: every in-scope draft/in_review asset (or an explicit id list).

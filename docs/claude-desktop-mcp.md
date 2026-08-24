@@ -242,12 +242,22 @@ way to reach a component no alias names.
 | `get_asset_fields` | `channel`, `assetType?` | The exact components that card renders — key, label, recommended + hard char limits. **Call before authoring.** |
 | `add_asset` | `brand`, `campaign`, `fields`, `channel?`, `assetType?`, `stage?`, `audience?`, `proofPoints?`, … | Hand-authors a first-class asset |
 | `edit_asset` | `assetId`, `fields`, … | Edits any component of an existing asset |
+| `schedule_asset` | `assetId` / `assetIds` / `campaign`, `date`, `time?`, `until?`, `everyDays?` | Sets when an asset goes out |
 
 `headline` / `primaryText` / `description` / `cta` still work as shorthand for the four commonest
 components, and `fields` wins where both name the same key. A shorthand the format has no component
 for is **reported back, not stored** — the reply's `notStored` names it, so copy never disappears
 quietly. Every write also returns `fields: { filled, missing, complete }`, and `list_assets` returns
 the same per asset, so a half-built card is visible instead of reading as finished.
+
+`schedule_asset` reads `date` (and `until`) as a calendar day **in the timezone of the browser tab
+running Breadcrumbs** — the tab is the executor, so Desktop's own timezone never enters into it. The
+reply names the zone it used. Each asset keeps its existing time of day unless you pass `time`, so
+re-dating a campaign moves it without collapsing a staggered day onto one instant, and an asset with
+an `endsAt` moves both ends together and keeps its length. `everyDays` spreads a batch across
+consecutive days in the order it already runs in. Posted assets are skipped and named: when
+something actually went out is a fact, not a plan. Setting a date does **not** set a status —
+`set_asset_status` is what marks an asset scheduled.
 
 ### Object cards — the other kind of card
 
