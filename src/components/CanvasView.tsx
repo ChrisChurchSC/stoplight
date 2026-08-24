@@ -176,6 +176,9 @@ interface Band {
 
 export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) {
   const rows = useTrafficStore((s) => s.rows)
+  // A share link opens somebody else's finished work read-only, so the build-out guide below is
+  // addressed to the wrong person — see Hint.tsx for the same reasoning at the other eight.
+  const sharedView = useTrafficStore((s) => !!s.sharedSession)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
   const ctaFilter = useTrafficStore((s) => s.ctaFilter)
@@ -2305,8 +2308,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           ) : null,
         )}
 
-        {/* A fresh custom board starts blank — guide the build-out loop. */}
-        {isCustomBoard && scopeAudiences.length === 0 && (
+        {/* A fresh custom board starts blank — guide the build-out loop. Not for a share viewer. */}
+        {isCustomBoard && scopeAudiences.length === 0 && !sharedView && (
           <div className="cv-blank-hint">
             <strong>Build a branching journey</strong>
             <span>Marketing is routing, so a campaign is a tree, not a grid.</span>
