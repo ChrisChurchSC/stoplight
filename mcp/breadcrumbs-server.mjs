@@ -1129,14 +1129,14 @@ server.registerTool(
   {
     title: 'Report on a campaign',
     description:
-      'The report you hand a client: what this campaign SAID it would do, and what happened. It opens with the promise — the GTM motion somebody chose, the goal, the audiences, the proof points it leans on — and lists under `promise.unanswered` any rung nobody ever answered, because a report cannot check a campaign against a goal it was never given. ' +
+      'The report you hand a client: what this campaign SAID it would do, and what happened. A report is on ONE CAMPAIGN — pick from list_campaigns, which includes the Drafts space. It does not take a brand: a campaign made as a blank canvas belongs to no brand, and `brand` comes back null for one rather than headed "Drafts", which is a catch-all and not a customer. It opens with the promise — the GTM motion somebody chose, the goal, the audiences, the proof points it leans on — and lists under `promise.unanswered` any rung nobody ever answered, because a report cannot check a campaign against a goal it was never given. ' +
       'Then what shipped against it (by stage and channel, the journey and its gaps), then what was MEASURED — reach and engagement the channel actually reported, never a projection. ' +
       'MONEY IS WITHHELD, NOT ZEROED, when no CRM is connected: the figures available without one are sample data, and a sample number in a money column reads as a result. `money.shown` is false with the reason in `money.reason`. ' +
       'Proof points are ranked by measured engagement and say so in `basis`, so a reader never mistakes attention for revenue. ' +
       '`timing` compares planned against actual, excluding imported posts, whose intent equals their fact by construction and would report a perfect zero slip. ' +
       'Use review_campaign to find and fix what is unfinished; use this to report on what is done.',
     inputSchema: {
-      campaign: z.string().describe('The campaign to report on'),
+      campaign: z.string().describe('The campaign to report on — from list_campaigns. No brand is needed or accepted; a campaign carries its own.'),
     },
   },
   async (a) => text(await dispatch('getCampaignReport', a)),

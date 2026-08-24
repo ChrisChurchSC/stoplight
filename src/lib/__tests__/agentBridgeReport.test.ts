@@ -3,6 +3,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { runAgentAction } from '../agentBridge'
 import { mockAttio } from '../../adapters/attio/mockAttio'
+import { useTrafficStore } from '../../store/useTrafficStore'
+import { DRAFTS_SPACE } from '../../domain/clients'
 
 /**
  * THE REPORT AS THE CONNECTOR SERVES IT — the same rule the pure tests pin, asserted through the
@@ -29,7 +31,7 @@ async function add(campaign: string, assetName: string, extra: Record<string, un
 const report = async (campaign: string) =>
   ((await runAgentAction('getCampaignReport', { campaign })) as {
     result: {
-      brand: string
+      brand: string | null
       campaign: string
       promise: { motion: string | null; unanswered: string[] }
       shipped: { total: number; live: number }
@@ -90,6 +92,21 @@ describe('the report the connector hands back', () => {
     // addAsset creates the campaign with a default motion; the point is that it is REPORTED,
     // not that it has a particular value.
     expect(r.result.promise.motion).toBeTruthy()
+  })
+
+  it('does not head the report with Drafts for a campaign nobody owns', async () => {
+    const c = fresh()
+    // A blank-canvas campaign: it lives in the Drafts space and is filed under no brand. Created
+    // through the store because new_campaign is the brand-scoped path and requires one.
+    useTrafficStore.getState().addCampaign({ name: c, client: DRAFTS_SPACE, strategy: 'Demand Gen' })
+    const r = await report(c)
+
+    expect(r.error).toBeUndefined()
+    // The two ways of being nobody's are not client names, and must not print as one.
+    expect(r.result.brand).not.toBe('Drafts')
+    expect(r.result.brand).not.toBe('Unassigned')
+    expect(r.result.brand).toBeNull()
+    expect(r.result.campaign).toBe(c)
   })
 
   it('refuses a campaign that does not exist rather than reporting an empty one', async () => {

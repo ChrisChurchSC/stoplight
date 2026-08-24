@@ -1760,7 +1760,11 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!rows.length && !st.campaignList.some((c) => c.name === campaign))
       throw new Error(`campaign not found: ${campaign}. list_campaigns shows every one, including the Drafts space.`)
 
-    const brand = brandForCampaignName(campaign)
+    // A REPORT IS ON A CAMPAIGN, and only names a brand when there is a real one to name.
+    // brandForCampaignName falls back to Drafts / Unassigned, which are the two ways of being
+    // nobody's — printing either at the top of a client report states an owner that does not exist.
+    const resolved = brandForCampaignName(campaign)
+    const brand = isBrandless(resolved) || resolved === DRAFTS_SPACE ? null : resolved
     const record = st.campaignList.find((c) => c.name === campaign)
     const board = boardFor(st.flowBoards, campaign)
     const suggestions = rankSuggestions(reviewCampaign({ campaign, rows, objects: board.objects }).suggestions)

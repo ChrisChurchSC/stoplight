@@ -33,7 +33,13 @@ export interface ReportGoal {
 }
 
 export interface ReportInput {
-  brand: string
+  /**
+   * THE CAMPAIGN IS WHAT IS REPORTED ON. The brand is an attribute it may not have: a campaign made
+   * as a blank canvas lives in the Drafts space and belongs to nobody, and `Drafts` / `Unassigned`
+   * are catch-alls, not clients. Passing one through would head a report with a placeholder as
+   * though it were the customer's name. Null when the campaign is not filed under a brand yet.
+   */
+  brand?: string | null
   campaign: string
   /** The campaign's assets. Archived rows are dropped here rather than by every caller. */
   rows: TrafficRow[]
@@ -85,7 +91,8 @@ export interface ProofPerformance {
 }
 
 export interface CampaignReport {
-  brand: string
+  /** The brand this campaign is filed under, or null when it is not filed under one. */
+  brand: string | null
   campaign: string
   promise: {
     motion: string | null
@@ -266,7 +273,7 @@ export function buildCampaignReport(input: ReportInput): CampaignReport {
   }
 
   return {
-    brand: input.brand,
+    brand: input.brand?.trim() || null,
     campaign: input.campaign,
     promise: {
       motion: input.strategy?.trim() || null,
