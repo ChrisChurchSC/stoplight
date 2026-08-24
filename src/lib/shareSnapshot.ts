@@ -280,8 +280,23 @@ export async function publishShareSnapshot(
  * that is not a share view.
  */
 const SEEDED_KEYS = 'stoplight.shareSeeded.v1'
+const SHARE_VIEW_FLAG = 'stoplight.shareView'
 
 function forgetSeededSnapshot(): void {
+  /**
+   * The flag goes first, and unconditionally.
+   *
+   * It is what tells the rest of the app "this tab is showing somebody else's shared work": the
+   * store runs on localStorage because of it, and AuthGate waves the viewer past sign-in because of
+   * it. Left behind on a load that carries no token, it would do both of those for a viewer who has
+   * no grant and no seeded data — an unauthenticated window onto a live workspace, showing nothing.
+   * The seeded keys are the easy half of the cleanup; this is the half that matters.
+   */
+  try {
+    sessionStorage.removeItem(SHARE_VIEW_FLAG)
+  } catch {
+    /* no sessionStorage — nothing was ever flagged */
+  }
   try {
     const raw = localStorage.getItem(SEEDED_KEYS)
     if (!raw) return
@@ -365,7 +380,7 @@ export async function maybeHydrateShare(): Promise<void> {
     // Their own workspace already holds this work. Clear any stale share-view flag so the store
     // runs against the backend rather than localStorage.
     try {
-      sessionStorage.removeItem('stoplight.shareView')
+      sessionStorage.removeItem(SHARE_VIEW_FLAG)
     } catch {
       /* ignore */
     }
@@ -375,7 +390,7 @@ export async function maybeHydrateShare(): Promise<void> {
   // Snapshot view → the store must read the seeded localStorage, not a backend scoped to a
   // workspace that does not contain any of this. This flag puts its data layer in localStorage mode.
   try {
-    sessionStorage.setItem('stoplight.shareView', '1')
+    sessionStorage.setItem(SHARE_VIEW_FLAG, '1')
   } catch {
     /* ignore */
   }

@@ -25,6 +25,7 @@ import {
   suggestCompanyFromEmail,
   validateWorkspaceName,
 } from '../domain/workspaceNaming'
+import { shareViewActive } from '../domain/shareAccess'
 import { decodeShareToken } from '../lib/shareLink'
 import { AuthShell } from './AuthShell'
 import { AuthOrDivider, GoogleButton } from './GoogleButton'
@@ -33,13 +34,24 @@ import { SignUpPage } from './SignUpPage'
 // A valid ?share= link is a self-contained grant (client + role live in the token), so a
 // recipient needs no account — the store reads it on load and pins the shared role. Without
 // this, an auth-configured deploy would wall share links behind sign-in and they'd open nothing.
-function hasValidShareLink(): boolean {
+//
+// The token is not asked for alone: it is stripped from the URL once the campaign mirror fires, and
+// this gate re-renders long after that. shareViewActive explains the failure that caused in full.
+function inShareView(): boolean {
+  let hasToken = false
   try {
     const token = new URLSearchParams(window.location.search).get('share')
-    return !!(token && decodeShareToken(token))
+    hasToken = !!(token && decodeShareToken(token))
   } catch {
-    return false
+    hasToken = false
   }
+  let flagged = false
+  try {
+    flagged = sessionStorage.getItem('stoplight.shareView') === '1'
+  } catch {
+    flagged = false
+  }
+  return shareViewActive({ hasToken, flagged })
 }
 
 const SIGNUP_PATH = '/signup'
@@ -269,7 +281,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // No backend configured → run as before, no auth.
   if (!isSupabaseConfigured) return <>{children}</>
   // A valid share link grants access without an account — don't wall it behind sign-in.
-  if (hasValidShareLink()) return <>{children}</>
+  if (inShareView()) return <>{children}</>
   // On the SAME lilac field as the gate it precedes. This used to be grey text on the app's --bg,
   // so arriving logged-out meant a neutral screen that then swapped wholesale to a purple one —
   // two different pages for what is one wait.
