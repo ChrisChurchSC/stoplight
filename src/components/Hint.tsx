@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+import { useTrafficStore } from '../store/useTrafficStore'
+
 /**
  * A SMALL CARD POINTING AT ONE CONTROL, SAYING WHAT IT IS FOR.
  *
@@ -52,7 +54,19 @@ function seen(key: string): boolean {
 
 export function Hint({ show, storageKey, title, body, placement = 'below', align = 'right', cta }: HintProps) {
   const [dismissed, setDismissed] = useState(() => seen(storageKey))
-  if (!show || dismissed) return null
+  /**
+   * NOBODY IS TAUGHT TO BUILD A WORKSPACE THEY ARE VISITING.
+   *
+   * Every hint explains how to make the thing on screen — add a Brand card, name the campaign,
+   * branch a card into next steps — and several run as a sequence with a Next button. A share link
+   * opens a read-only view of somebody else's finished work, so all of that is addressed to the
+   * wrong person: it reads as a to-do list for a campaign the viewer did not make and cannot
+   * change, pointing at controls the shared view does not give them.
+   *
+   * Gated here rather than at the eight call sites, so a hint added later cannot forget.
+   */
+  const shared = useTrafficStore((s) => !!s.sharedSession)
+  if (shared || !show || dismissed) return null
   const close = () => {
     setDismissed(true)
     try {
