@@ -53,3 +53,25 @@ export function decideShareView(input: ShareViewInput): ShareViewSource {
 
   return input.viewerWorkspaceIds.includes(input.ownerWorkspaceId) ? 'live' : 'snapshot'
 }
+
+/**
+ * IS THIS TAB SHOWING SOMEBODY ELSE'S SHARED WORK?
+ *
+ * Asked by the auth gate, which lets a share viewer past sign-in — the whole point of a ?share=
+ * link is that it needs no account. The obvious answer is "is there a ?share= token in the address
+ * bar", and that answer is wrong after the first render.
+ *
+ * The app mirrors the open campaign into the URL so a campaign can be linked to, and that rewrite
+ * drops the token deliberately (a spent token should not trail through every later URL). The gate
+ * re-read the live URL on every render, so the sequence was: token seeds the snapshot, gate admits
+ * the viewer, the mirror fires, the gate re-renders and now sees no token — sign-in wall, over the
+ * top of a fully hydrated campaign. The recipient signs up to get past it, lands in the empty
+ * workspace that creates, and reports a blank page. See maybeHydrateShare and Workbench's mirror.
+ *
+ * So the boot flag answers too. It is set before the store loads and only for a viewer actually
+ * being served a snapshot, and forgetSeededSnapshot clears it on any load without a token — so it
+ * cannot outlive the view it describes and wave a stranger past the gate.
+ */
+export function shareViewActive(input: { hasToken: boolean; flagged: boolean }): boolean {
+  return input.hasToken || input.flagged
+}

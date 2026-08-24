@@ -108,6 +108,8 @@ export function Workbench() {
   const contributeAggregate = useTrafficStore((s) => s.contributeAggregate)
   const homeFilter = useTrafficStore((s) => s.homeFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  // A share viewer's address bar is not ours to rewrite — see the mirror effect below.
+  const sharedSession = useTrafficStore((s) => s.sharedSession)
   /** True once the workspace has been read — see the hold before this component's render. */
   const boardsHydrated = useTrafficStore((s) => s.boardsHydrated)
   const { brands } = useHomeCanvases()
@@ -135,13 +137,24 @@ export function Workbench() {
    * up pasted somewhere it should never have gone.
    */
   useEffect(() => {
+    /**
+     * NOT FOR A SHARE VIEWER. Their URL is the grant: strip the ?share= token out of it and the
+     * view cannot survive a refresh, a bookmark, or the address bar being copied to a colleague —
+     * the next load carries no token, hydrates nothing, and clears what the last one seeded. It
+     * also raced the auth gate, which re-reads this URL and walled the viewer out mid-session.
+     *
+     * Nothing is lost by holding still. The mirror exists so a campaign can be linked to and
+     * pasted at a model; a recipient has one campaign, was handed its link already, and has no
+     * workspace for a ?campaign= link to resolve against anyway.
+     */
+    if (sharedSession) return
     const open = campaignFilter !== 'all' ? campaignFilter : ''
     const brand = clientFilter !== 'all' ? clientFilter : ''
     const next = open ? new URL(buildCampaignLink(window.location.origin, open, brand)) : null
     const target = next ? `${next.pathname}${next.search}` : window.location.pathname
     if (`${window.location.pathname}${window.location.search}` === target) return
     window.history.replaceState(null, '', target)
-  }, [campaignFilter, clientFilter])
+  }, [campaignFilter, clientFilter, sharedSession])
 
   const overview = clientFilter === 'all'
   // Level 1: a brand is open but no campaign is selected — show the campaign-states
