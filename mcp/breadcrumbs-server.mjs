@@ -237,6 +237,10 @@ FILL EVERY FIELD. An asset card renders every component its format defines (a we
 an object card contributes only the direction it carries. Every write returns which components are
 still empty — act on that rather than treating a successful write as a finished card.
 
+WHEN IT GOES OUT IS THE PERSON'S CALL. schedule_asset sets an asset's date, and a date chosen
+because the field wanted one is a guess wearing a timestamp — invisible afterwards, because every
+card looks scheduled either way. Ask for the window, then set it.
+
 REVIEW BEFORE YOU CALL IT DONE. review_campaign returns everything worth doing on a campaign,
 ranked, each finding carrying the call that fixes it.
 
@@ -898,7 +902,7 @@ server.registerTool(
   {
     title: 'List a campaign’s assets (with copy + status)',
     description:
-      "Read back each asset for a brand (optionally one campaign): id, assetName, status, source, sourceUrl, publishedAt, metrics, funnel stage, audience, channel, type, headline, primaryText, description, cta, proof points, and the journey it sits in — `linksTo` (what it leads to), `branchOf` (what it hangs off) and `variantOf`, all of them asset NAMES, which is why assetName comes back too. Verify generation AND lifecycle AND real-content imports. Filter status:[\"approved\"] for the shippable set, or source:[\"social-live\"] / [\"site\"] for imported real content (the actual captions/copy). Archived hidden unless includeArchived.",
+      "Read back each asset for a brand (optionally one campaign): id, assetName, status, source, sourceUrl, scheduledAt (when it is MEANT to go out) and publishedAt (when it actually did), metrics, funnel stage, audience, channel, type, headline, primaryText, description, cta, proof points, and the journey it sits in — `linksTo` (what it leads to), `branchOf` (what it hangs off) and `variantOf`, all of them asset NAMES, which is why assetName comes back too. Verify generation AND lifecycle AND real-content imports. Filter status:[\"approved\"] for the shippable set, or source:[\"social-live\"] / [\"site\"] for imported real content (the actual captions/copy). Archived hidden unless includeArchived. Date filters and calendar grouping read publishedAt, falling back to scheduledAt, so an authored asset is placed by its intended date until it has a real one.",
     inputSchema: {
       brand: z.string().describe('The brand / client name'),
       campaign: z.string().optional().describe('A specific campaign name, or omit for all of the brand'),
@@ -1008,7 +1012,7 @@ server.registerTool(
   {
     title: 'Edit an asset',
     description:
-      'Edit an asset’s copy and targeting. Pass `fields` (key → copy, from get_asset_fields) to set ANY component the card renders — that is the only way to reach a subhead, proof stat, FAQ or footer CTA. headline/primaryText/description/cta still work as shorthand for the four commonest. The reply reports which components are still empty. Editing changes the content, so re-run run_coherence_check to see the result. This is how a flagged break gets fixed by hand.',
+      'Edit an asset’s copy and targeting. Pass `fields` (key → copy, from get_asset_fields) to set ANY component the card renders — that is the only way to reach a subhead, proof stat, FAQ or footer CTA. headline/primaryText/description/cta still work as shorthand for the four commonest. The reply reports which components are still empty. Editing changes the content, so re-run run_coherence_check to see the result. This is how a flagged break gets fixed by hand. Also sets `scheduledAt` (when it goes out) and renames via `assetName` — a rename rewrites every journey link pointing at the old name, because links address assets by name. Copy sent under a key this format has no component for is now REFUSED outright rather than reported back inside a success: nothing is written and the reply says which keys to use.',
     inputSchema: {
       assetId: z.string().describe('The asset id (from list_assets)'),
       mediaType: z.enum(['image', 'video', 'text', 'link']).optional().describe('What the asset is made of (default image). image/video/link cards render an in-creative copy row; a text asset does not.'),
@@ -1023,6 +1027,8 @@ server.registerTool(
       description: z.string().optional(),
       cta: z.string().optional(),
       proofPoints: z.array(z.string()).optional().describe('Proof point ids or labels to attach'),
+      assetName: z.string().optional().describe('Rename the asset. Journey links (linksTo / branchOf / variantOf) address assets BY NAME, so every line pointing at the old name is rewritten in the same write; a name another asset already uses is refused rather than silently uniquified.'),
+      scheduledAt: z.string().nullable().optional().describe('When it should go out. ' + "ISO 8601. With a UTC offset (\"2026-09-03T09:00:00Z\") it is an absolute moment; without one (\"2026-09-03T09:00\", \"2026-09-03\") it is wall-clock time in the timezone of the tab running Breadcrumbs, not Desktop’s. null clears it."),
       audience: z.string().optional(),
       stage: z.enum(['awareness', 'consideration', 'conversion', 'retention']).optional(),
       channel: z.string().optional(),
@@ -1202,7 +1208,7 @@ server.registerTool(
   {
     title: 'Hand-author an asset',
     description:
-      'Create a bespoke asset by hand (no generation): set channel, stage, audience, format, proofPoints and the copy. CALL get_asset_fields FIRST for this channel + assetType, then pass every key it lists in `fields` — an asset card renders each component it defines (a website has nine) and anything you omit shows up blank. The reply names whatever is still empty. It is first-class (appears in list_assets, tagged authored, coherence-checked). Use for 1:1 ABM emails and one-off pieces.',
+      'Create a bespoke asset by hand (no generation): set channel, stage, audience, format, proofPoints and the copy. CALL get_asset_fields FIRST for this channel + assetType, then pass every key it lists in `fields` — an asset card renders each component it defines (a website has nine) and anything you omit shows up blank. The reply names whatever is still empty. It is first-class (appears in list_assets, tagged authored, coherence-checked). Pass `scheduledAt` to say when it goes out — omit it and the asset is stamped with the moment it was created, so a session of authoring stacks onto a single day in the calendar. Copy sent under a key this format has no component for is REFUSED outright: nothing is written and the reply says which keys to use. Use for 1:1 ABM emails and one-off pieces.',
     inputSchema: {
       brand: z.string().describe('The brand'),
       campaign: z.string().describe('The campaign to author into'),
@@ -1224,6 +1230,7 @@ server.registerTool(
       description: z.string().optional(),
       cta: z.string().optional(),
       proofPoints: z.array(z.string()).optional(),
+      scheduledAt: z.string().nullable().optional().describe('When it should go out. ' + "ISO 8601. With a UTC offset (\"2026-09-03T09:00:00Z\") it is an absolute moment; without one (\"2026-09-03T09:00\", \"2026-09-03\") it is wall-clock time in the timezone of the tab running Breadcrumbs, not Desktop’s. null clears it." + ' Omit and the asset is stamped with the moment it was created, which stacks a whole session onto one day in the calendar.'),
       source: z.enum(['authored', 'imported', 'social-live', 'site']).optional().describe('Provenance (default authored). Use for a single imported real asset.'),
       sourceUrl: z.string().optional().describe('The external post/page URL (imported assets)'),
       mediaRefs: z.array(z.string()).optional().describe('Media urls (image/video)'),
@@ -1254,7 +1261,7 @@ server.registerTool(
   'set_asset_status',
   {
     title: 'Approve / reject / review an asset',
-    description: 'Move an asset through the review lifecycle: draft → in_review → approved / rejected (also scheduled/posted/failed). Only approved assets are the shippable set. Optional note.',
+    description: 'Move an asset through the review lifecycle: draft → in_review → approved / rejected (also scheduled/posted/failed). Only approved assets are the shippable set. `scheduled` REQUIRES a scheduledAt — it claims a publisher queued the asset for a moment, and one with no date reads as handled everywhere it is counted while the calendar has nothing to place. Optional note.',
     inputSchema: {
       assetId: z.string().describe('The asset id'),
       status: z.enum(['draft', 'in_review', 'approved', 'rejected', 'scheduled', 'posted', 'failed']).describe('The new status'),
@@ -1262,6 +1269,58 @@ server.registerTool(
     },
   },
   async (a) => text(await dispatch('setAssetStatus', a)),
+)
+
+server.registerTool(
+  'schedule_asset',
+  {
+    title: 'Set when an asset goes out',
+    description:
+      'Set the DATE an asset goes out — one asset (assetId), several (assetIds), or a whole campaign (campaign). ' +
+      '`date` is YYYY-MM-DD read in the timezone of the browser tab running Breadcrumbs, not Desktop’s; the reply names the zone it used, so say the day you mean rather than an offset. ' +
+      'Each asset KEEPS its own time of day unless you pass `time` (HH:MM, 24-hour) — re-dating a campaign therefore does not restack a carefully staggered day onto one instant. ' +
+      '`everyDays` spreads a batch instead of dumping it on a single day: the assets are walked in the order they already run in and placed that many days apart, so it re-spaces rather than reorders. ' +
+      '`until` (YYYY-MM-DD) sets a run-until for assets that flight rather than fire once (always-on ads, landing pages, nurture); with no `until`, a row that already has an end moves both ends together and keeps its length. ' +
+      'Posted assets are skipped and named in the reply: when something actually went out is a fact, not a plan. ' +
+      'It does NOT change status — a draft with a date is still a draft, and set_asset_status is what marks it scheduled once a publisher has it.',
+    inputSchema: {
+      assetId: z.string().optional().describe('One asset id'),
+      assetIds: z.array(z.string()).optional().describe('Several asset ids (beats assetId)'),
+      campaign: z.string().optional().describe('Every live asset in this campaign (used when no ids are given)'),
+      date: z.string().describe('The day it goes out, YYYY-MM-DD, in the app tab’s local timezone'),
+      time: z.string().optional().describe('Time of day, HH:MM on a 24-hour clock. Omit to keep each asset’s existing time'),
+      until: z.string().optional().describe('For assets that run over a period: the day they stop, YYYY-MM-DD'),
+      everyDays: z
+        .number()
+        .optional()
+        .describe('Spread a batch: place each successive asset this many days after the one before it (1 = consecutive days)'),
+    },
+  },
+  async (a) => text(await dispatch('scheduleAsset', a)),
+)
+
+server.registerTool(
+  'set_schedule',
+  {
+    title: 'Set dates on many assets at once',
+    description:
+      'Set a DIFFERENT date per asset, in one call: `items: [{ assetId, scheduledAt }]`. Use this when the schedule is already decided and you are writing it in; use schedule_asset when a batch shares one day (optionally spread evenly). ' +
+      'Sixteen assets is one call here — each tool call is a separate round trip through the workspace queue, and a run of sixteen can exhaust the 120s command timeout before it finishes. ' +
+      '`scheduledAt` is ISO 8601. WITH a UTC offset ("2026-09-03T09:00:00Z") it is taken as an absolute moment; WITHOUT one ("2026-09-03T09:00", "2026-09-03") it is a wall-clock time read in the timezone of the browser tab running Breadcrumbs — not Desktop’s — and the reply names that zone. `null` clears the date. ' +
+      'One bad item does not sink the batch: every item gets its own result, the good ones are written together, and the failures are named with the reason. Posted assets are refused — when something went out is a fact, not a plan. ' +
+      'It does NOT change status: set_asset_status is what marks an asset scheduled, and it now requires a date to be set first.',
+    inputSchema: {
+      items: z
+        .array(
+          z.object({
+            assetId: z.string().describe('The asset id'),
+            scheduledAt: z.string().nullable().describe('ISO 8601 date-time, or null to clear the date'),
+          }),
+        )
+        .describe('One entry per asset. Each is applied independently; failures are reported per item.'),
+    },
+  },
+  async (a) => text(await dispatch('setSchedule', a)),
 )
 
 server.registerTool(

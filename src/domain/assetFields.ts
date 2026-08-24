@@ -175,7 +175,7 @@ export class UnknownAssetFieldError extends Error {
   constructor(readonly unknownKeys: string[], readonly validKeys: string[]) {
     super(
       `unknown field key(s): ${unknownKeys.join(', ')}. This asset renders: ${validKeys.join(', ')}. ` +
-        `Call describe_asset_fields for the full schema.`,
+        `Call get_asset_fields for the full schema.`,
     )
     this.name = 'UnknownAssetFieldError'
   }

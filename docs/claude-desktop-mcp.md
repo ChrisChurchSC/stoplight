@@ -242,12 +242,55 @@ way to reach a component no alias names.
 | `get_asset_fields` | `channel`, `assetType?` | The exact components that card renders — key, label, recommended + hard char limits. **Call before authoring.** |
 | `add_asset` | `brand`, `campaign`, `fields`, `channel?`, `assetType?`, `stage?`, `audience?`, `proofPoints?`, … | Hand-authors a first-class asset |
 | `edit_asset` | `assetId`, `fields`, … | Edits any component of an existing asset |
+| `schedule_asset` | `assetId` / `assetIds` / `campaign`, `date`, `time?`, `until?`, `everyDays?` | Sets when an asset goes out |
+| `set_schedule` | `items: [{ assetId, scheduledAt }]` | Sets a different date per asset, in one call |
 
 `headline` / `primaryText` / `description` / `cta` still work as shorthand for the four commonest
 components, and `fields` wins where both name the same key. A shorthand the format has no component
 for is **reported back, not stored** — the reply's `notStored` names it, so copy never disappears
 quietly. Every write also returns `fields: { filled, missing, complete }`, and `list_assets` returns
 the same per asset, so a half-built card is visible instead of reading as finished.
+
+`schedule_asset` moves a batch to one day (optionally spread with `everyDays`); `set_schedule` writes
+a different date to each asset. Both keep an asset's existing time of day unless told otherwise, move
+both ends of a flighted asset together, and skip posted assets — when something went out is a fact,
+not a plan.
+
+### Dates: intent vs fact
+
+`scheduledAt` is when an asset is **meant** to go out; `publishedAt` is when it **actually** did.
+Both come back from `list_assets`, and setting one never clears the other — the gap between them is
+the slip, and it is worth keeping. Filters and calendar grouping read `publishedAt` and fall back to
+`scheduledAt`, so an authored asset is placed by its intended date until it has a real one.
+
+`add_asset` and `edit_asset` both take `scheduledAt`, and `set_schedule` writes a different date to
+each of many assets in one call. **Omit it on `add_asset` and the asset is stamped with the moment
+it was created** — which is why a month of assets authored in one session used to stack onto a
+single day in the calendar.
+
+A date **with** a UTC offset (`2026-09-03T09:00:00Z`) is an absolute moment. A date **without** one
+(`2026-09-03T09:00`, or a bare `2026-09-03`) is wall-clock time, resolved in the timezone of the
+browser tab running Breadcrumbs — not Desktop's, and there is no workspace timezone setting to
+resolve against. Every reply names the zone it used. `null` clears a date. Anything unreadable is an
+error, never a silent fall back to now: an asset quietly scheduled for the moment it was created is
+indistinguishable from one somebody scheduled on purpose.
+
+`set_asset_status(status: "scheduled")` requires a date to already be set — the status claims a
+publisher queued the asset for a moment, and one with no moment reads as handled everywhere it is
+counted while the calendar has nothing to place.
+
+### Renaming, and why it is not just a field
+
+Journey links address assets **by name**: `linksTo`, `branchOf` and `variantOf` all hold asset names,
+not ids. So `edit_asset`'s `assetName` rewrites every link pointing at the old name in the same
+write, and refuses a name another asset already uses rather than silently uniquifying it — two
+assets sharing a name makes every line between them ambiguous.
+
+### Writes that cannot store what they were sent now fail
+
+Copy sent under a key the format has no component for used to come back as `notStored` inside a
+success reply. It is now an error, and nothing is written: the reply names the keys that would work.
+`clampedToLimit` stays a note, because clamped copy **was** stored.
 
 ### Object cards — the other kind of card
 

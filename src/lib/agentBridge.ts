@@ -25,6 +25,8 @@ import { nextStep } from '../domain/nextStep'
 import { brandPresence } from '../domain/presence'
 import { breakScopeKey, coherenceContentHash, detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
+import { reschedulePatch } from './assetTasks'
+import { executorTimezone, normalizeScheduleInput } from '../domain/scheduleInput'
 import type { MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { type AssetFilter, type ViewGroupBy, assetMatchesFilter, assetDate, groupKeyFor, resolveWindow } from '../domain/savedViews'
 import { GTM_STRATEGIES, resolveStrategyKey } from '../domain/strategies'
@@ -81,13 +83,9 @@ function copyReport(
   const out: Record<string, unknown> = { fields: coverage }
   if (applied) {
     if (Object.keys(applied.mapped).length) out.wroteTo = applied.mapped
-    // Copy that went NOWHERE. Loud, because the old behaviour was to drop it without a word.
-    if (applied.unmapped.length) {
-      out.notStored = applied.unmapped
-      out.notStoredWhy =
-        `This asset has no field for: ${applied.unmapped.join(', ')}. That copy was NOT saved — ` +
-        `re-send it under a real key from get_asset_fields.`
-    }
+    // Copy that went nowhere no longer reaches here: add_asset and edit_asset refuse the write
+    // outright (see assertEveryFieldLands). A caller reading a 200 should not have to check a
+    // field inside it to learn that half of what it sent was dropped.
     if (applied.clamped.length) out.clampedToLimit = applied.clamped
   }
   if (coverage.missing.length) {
@@ -343,6 +341,13 @@ function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { 
     sourceUrl: r.sourceUrl ?? '',
     mediaRef: r.mediaRef ?? '',
     mediaRefs: r.mediaRefs ?? [],
+    /**
+     * BOTH HALVES, because they are different claims. `scheduledAt` is when somebody INTENDS this
+     * to go out; `publishedAt` is when it actually did. Returning only the second meant nothing
+     * outside could read back a date it had just written, and a filter that falls back to
+     * scheduledAt was sorting on a field no caller could see.
+     */
+    scheduledAt: r.scheduledAt ?? '',
     publishedAt: r.publishedAt ?? '',
     metrics: r.socialMetrics ?? null,
     metricsUpdatedAt: r.metricsUpdatedAt ?? null,
@@ -563,6 +568,49 @@ async function assertBoardLanded(
     matches(boards.find((b) => b.key === campaign)?.objects?.find((o) => o.id === cardId)),
   )
   if (!landed) revert(STORAGE_FULL)
+}
+
+
+/**
+ * REFUSE THE WRITE RATHER THAN REPORT IT AFTERWARDS.
+ *
+ * Copy sent under a key the format has no component for used to come back as `notStored` inside a
+ * success reply. Every caller that treated a 200 as "it worked" — which is every caller that does
+ * not read the body field by field — lost that copy without ever being told. A write that cannot
+ * store what it was given has not succeeded, so it now fails, before anything is written.
+ */
+function assertEveryFieldLands(channel: string, assetType: string | undefined, applied: { unmapped: string[] }): void {
+  if (!applied.unmapped.length) return
+  throw new Error(
+    `This asset has no field for: ${applied.unmapped.join(', ')}. NOTHING was written. ` +
+      `Call get_asset_fields for ${channel}${assetType ? ` / ${assetType}` : ''} and re-send that copy under a key it lists.`,
+  )
+}
+
+/**
+ * RENAMING AN ASSET MEANS REWRITING EVERY LINE THAT POINTS AT IT.
+ *
+ * The journey is stored in NAMES, not ids: link_assets writes `linksTo: to.assetName` and
+ * `branchOf: from.assetName`, and fan-out writes `variantOf: row.assetName`. So a rename that
+ * touches only the asset is not a rename, it is a quiet unlinking — the card keeps its edges in the
+ * data and every one of them now names something that does not exist. review_campaign reads those
+ * edges, which is how a rename would have turned into a journey with holes in it nobody edited.
+ *
+ * Matched case-insensitively because link_assets compares that way when it refuses a duplicate link.
+ */
+function renameUpdates(rows: TrafficRow[], id: string, from: string, to: string): { id: string; patch: Partial<TrafficRow> }[] {
+  const was = from.trim().toLowerCase()
+  const same = (v: string | undefined) => (v ?? '').trim().toLowerCase() === was
+  const out: { id: string; patch: Partial<TrafficRow> }[] = []
+  for (const r of rows) {
+    if (r.id === id) continue
+    const patch: Partial<TrafficRow> = {}
+    if (same(r.linksTo)) patch.linksTo = to
+    if (same(r.branchOf)) patch.branchOf = to
+    if (same(r.variantOf)) patch.variantOf = to
+    if (Object.keys(patch).length) out.push({ id: r.id, patch })
+  }
+  return out
 }
 
 /** The same check for asset rows, which go to storage through the sheet adapter rather than a slice. */
@@ -1321,6 +1369,41 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const channel = channelArg(a.channel, row.channel)
     const assetType = str(a.assetType).trim() || row.assetType || ''
     const patch: Partial<TrafficRow> = {}
+    /**
+     * INTENT, WHICH IS NOT THE SAME WRITE AS FACT. `scheduledAt` says when this is MEANT to go out;
+     * `publishedAt` says when it did. Passing null clears the intent — stored as an empty string,
+     * because the field is not optional on a row and a missing date has to read as "none set" rather
+     * than as the epoch. Filters already cope: assetDate falls back to createdAt when it cannot
+     * parse one, so a cleared asset sorts by when it was made instead of vanishing from the window.
+     */
+    let linkUpdates: { id: string; patch: Partial<TrafficRow> }[] = []
+    if ('scheduledAt' in a) {
+      const iso = normalizeScheduleInput(a.scheduledAt, 'scheduledAt')
+      patch.scheduledAt = iso ?? ''
+      // A flighted asset keeps its length: move the start, move the end with it.
+      const was = Date.parse(row.scheduledAt ?? '')
+      const ends = Date.parse(row.endsAt ?? '')
+      if (iso && Number.isFinite(was) && Number.isFinite(ends)) {
+        patch.endsAt = new Date(ends + (Date.parse(iso) - was)).toISOString()
+      }
+    }
+    const nextName = str(a.assetName).trim()
+    if (nextName && nextName.toLowerCase() !== (row.assetName ?? '').trim().toLowerCase()) {
+      // Names ADDRESS the journey, so two assets sharing one makes every link between them
+      // ambiguous. add_asset already uniquifies for this reason; a rename has to refuse instead,
+      // because silently becoming "Launch post 2" is not the name the caller asked for.
+      const clash = st.rows.find(
+        (r) => r.id !== id && !r.archivedAt && (r.assetName ?? '').trim().toLowerCase() === nextName.toLowerCase(),
+      )
+      if (clash)
+        throw new Error(
+          `Another asset is already called "${clash.assetName}". Journey links (linksTo / branchOf / variantOf) address assets BY NAME, so two with the same name makes every line between them ambiguous. Pick a different name.`,
+        )
+      linkUpdates = renameUpdates(st.rows, id, row.assetName ?? '', nextName)
+      patch.assetName = nextName
+    } else if (nextName) {
+      patch.assetName = row.assetName
+    }
     if (str(a.channel).trim()) patch.channel = channel
     if (str(a.assetType).trim()) patch.assetType = assetType
     if (typeof a.audience === 'string') patch.audience = str(a.audience).trim()
@@ -1334,6 +1417,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     let applied: ReturnType<typeof applyCopyFields> | null = null
     if (COPY_ARGS.some((k) => typeof a[k] === 'string') || isFieldMap(a.fields)) {
       applied = applyCopyFields(channel, assetType, row.messaging ?? {}, a, mediaType)
+      assertEveryFieldLands(channel, assetType, applied)
       patch.messaging = applied.messaging
       if (applied.inCreativeCopy !== undefined) patch.extractedCopy = applied.inCreativeCopy
     }
@@ -1343,11 +1427,18 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       const pk = messagingKeys(channel, assetType).primaryText ?? 'primary'
       patch.rtbMap = { ...(row.rtbMap ?? {}), [pk]: ids }
     }
-    await useTrafficStore.getState().updateRow(id, patch)
+    // ONE write: a rename and the lines that point at it must not be able to land separately, or a
+    // storage failure between them leaves every referrer naming an asset that no longer exists.
+    if (linkUpdates.length) await useTrafficStore.getState().updateRows([{ id, patch }, ...linkUpdates])
+    else await useTrafficStore.getState().updateRow(id, patch)
+    assertRowsLanded([id, ...linkUpdates.map((u) => u.id)])
     const after = useTrafficStore.getState().rows.find((r) => r.id === id)
     return {
       id,
       updated: Object.keys(patch),
+      assetName: after?.assetName ?? row.assetName,
+      scheduledAt: after?.scheduledAt ?? '',
+      ...(linkUpdates.length ? { relinked: linkUpdates.length, timezone: executorTimezone() } : {}),
       ...copyReport(channel, assetType, after?.messaging ?? patch.messaging ?? row.messaging, applied, after ?? row),
       note: 'Re-run run_coherence_check to see the edit reflected.',
     }
@@ -1822,6 +1913,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const mediaType = mediaArg(a.mediaType)
     const stage = str(a.stage).trim().toLowerCase()
     const applied = applyCopyFields(channel, assetType, {}, a, mediaType)
+    assertEveryFieldLands(channel, assetType, applied)
     const patch: Partial<TrafficRow> = {
       channel,
       // An asset addressed by `fields` need never pass `headline` — and on a format with no headline
@@ -1850,6 +1942,12 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (mediaRefs.length) {
       patch.mediaRefs = mediaRefs
       patch.mediaRef = mediaRefs[0]
+    }
+    // Without this every authored asset is stamped with the moment it was created, so a month of
+    // work built in one session stacks onto a single day and the calendar reads as one column.
+    if ('scheduledAt' in a) {
+      const iso = normalizeScheduleInput(a.scheduledAt, 'scheduledAt')
+      patch.scheduledAt = iso ?? ''
     }
     const row = await useTrafficStore.getState().addAsset(brand, campaign, patch)
     assertRowsLanded([row.id])
@@ -1901,8 +1999,211 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const status = str(a.status).trim() as RowStatus
     if (!id) throw new Error('assetId is required')
     if (!ASSET_STATUSES.includes(status)) throw new Error(`status must be one of: ${ASSET_STATUSES.join(', ')}`)
+    /**
+     * `scheduled` is a CLAIM ABOUT A MOMENT: a publisher has accepted this and queued it for
+     * scheduledAt. Marked scheduled with no date, an asset reads as handled everywhere it is
+     * counted while the calendar has nothing to place — the kind of lie a view acts on rather
+     * than surfaces. Every other status is a claim about the asset alone and needs no date.
+     */
+    if (status === 'scheduled') {
+      const row = useTrafficStore.getState().rows.find((r) => r.id === id)
+      if (!row) throw new Error(`asset not found: ${id}`)
+      if (!Number.isFinite(Date.parse(row.scheduledAt ?? '')))
+        throw new Error(
+          `"${row.assetName}" has no scheduledAt, so it cannot be marked scheduled — that would claim a publisher queued it for a moment that does not exist. Set a date first with set_schedule (or edit_asset scheduledAt).`,
+        )
+    }
     await useTrafficStore.getState().setRowStatus(id, status, str(a.note).trim() || undefined)
     return { id, status }
+  },
+
+  /**
+   * SET WHEN AN ASSET GOES OUT — the field Desktop could read and never write.
+   *
+   * Every other thing on a card was reachable from the connector; the date was not, so a campaign
+   * built entirely through Desktop shipped on whatever moments the seeder happened to propose, and
+   * the only way to move one was to open the tab and drag it. Scheduling is the last rung before
+   * approval, and a rung you cannot reach from where the work is being done is a rung people skip.
+   *
+   * THE MOVE IS `reschedulePatch`, NOT A DATE WRITTEN HERE. It is the same function the Tasks
+   * drawer's date input calls, and it is careful about the two things this is easy to get wrong: the
+   * day has to land in the LOCAL calendar it will be read back in (a UTC write reads a day early
+   * west of Greenwich), and a row with an `endsAt` has to move both ends together or the start
+   * eventually overtakes the end. Local means THIS TAB's zone — the executor's, not Desktop's — so
+   * the reply names the zone it used rather than leaving the caller to assume its own.
+   *
+   * POSTED ASSETS ARE SKIPPED, not moved. Their moment is a fact about the world now, and rewriting
+   * it would quietly relabel when something actually went out. They are named in the reply so a
+   * caller sees the refusal instead of counting them as done.
+   *
+   * SETTING A DATE DOES NOT SET A STATUS. A draft with a date is still a draft; `scheduled` means a
+   * publisher accepted it, which is set_asset_status's business, not this one's.
+   */
+  async scheduleAsset(a) {
+    const DAY = /^\d{4}-\d{2}-\d{2}$/
+    // A date JS would silently roll over (Feb 31 -> Mar 3) is a typo, not an instruction.
+    const realDay = (v: string): boolean => {
+      const [y, m, d] = v.split('-').map(Number)
+      const dt = new Date(y, m - 1, d)
+      return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d
+    }
+    const dayPlus = (base: string, days: number): string => {
+      const [y, m, d] = base.split('-').map(Number)
+      const dt = new Date(y, m - 1, d + days)
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+    }
+
+    const day = str(a.date).trim()
+    if (!DAY.test(day) || !realDay(day)) throw new Error('date is required, as YYYY-MM-DD (a real calendar day)')
+    const time = str(a.time).trim()
+    if (time) {
+      const [hh, mm] = time.split(':').map(Number)
+      if (!/^\d{1,2}:\d{2}$/.test(time) || !(hh >= 0 && hh < 24) || !(mm >= 0 && mm < 60))
+        throw new Error('time must be HH:MM on a 24-hour clock')
+    }
+    const until = str(a.until).trim()
+    if (until && (!DAY.test(until) || !realDay(until))) throw new Error('until must be YYYY-MM-DD (a real calendar day)')
+    if (until && until < day)
+      throw new Error(`until (${until}) is before date (${day}) — an asset cannot stop running before it starts`)
+    const everyRaw = Number(a.everyDays)
+    const every = Number.isFinite(everyRaw) && everyRaw > 0 ? Math.floor(everyRaw) : 0
+
+    const st = useTrafficStore.getState()
+    const ids = [str(a.assetId).trim() || str(a.id).trim(), ...list(a.assetIds)].filter(Boolean)
+    const campaign = str(a.campaign).trim()
+    // Rows with no readable date sort last rather than scrambling the order a NaN comparator returns.
+    const at = (r: TrafficRow): number => {
+      const t = Date.parse(r.scheduledAt ?? '')
+      return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t
+    }
+    let targets: TrafficRow[]
+    if (ids.length) {
+      const byId = new Map(st.rows.map((r) => [r.id, r]))
+      const missing = ids.filter((id) => !byId.has(id))
+      if (missing.length) throw new Error(`asset not found: ${missing.join(', ')}`)
+      targets = ids.map((id) => byId.get(id)!)
+    } else if (campaign) {
+      // Spacing walks the campaign in the order it already runs in, so it re-spaces rather than reorders.
+      targets = st.rows
+        .filter((r) => !r.archivedAt && (r.campaign ?? '').trim() === campaign)
+        .sort((x, y) => at(x) - at(y))
+      if (!targets.length) throw new Error(`no assets in campaign: ${campaign}`)
+    } else {
+      throw new Error('assetId, assetIds or campaign is required')
+    }
+
+    const skipped = targets.filter((r) => r.status === 'posted')
+    const movable = targets.filter((r) => r.status !== 'posted')
+    const refused = skipped.map((r) => ({ id: r.id, name: r.assetName, reason: 'already posted' }))
+    if (!movable.length) {
+      return {
+        scheduled: 0,
+        skipped: refused,
+        note: 'Nothing moved: every asset in scope has already been posted, and when it went out is a fact, not a plan.',
+      }
+    }
+
+    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    const moved: { id: string; name: string; from: string; to: string; endsAt?: string }[] = []
+    movable.forEach((row, i) => {
+      const onDay = every ? dayPlus(day, i * every) : day
+      const patch = reschedulePatch(row, onDay, time || undefined)
+      if (!patch) return
+      // An explicit run-until replaces the carried length; it moves with the start so a spaced
+      // batch keeps flights the same length instead of fanning them out.
+      if (until) {
+        const end = reschedulePatch(
+          { scheduledAt: row.endsAt || patch.scheduledAt },
+          every ? dayPlus(until, i * every) : until,
+        )
+        if (end) patch.endsAt = end.scheduledAt
+      }
+      updates.push({ id: row.id, patch })
+      moved.push({ id: row.id, name: row.assetName, from: row.scheduledAt, to: patch.scheduledAt, endsAt: patch.endsAt })
+    })
+
+    await useTrafficStore.getState().updateRows(updates)
+    assertRowsLanded(updates.map((u) => u.id))
+
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return {
+      scheduled: moved.length,
+      timezone: zone,
+      assets: moved.slice(0, 25),
+      truncated: moved.length > 25 ? moved.length - 25 : undefined,
+      skipped: refused,
+      note:
+        `Dates are local to the browser tab running Breadcrumbs (${zone}), not to Claude Desktop.` +
+        (time ? '' : ' Each asset kept its own time of day — pass `time` to set one.') +
+        ' Status is unchanged: a dated draft is still a draft, and set_asset_status is what marks it scheduled.',
+    }
+  },
+
+
+  /**
+   * SET MANY DATES IN ONE CALL, per item, and let the bad ones fail alone.
+   *
+   * schedule_asset moves a batch to ONE day (optionally spread evenly). This is the other shape: a
+   * date per asset, which is what you want when the schedule is already decided elsewhere and is
+   * being written in rather than derived. Sixteen assets used to mean sixteen calls, each one a
+   * separate enqueue-and-poll round trip through the workspace queue, and a run of them would spend
+   * the whole 120s command timeout before finishing.
+   *
+   * ONE BAD ID DOES NOT SINK THE BATCH. Every item gets its own result — the fifteen that parsed are
+   * written, the one that did not is named with the reason. A batch that refused wholesale because a
+   * caller fat-fingered one id would push people straight back to sixteen calls.
+   *
+   * The writes still land TOGETHER, in a single updateRows, so a batch is never half-applied.
+   */
+  async setSchedule(a) {
+    const items = Array.isArray(a.items) ? a.items : []
+    if (!items.length) throw new Error('items is required: [{ assetId, scheduledAt }]')
+    const st = useTrafficStore.getState()
+    const byId = new Map(st.rows.map((r) => [r.id, r]))
+    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    const results: Record<string, unknown>[] = []
+
+    items.forEach((raw, i) => {
+      const it = (raw && typeof raw === 'object' ? raw : {}) as Args
+      const assetId = str(it.assetId).trim() || str(it.id).trim()
+      try {
+        if (!assetId) throw new Error('assetId is required')
+        const row = byId.get(assetId)
+        if (!row) throw new Error(`asset not found: ${assetId}`)
+        if (row.status === 'posted')
+          throw new Error('already posted — when it went out is a fact, not a plan, so its date is not rewritten')
+        if (!('scheduledAt' in it)) throw new Error('scheduledAt is required (pass null to clear it)')
+        const iso = normalizeScheduleInput(it.scheduledAt, 'scheduledAt')
+        const patch: Partial<TrafficRow> = { scheduledAt: iso ?? '' }
+        // A flighted asset keeps its length, exactly as a calendar drag would move both ends.
+        const was = Date.parse(row.scheduledAt ?? '')
+        const ends = Date.parse(row.endsAt ?? '')
+        if (iso && Number.isFinite(was) && Number.isFinite(ends)) {
+          patch.endsAt = new Date(ends + (Date.parse(iso) - was)).toISOString()
+        }
+        updates.push({ id: row.id, patch })
+        results.push({ assetId, assetName: row.assetName, ok: true, scheduledAt: patch.scheduledAt })
+      } catch (e) {
+        results.push({ assetId: assetId || `item ${i}`, ok: false, error: String((e as Error)?.message ?? e) })
+      }
+    })
+
+    if (updates.length) {
+      await useTrafficStore.getState().updateRows(updates)
+      assertRowsLanded(updates.map((u) => u.id))
+    }
+    const failed = results.filter((r) => !r.ok).length
+    return {
+      requested: items.length,
+      scheduled: updates.length,
+      failed,
+      timezone: executorTimezone(),
+      results,
+      note:
+        `A date with no UTC offset was read in the timezone of the tab running Breadcrumbs (${executorTimezone()}), not Desktop's. ` +
+        (failed ? `${failed} item(s) failed and are named above; the rest were written. ` : '') +
+        'Status is unchanged: set_asset_status is what marks an asset scheduled.',
+    }
   },
 
   // Bulk-approve: every in-scope draft/in_review asset (or an explicit id list).
