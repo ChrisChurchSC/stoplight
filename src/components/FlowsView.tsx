@@ -5,7 +5,7 @@ import { CHANNELS } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, opensRecordStep, pruneBoard, remapBuiltTargets, renameEndpoint,
+  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, flattenChannelNodes, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, opensRecordStep, pruneBoard, remapBuiltTargets, renameEndpoint,
 } from '../domain/flowBoard'
 import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
@@ -6613,10 +6613,24 @@ export function FlowsView() {
     const openingRows = useTrafficStore
       .getState()
       .rows.filter((r) => (r.campaign ?? '').trim() === n && !r.archivedAt)
-    return pruneBoard(board, {
+    /**
+     * The channel is not a node any more, so anything still pointing at one is moved down onto the
+     * assets it stood for BEFORE the prune runs. Order matters: pruneBoard deletes endpoints it does
+     * not recognise, so flattening afterwards would be flattening what was already thrown away.
+     * targetIds is row ids alone for the same reason it used to include channel keys, which is that
+     * it lists what an edge may legally point at, and a channel is no longer one of those things.
+     */
+    const assetIdsByChannel = new Map<string, string[]>()
+    for (const r of openingRows) {
+      const k = deliverableKeyFor(r)
+      const cur = assetIdsByChannel.get(k)
+      if (cur) cur.push(r.id)
+      else assetIdsByChannel.set(k, [r.id])
+    }
+    return pruneBoard(flattenChannelNodes(board, assetIdsByChannel), {
       objectKinds: new Set(Object.keys(OBJECT_META)),
       smartObjectIds: new Set(smartObjects.map((o) => o.id)),
-      targetIds: new Set(openingRows.flatMap((r) => [r.id, deliverableKeyFor(r)])),
+      targetIds: new Set(openingRows.map((r) => r.id)),
     })
   }
   const openView = (n: string) => {
@@ -11091,7 +11105,18 @@ export function FlowsView() {
                           posts and their ports, so a whole motion reads as one family on the
                           board: paid red, email teal, web orange. See GROUP_TONE. */}
                       <div
-                        className="flow-branched flow-chan"
+                        /**
+                         * NO CHANNEL NODE AND NO FRAME. Adding a card used to bring a box with it:
+                         * the channel it belongs to, drawn as a dashed rim with a header and a
+                         * count, which is the same thing a Cmd-G group looks like. So every new
+                         * asset arrived already grouped, by something nobody grouped.
+                         *
+                         * The channel is on the card now, as its own labelled and coloured badge
+                         * beside the asset type, which is where it can be read without costing a
+                         * box and a hop. What is left here is the grouping the LAYOUT still needs,
+                         * with nothing drawn around it.
+                         */
+                        className="flow-branched flow-flat"
                         /**
                          * The reserved min-height went with the branch list going into normal flow.
                          * It existed only because the posts were positioned ABSOLUTELY off to the
@@ -11103,64 +11128,6 @@ export function FlowsView() {
                          */
                         style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, ['--tone']: d.tone } as React.CSSProperties}
                       >
-                        <div
-                          className={`flow-node flow-tier-deliv${connectOver === d.key ? ' drop-target' : ''}${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}${trailCls(d.key)}`}
-                          data-node-id={d.key}
-                          data-role="output"
-                          onMouseDown={(e) => startDrag(e, d.key)}
-                          onClick={(e) => clickSelect(e, d.key)}
-                        >
-                          {/* CHANNEL, not Deliverable. Internal ids stay `deliverable` and
-                              DELIVERABLE_PRESETS, the same split Flows kept when it became
-                              Campaigns: rename what a person reads, leave what the code keys on. */}
-                          <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 15%, transparent)` }}>
-                            Channel
-                          </span>
-                          <div className="flow-node-main">
-                            <div className="flow-node-text">
-                              <div className="flow-node-label">{d.label}</div>
-                              <div className="flow-node-desc">
-                                ×{d.count}
-                                {(() => {
-                                  // A deliverable stands for several assets, so the count is the
-                                  // useful signal rather than a spinner on the group.
-                                  const busy = d.rows.filter((r) => regenIds.has(r.id)).length
-                                  return busy ? <span className="flow-deliv-busy">Writing {busy}…</span> : null
-                                })()}
-                                {/* The deliverable summarises its assets, so it summarises their
-                                    flags too: a collapsed group must not hide that the copy under
-                                    it is stale. */}
-                                {(() => {
-                                  const stale = d.rows.filter((r) => r.recheckFlag).length
-                                  if (!stale) return null
-                                  return (
-                                    <span className="flow-deliv-stale" title={`${stale} out of date. Generate to refresh ${stale === 1 ? 'it' : 'them'}.`}>
-                                      {stale} out of date
-                                    </span>
-                                  )
-                                })()}
-                              </div>
-                              {/* No record tags here, for the same reason the campaign card lost
-                                  its own: audience and proof are context you attach by connecting
-                                  a card to the campaign. A deliverable inherits the campaign's
-                                  records, and the per-deliverable OVERRIDE still lives in the
-                                  inspector, where it reads as the exception it is rather than as
-                                  two amber "Needs a..." prompts on every card on the board. */}
-                            </div>
-                          </div>
-                          {/* A channel could always be connected TO and never FROM: it was a drop
-                              target with no handles of its own, so the one direction you could not
-                              draw was the one going onward. Same four handles every other card has. */}
-                          {CONNECT_SIDES.map((side) => (
-                            <button
-                              key={side}
-                              className={`flow-note-port flow-out-port side-${side}`}
-                              title="Draw a connection"
-                              aria-label={`Draw a connection from the ${side}`}
-                              onMouseDown={(e) => startConnect(e, d.key)}
-                            />
-                          ))}
-                        </div>
                         <div className="flow-branch-list">
                           {posts.map((r) => {
                             const c = viewPostCopy(r)

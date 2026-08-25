@@ -446,3 +446,72 @@ export function pruneBoard(
       : {}),
   }
 }
+
+/**
+ * TAKE THE CHANNEL OUT OF THE BOARD WITHOUT TAKING ANYTHING WITH IT.
+ *
+ * A channel was never a stored thing (it is a group of assets keyed channel|assetType) but it WAS an
+ * identity, and three kinds of authored work were filed under it: connectors drawn to or from it,
+ * whether it is detached from the brief, and where somebody dragged it. Stop drawing the node and
+ * all three point at something that no longer exists. pruneBoard then deletes them on the next
+ * openView, quietly, which is the failure this file already carries a comment about: the wire that
+ * explained it disappeared and could never be undrawn.
+ *
+ * So the work moves down to the assets it was always standing for, rather than being deleted:
+ *
+ *  - A WIRE to a channel becomes a wire to each of its assets. That is what it always meant: the
+ *    channel had no copy of its own for a record to inform. One line in becomes several, which is
+ *    honest, because it was one line standing for several relationships.
+ *
+ *  - DETACHED FROM THE BRIEF moves onto the assets too. It is stored as the absence of an
+ *    inheritance, so the assets keep exactly the inheritance they had; it stops being expressed at a
+ *    level the board no longer has.
+ *
+ *  - A DRAGGED POSITION goes. It positioned a card that is not drawn any more, and the assets carry
+ *    their own. Keeping it leaves coordinates nothing can ever use again.
+ *
+ * The map of channel key to asset ids is the authority on what IS a channel, rather than a guess
+ * from the shape of the string. Anything that looks like a channel key and is not in the map is a
+ * channel with no assets left, so it is dropped: the same answer pruneBoard gives, made explicit
+ * here rather than left to happen later.
+ */
+export function flattenChannelNodes(board: FlowBoard, assetIdsByChannel: Map<string, string[]>): FlowBoard {
+  const looksLikeChannelKey = (id: string): boolean => id.includes('|')
+  /** The ids a wire should reach now: the channel's assets, or the endpoint itself if it is not one. */
+  const resolve = (id: string): string[] => {
+    const assets = assetIdsByChannel.get(id)
+    if (assets) return assets
+    return looksLikeChannelKey(id) ? [] : [id]
+  }
+
+  const seen = new Set<string>()
+  const connectors: { from: string; to: string }[] = []
+  for (const c of board.connectors) {
+    for (const from of resolve(c.from)) {
+      for (const to of resolve(c.to)) {
+        // Two channels sharing an asset, or a channel wired to one of its own assets, can produce a
+        // self-edge once both ends resolve. A card wired to itself is not a relationship.
+        if (from === to) continue
+        const k = from + ' ' + to
+        if (seen.has(k)) continue
+        seen.add(k)
+        connectors.push({ from, to })
+      }
+    }
+  }
+
+  const detached = [...new Set((board.detached ?? []).flatMap(resolve))]
+
+  const pos: FlowBoard['pos'] = {}
+  for (const [id, p] of Object.entries(board.pos)) {
+    if (assetIdsByChannel.has(id) || looksLikeChannelKey(id)) continue
+    pos[id] = p
+  }
+
+  return {
+    ...board,
+    connectors,
+    pos,
+    ...(board.detached ? { detached } : {}),
+  }
+}
