@@ -55,6 +55,7 @@ export function Breadcrumb() {
   // cursors; both share one tab identity, so there's no double-counting.
   const { peers } = usePresence({
     client: clientFilter,
+    campaign: campaignFilter,
     enabled: clientFilter !== 'all',
     shared: sharedView,
     bounds: { w: 0, h: 0 },

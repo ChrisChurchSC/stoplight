@@ -1177,6 +1177,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // ---- multiplayer presence (live, over the network) ----
   const { peers, publishCursor, publishNode, publishMove, clearCursor } = usePresence({
     client: clientFilter,
+    campaign: campaignFilter,
     enabled: clientFilter !== 'all',
     // A share recipient appears here too, as a read-only guest — so you can see the client reading
     // the campaign you sent them. usePresence puts them in the OWNER's room and refuses their
@@ -1187,8 +1188,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     // A peer's drag is applied as a local nudge — last write wins.
     onRemoteMove: (id, x, y) => applyMoved({ ...movedRef.current, [id]: { x, y } }),
   })
+  // Only people on THIS board get drawn on it — see Peer.onBoard. The header still counts the rest.
   const peerByNode = new Map<string, Peer>()
-  for (const p of peers) if (p.nodeId) peerByNode.set(p.nodeId, p)
+  for (const p of peers) if (p.onBoard && p.nodeId) peerByNode.set(p.nodeId, p)
 
   // ---- pan / zoom / node-drag ----
   const onWheel = (e: React.WheelEvent) => {
@@ -2296,7 +2298,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
 
         {/* Live cursors (screen space, computed from world coords + the local viewport). */}
         {peers.map((p) =>
-          p.cursor ? (
+          p.onBoard && p.cursor ? (
             <div
               key={`cur-${p.id}`}
               className="cv-cursor"
