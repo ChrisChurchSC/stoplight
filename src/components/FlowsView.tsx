@@ -2375,17 +2375,34 @@ export function FlowsView() {
   }
   // Leaving the campaign mid-drag must not leave the listeners behind on the window.
   useEffect(() => () => releaseGesture.current(), [])
-  const startConnect = (e: ReactMouseEvent, from: string) => {
+  /**
+   * Begin a connection from a POINT, rather than from the event that happened to start it.
+   *
+   * Split out because the plus on a card's right edge has to decide what gesture it is in the middle
+   * of one: a click adds a next step, a drag draws a wire, and which it turns out to be is not known
+   * on mousedown. So the drag path starts a connection several pixels and one mousemove later, with
+   * no React event of its own to hand over.
+   */
+  const beginConnectAt = (from: string, clientX: number, clientY: number) => {
     if (spaceHeld.current) return
-    e.stopPropagation()
     const cv = canvasRef.current
     if (!cv) return
     const cr = cv.getBoundingClientRect()
     drawingFrom.current = from
-    connectStart.current = { x: e.clientX, y: e.clientY }
+    connectStart.current = { x: clientX, y: clientY }
     captureGesture()
-    setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+    setDrawing({ from, x: clientX - cr.left, y: clientY - cr.top })
   }
+  const startConnect = (e: ReactMouseEvent, from: string) => {
+    if (spaceHeld.current) return
+    e.stopPropagation()
+    beginConnectAt(from, e.clientX, e.clientY)
+  }
+  /**
+   * Set while the plus is being dragged, so the click it fires on release does not ALSO open the
+   * picker. A drag that ends by adding a card nobody asked for is worse than one that does nothing.
+   */
+  const plusDragged = useRef(false)
   const startDrag = (e: ReactMouseEvent, id: string) => {
     if (tool !== 'select' || spaceHeld.current) return
     if ((e.target as HTMLElement).closest('input, textarea, button, select')) return
@@ -11273,9 +11290,49 @@ export function FlowsView() {
                                     className="flow-branch-plus"
                                     title="Add a next step from this asset"
                                     aria-label="Add a next step from this asset"
-                                    onMouseDown={(e) => e.stopPropagation()}
+                                    /**
+                                     * THE PLUS WAS SITTING ON TOP OF THE ONE PORT PEOPLE REACH FOR.
+                                     *
+                                     * A card has four connect ports, one per edge, and the right-hand
+                                     * one lives at right:-7px. The plus lives at right:-11px and is
+                                     * 20px across, so it covers it completely: dragging off the right
+                                     * edge of a card - the obvious way to draw a line to the next one
+                                     * - hit the plus and did nothing, and the port underneath could
+                                     * never be reached at all.
+                                     *
+                                     * So the plus answers both. It cannot know on mousedown which
+                                     * gesture it is in, so it waits: past a few pixels of movement it
+                                     * hands over to the connection machinery, and released without
+                                     * moving it is still the click that adds a next step. The
+                                     * threshold is what separates a drag from a hand that moved while
+                                     * clicking.
+                                     */
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation()
+                                      if (e.button !== 0) return
+                                      plusDragged.current = false
+                                      const sx = e.clientX
+                                      const sy = e.clientY
+                                      const stop = () => {
+                                        document.removeEventListener('mousemove', onMove)
+                                        document.removeEventListener('mouseup', stop)
+                                      }
+                                      const onMove = (ev: MouseEvent) => {
+                                        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return
+                                        stop()
+                                        plusDragged.current = true
+                                        beginConnectAt(r.id, ev.clientX, ev.clientY)
+                                      }
+                                      document.addEventListener('mousemove', onMove)
+                                      document.addEventListener('mouseup', stop)
+                                    }}
                                     onClick={(e) => {
                                       e.stopPropagation()
+                                      // The release that ended a drag is not a click on the plus.
+                                      if (plusDragged.current) {
+                                        plusDragged.current = false
+                                        return
+                                      }
                                       setConnectFrom(r.id)
                                       setSel(null)
                                       setBriefCollapsed(false)
