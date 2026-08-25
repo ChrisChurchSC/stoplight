@@ -41,6 +41,12 @@ export type { Peer } from '../domain/livePresence'
 
 interface Opts {
   client: string
+  /**
+   * The campaign board this tab has open. The room is still the BRAND — a colleague elsewhere in
+   * it should show up in the count — but each peer carries the board they are on, so the canvas
+   * can draw only the ones actually looking at the same thing. See Peer.onBoard.
+   */
+  campaign: string
   enabled: boolean
   /** True in a ?share= view: join as a read-only guest, in the OWNER's room. */
   shared?: boolean
@@ -187,7 +193,7 @@ export function usePresence(opts: Opts): {
   publishMove: (id: string, x: number, y: number) => void
   clearCursor: () => void
 } {
-  const { client, enabled, shared = false, onRemoteMove } = opts
+  const { client, campaign, enabled, shared = false, onRemoteMove } = opts
   const [peers, setPeers] = useState<Peer[]>([])
 
   const selfRef = useRef<PresenceIdentity | null>(null)
@@ -220,6 +226,7 @@ export function usePresence(opts: Opts): {
         roster: rosterRef.current,
         motion: motionRef.current,
         client,
+        campaign,
         selfId: self.id,
       })
       const sig = peersSignature(next)
@@ -255,7 +262,7 @@ export function usePresence(opts: Opts): {
       if (cancelled) return
       selfRef.current = identity
       const room = presenceRoomKey({ workspaceId, client })
-      const self: PeerIdentity = { ...identity, client }
+      const self: PeerIdentity = { ...identity, client, campaign }
       const t =
         room && supabase
           ? openRealtime(room, self, handlers)
@@ -277,7 +284,7 @@ export function usePresence(opts: Opts): {
       motionRef.current.clear()
       sigRef.current = ''
     }
-  }, [enabled, client, shared])
+  }, [enabled, client, campaign, shared])
 
   const sendMotion = (force: boolean) => {
     const t = transportRef.current

@@ -15,6 +15,7 @@ const ident = (over: Partial<PeerIdentity> = {}): PeerIdentity => ({
   name: 'Ari',
   role: 'editor',
   client: 'ABM',
+  campaign: 'FW 2026',
   ...over,
 })
 
@@ -74,6 +75,7 @@ describe('mergePeers', () => {
       roster: [ident({ id: 'tab_a' }), ident({ id: 'tab_b', name: 'Sam' })],
       motion: new Map(),
       client: 'ABM',
+      campaign: 'FW 2026',
       selfId: 'tab_a',
     })
     expect(peers.map((p) => p.name)).toEqual(['Sam'])
@@ -84,6 +86,7 @@ describe('mergePeers', () => {
       roster: [ident({ id: 'tab_b', name: 'Sam' })],
       motion: new Map(),
       client: 'ABM',
+      campaign: 'FW 2026',
       selfId: 'tab_a',
     })
     expect(peers).toHaveLength(1)
@@ -96,6 +99,7 @@ describe('mergePeers', () => {
       roster: [ident({ id: 'tab_b', name: 'Sam' })],
       motion: new Map([['tab_b', motion({ cursor: { x: 4, y: 5 }, nodeId: 'node_9' })]]),
       client: 'ABM',
+      campaign: 'FW 2026',
       selfId: 'tab_a',
     })
     expect(peers[0].cursor).toEqual({ x: 4, y: 5 })
@@ -107,9 +111,36 @@ describe('mergePeers', () => {
       roster: [ident({ id: 'tab_b', name: 'Sam', client: 'Gretel' })],
       motion: new Map(),
       client: 'ABM',
+      campaign: 'FW 2026',
       selfId: 'tab_a',
     })
     expect(peers).toEqual([])
+  })
+
+  it('counts a peer on another campaign but does not put them on your board', () => {
+    // The roster is brand-wide on purpose: knowing a colleague is somewhere in the brand is worth
+    // showing. Drawing their cursor is not — it would track their movements over THEIR board while
+    // floating across yours, landing on your cards by coordinate coincidence.
+    const peers = mergePeers({
+      roster: [ident({ id: 'tab_b', name: 'Sam', campaign: 'Hurricane Season' })],
+      motion: new Map([['tab_b', { cursor: { x: 4, y: 5 }, nodeId: 'node_9', ts: 1 }]]),
+      client: 'ABM',
+      campaign: 'FW 2026',
+      selfId: 'tab_a',
+    })
+    expect(peers).toHaveLength(1)
+    expect(peers[0].onBoard).toBe(false)
+  })
+
+  it('marks a peer on the same campaign as on your board', () => {
+    const peers = mergePeers({
+      roster: [ident({ id: 'tab_b', name: 'Sam', campaign: 'FW 2026' })],
+      motion: new Map(),
+      client: 'ABM',
+      campaign: 'FW 2026',
+      selfId: 'tab_a',
+    })
+    expect(peers[0].onBoard).toBe(true)
   })
 
   it('carries the role through, so a share guest can be drawn as one', () => {
@@ -117,6 +148,7 @@ describe('mergePeers', () => {
       roster: [ident({ id: 'tab_g', name: 'Guest', role: 'viewer' })],
       motion: new Map(),
       client: 'ABM',
+      campaign: 'FW 2026',
       selfId: 'tab_a',
     })
     expect(peers[0].role).toBe('viewer')
@@ -130,6 +162,8 @@ describe('peersSignature', () => {
     color: '#1971c2',
     role: 'editor' as const,
     client: 'ABM',
+    campaign: 'FW 2026',
+    onBoard: true,
     cursor: { x: 10.1, y: 20.2 },
     nodeId: null,
     ts: 1,
@@ -151,6 +185,8 @@ describe('peersSignature', () => {
   it('changes when who is here changes', () => {
     expect(peersSignature([peer({ name: 'Sam' })])).not.toBe(peersSignature([peer({ name: 'Ari' })]))
     expect(peersSignature([peer({ role: 'editor' })])).not.toBe(peersSignature([peer({ role: 'viewer' })]))
+    // Someone switching to your board has to repaint it, even if they have not moved since.
+    expect(peersSignature([peer({ onBoard: true })])).not.toBe(peersSignature([peer({ onBoard: false })]))
     expect(peersSignature([peer()])).not.toBe(peersSignature([]))
   })
 })
