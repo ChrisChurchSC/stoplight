@@ -23504,9 +23504,49 @@ table.aud-sheet td.stick .aud-cell {
    here, so declaration order is what makes these rules win. Don't relocate.
    ============================================================================ */
 
+/* ---- OUTPUT: raised, filled, and the widest card that is not the plate ---- */
+/* THE MATERIAL NOW HANGS OFF THE ROLE, not off the tier. It used to be assembled by accident: a
+   channel card got its fill from .flow-tier-deliv, a post card got its fill from .flow-brief-node,
+   and the raise, the radius and the width they share came from plain .flow-node — which an INPUT
+   card inherits too. So a post differed from a piece of context only by what .flow-note went on to
+   override, and every new output tier had to re-derive the same look by hand. [data-role='output']
+   was already emitted on all three sites in FlowsView and matched ZERO rules; this is the hook,
+   used.
+
+   TIER STILL OWNS COLOUR. Nothing here sets background or border-color on purpose: intensity is the
+   tier's job (campaign a faint plate, its channel card a firm tint, its posts a whisper) and this
+   rule is 0-2-0 sitting after the tier block, so declaring a fill here would silently flatten all
+   three into one. Role says how a card is BUILT; tier says how loud it is.
+
+   max-width: none is load-bearing. .flow-brief-node caps at 250px and .flow-node:not(.flow-brief-node)
+   at 252px, and max-width beats width — without releasing it, `width: 288px` is ignored and the
+   silhouette change quietly does nothing. Same trap the input rule below documents. */
+.flow-node[data-role='output'] {
+  width: 288px;
+  max-width: none;
+  border-radius: 12px;
+  box-shadow: var(--shadow-raise);
+}
+
 /* ---- INPUT: flat, recessed, a tone spine on the left ---- */
 .flow-note[data-role='input'] {
-  width: 236px;
+  /* SILHOUETTE IS THE CUE THAT SURVIVES. This was 236px against outputs capped at 250-252, a 6%
+     delta you could only see with the two cards adjacent — so the split was resting entirely on
+     elevation and fill, which are the two levers that die first. --shadow-raise is a 20px blur at
+     12% alpha and is a smudge at the 50% zoom preset; a 16% tone tint on white sits a few percent
+     of luminance from --surface-2. Width does not degrade: 200 against 288 reads at any zoom, in
+     greyscale, half-occluded behind a wire, and in the corner of your eye.
+
+     The board now steps 288 / 252 / 200 — the things you ship, the campaign plate, the context they
+     are written from. ⚠️ The plate sitting BETWEEN the other two is not the intent and not a choice
+     made here: .flow-stack-view > .flow-node[data-node-id='campaign'] asks for width: 340px and has
+     the specificity to win it, but the max-width: 252px cap above (added later, for tag-row
+     truncation) clamps it — different property, so specificity never arbitrates and the 340 has been
+     dead for a while. It went unnoticed while every card was ~250 wide. Give that rule
+     max-width: none and the step becomes 340 / 288 / 200, with the plate widest as its name implies;
+     left alone deliberately here because widening the campaign card is a call to make on purpose,
+     not a side effect of this change. */
+  width: 200px;
   max-width: none;
   /* .flow-node's padding (8px 10px 12px) double-pads these cards on top of each
      child's own inset. Reset here; children carry the whole inset below. */
