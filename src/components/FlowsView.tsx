@@ -11190,7 +11190,13 @@ export function FlowsView() {
                                       motion it belongs to, not one purple for every post: a post
                                       under a paid ad and a post under a newsletter are different
                                       work, and the board now says so before you read a word. */}
+                                  {/* The mark and the name are one thing, so they are one pill. They were a
+                                      pill and a separate 30px tile below it, which read as two facts about the
+                                      card when it is one fact said twice: the Instagram glyph and the word
+                                      Instagram. The glyph earns its place inside the pill, where it is the
+                                      thing you recognise before you read, and the tile's whole row goes. */}
                                   <span className="flow-node-chan" style={{ color: chanColor, background: `color-mix(in srgb, ${chanColor} 16%, transparent)` }}>
+                                    <ChannelIcon channel={r.channel as ChannelId} size={12} color={chanColor} />
                                     {chanLabel}
                                   </span>
                                   {/* Only when there is one to name. An asset that never picked a
@@ -11222,7 +11228,6 @@ export function FlowsView() {
                                     <span className="flow-node-stale" title={`Out of date: ${r.recheckFlag.reason}. Generate to refresh it.`} aria-label="Out of date" />
                                   )}
                                   <div className="flow-node-main">
-                                    <PresetTile tone={d.tone} channel={r.channel as ChannelId} />
                                     <div className="flow-node-text">
                                       {r.lineage?.bpStep && <div className="flow-node-step">{r.lineage.bpStep}</div>}
                                       <div className="flow-node-label">{c.head}</div>
