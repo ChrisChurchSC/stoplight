@@ -198,10 +198,12 @@ import { publishShareSnapshot } from '../lib/shareSnapshot'
 import { snapshotRows, diffChanged, diffSummary, type CampaignVersion } from '../domain/versions'
 import { apiFetch } from '../lib/apiFetch'
 
-// An anonymous share viewer (main.tsx seeded localStorage from the published snapshot and set a
-// flag) has no backend session — its data IS the seeded snapshot. So for a share view we run the
-// DATA layer in localStorage mode even when Supabase is configured; auth stays bypassed via the
-// share token. A signed-in user opening a share link keeps their live backend (no flag set).
+// A share viewer (main.tsx seeded localStorage from the published snapshot and set a flag) is
+// reading data that is not in any workspace they can query — often they have no session at all. So
+// for a share view we run the DATA layer in localStorage mode even when Supabase is configured;
+// auth stays bypassed via the share token. Only a MEMBER of the workspace that published the
+// snapshot keeps their live backend, and main.tsx sets no flag for them — being signed in is not
+// enough, because signing up from the link is what puts someone in an empty workspace of their own.
 const shareViewMode = ((): boolean => {
   try {
     const hasToken = !!new URLSearchParams(window.location.search).get('share')

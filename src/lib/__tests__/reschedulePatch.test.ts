@@ -65,4 +65,31 @@ describe('reschedulePatch', () => {
     const p = reschedulePatch({}, '2026-09-03')!
     expect(localDay(p.scheduledAt)).toBe('2026-09-03')
   })
+
+  /**
+   * The optional `time`, which the date input never passes and the connector does. The risk it
+   * carries is the range: `endsAt` moves by the distance the START moved, so replacing the hour has
+   * to be part of that move rather than a write after it — otherwise a caller that set the day and
+   * then the hour stretches a flight by exactly the hours it shifted.
+   */
+  it('replaces the time of day when one is given, and keeps it when one is not', () => {
+    const kept = reschedulePatch({ scheduledAt: '2026-08-10T12:30:00.000Z' }, '2026-09-03')!
+    expect(timeOfDay(kept.scheduledAt)).toBe(timeOfDay('2026-08-10T12:30:00.000Z'))
+
+    const set = reschedulePatch({ scheduledAt: '2026-08-10T12:30:00.000Z' }, '2026-09-03', '17:45')!
+    expect(localDay(set.scheduledAt)).toBe('2026-09-03')
+    expect(timeOfDay(set.scheduledAt)).toBe('17:45:00')
+  })
+
+  it('keeps a flight the same length when the hour moves too', () => {
+    const row = { scheduledAt: '2026-08-10T09:00:00.000Z', endsAt: '2026-08-24T09:00:00.000Z' }
+    const length = Date.parse(row.endsAt) - Date.parse(row.scheduledAt)
+
+    const p = reschedulePatch(row, '2026-09-03', '17:45')!
+    expect(Date.parse(p.endsAt!) - Date.parse(p.scheduledAt)).toBe(length)
+  })
+
+  it('treats an unreadable time as nothing to do, rather than midnight', () => {
+    expect(reschedulePatch({ scheduledAt: '2026-08-10T12:30:00.000Z' }, '2026-09-03', 'lunchtime')).toBeNull()
+  })
 })

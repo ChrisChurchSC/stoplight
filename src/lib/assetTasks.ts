@@ -84,11 +84,18 @@ const ymd = (d: Date) =>
  *  - The LENGTH, for a row with an `endsAt`. Both ends move together, as a calendar drag moves them;
  *    moving only the start eventually pushes it past the end and inverts the range.
  *
+ * `time` ("HH:MM", 24h) is the one way to REPLACE the carried time of day rather than keep it. The
+ * date input never passes one — it only knows the day — but a caller that genuinely means a moment
+ * does, and it belongs here rather than as a second write afterwards: `endsAt` moves by the distance
+ * the start actually moved, so a caller that set the hour separately would stretch the range by
+ * exactly the amount it had just changed the start.
+ *
  * Returns null when there is nothing to do, so a cleared input is not a write.
  */
 export function reschedulePatch(
   row: { scheduledAt?: string; endsAt?: string },
   day: string,
+  time?: string,
 ): { scheduledAt: string; endsAt?: string } | null {
   if (!day) return null
   const from = Date.parse(row.scheduledAt ?? '')
@@ -96,6 +103,11 @@ export function reschedulePatch(
   const [y, m, d] = day.split('-').map(Number)
   if (!y || !m || !d) return null
   next.setFullYear(y, m - 1, d)
+  if (time) {
+    const [hh, mm] = time.split(':').map(Number)
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null
+    next.setHours(hh, mm, 0, 0)
+  }
   const ends = Date.parse(row.endsAt ?? '')
   if (Number.isNaN(ends) || Number.isNaN(from)) return { scheduledAt: next.toISOString() }
   return { scheduledAt: next.toISOString(), endsAt: new Date(ends + (next.getTime() - from)).toISOString() }

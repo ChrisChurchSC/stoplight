@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { buildShareSnapshot, type SnapshotState } from '../shareSnapshot'
+import { buildShareSnapshot, maybeHydrateShare, type SnapshotState } from '../shareSnapshot'
 import { registerCampaign } from '../../domain/clients'
 
 /**
@@ -130,5 +130,47 @@ describe('buildShareSnapshot — a campaign filed under nobody', () => {
   it('stays out of a brand link when nothing names a brand at all', () => {
     const snap = buildShareSnapshot({ ...unfiled(), flowBoards: [] }, 'Acme')
     expect(snap['stoplight.campaigns.v1']).toEqual([])
+  })
+})
+
+/**
+ * A LOAD WITH NO TOKEN MUST LEAVE NOTHING OF THE LAST SHARE BEHIND.
+ *
+ * The seeded keys were already cleared here; the flag was not, and the flag is the more dangerous
+ * half. It is what puts the store on localStorage and what waves a viewer past the auth gate, so a
+ * flag outliving its snapshot means an unauthenticated tab claiming to be a share view with no
+ * share data in it — blank, and past a gate it should have stopped at.
+ */
+describe('maybeHydrateShare — leaving a share view', () => {
+  it('clears the share-view flag and the seeded keys when the URL carries no token', async () => {
+    sessionStorage.setItem('stoplight.shareView', '1')
+    localStorage.setItem('stoplight.sheet.v1', JSON.stringify({ rows: [{ id: 'r1' }] }))
+    localStorage.setItem('stoplight.shareSeeded.v1', JSON.stringify(['stoplight.sheet.v1']))
+
+    await maybeHydrateShare()
+
+    expect(sessionStorage.getItem('stoplight.shareView')).toBeNull()
+    expect(localStorage.getItem('stoplight.sheet.v1')).toBeNull()
+    expect(localStorage.getItem('stoplight.shareSeeded.v1')).toBeNull()
+  })
+
+  it('clears the flag even when there are no seeded keys recorded', async () => {
+    sessionStorage.setItem('stoplight.shareView', '1')
+
+    await maybeHydrateShare()
+
+    expect(sessionStorage.getItem('stoplight.shareView')).toBeNull()
+  })
+
+  it('clears the presence room, so the tab stops announcing itself into a workspace it left', async () => {
+    // A guest is now a visible participant, which means a tab that has left a share view is a tab
+    // that could otherwise keep broadcasting a cursor into somebody else's workspace room. The room
+    // id goes out with the flag and for the same reason.
+    sessionStorage.setItem('stoplight.shareView', '1')
+    sessionStorage.setItem('stoplight.presence.shareRoom', '97ffd48c-4093-4b10-9e85-8f681074f2b7')
+
+    await maybeHydrateShare()
+
+    expect(sessionStorage.getItem('stoplight.presence.shareRoom')).toBeNull()
   })
 })

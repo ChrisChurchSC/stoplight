@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { onSaveTrouble, retryPersistedState, type SaveTrouble } from '../adapters/state/workspaceState'
+import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
  * Says out loud when your work isn't reaching your account.
@@ -16,7 +17,16 @@ export function SaveBanner() {
 
   useEffect(() => onSaveTrouble(setTrouble), [])
 
-  if (!trouble) return null
+  /**
+   * A SHARE VIEWER HAS NO ACCOUNT FOR THE WORK TO REACH, and none of the work is theirs. Share
+   * views run on localStorage by design, so the workspace write this warns about was never
+   * attempted: the banner fires on "not signed in to a workspace", which for a recipient is the
+   * normal and correct state. It read as "your changes are not being saved" across the top of a
+   * read-only copy of a campaign they cannot change, above a Retry button with nothing to retry.
+   */
+  const shared = useTrafficStore((s) => !!s.sharedSession)
+
+  if (shared || !trouble) return null
 
   const retry = async () => {
     setRetrying(true)

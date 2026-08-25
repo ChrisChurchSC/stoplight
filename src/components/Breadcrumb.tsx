@@ -21,6 +21,8 @@ export function Breadcrumb() {
     return () => window.removeEventListener('mousedown', onDown)
   }, [menuOpen])
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  // Whether this tab is a ?share= guest — it joins the owner's room read-only. See usePresence.
+  const sharedView = useTrafficStore((s) => !!s.sharedSession)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const role = useTrafficStore((s) => s.role)
   const openShareDialog = useTrafficStore((s) => s.openShareDialog)
@@ -48,12 +50,14 @@ export function Breadcrumb() {
     .filter(([id]) => scopedPostedIds.has(id))
     .reduce((n, [, cs]) => n + cs.filter((c) => c.needsResponse).length, 0)
 
-  // Live presence in the top bar (the "N here" pill sits next to Share). The
-  // canvas keeps its own usePresence for cursors; both share one tab identity, so
-  // there's no double-counting.
+  // Live presence in the top bar (the "N here" pill sits next to Share). This counts real people
+  // on real machines now, not other tabs of this browser. The canvas keeps its own usePresence for
+  // cursors; both share one tab identity, so there's no double-counting.
   const { peers } = usePresence({
     client: clientFilter,
+    campaign: campaignFilter,
     enabled: clientFilter !== 'all',
+    shared: sharedView,
     bounds: { w: 0, h: 0 },
     nodeIds: [],
     onRemoteMove: () => {},

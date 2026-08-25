@@ -176,6 +176,9 @@ interface Band {
 
 export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) {
   const rows = useTrafficStore((s) => s.rows)
+  // A share link opens somebody else's finished work read-only, so the build-out guide below is
+  // addressed to the wrong person — see Hint.tsx for the same reasoning at the other eight.
+  const sharedView = useTrafficStore((s) => !!s.sharedSession)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
   const ctaFilter = useTrafficStore((s) => s.ctaFilter)
@@ -1171,17 +1174,23 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     return out
   }, [perfMode, nodes, perf])
 
-  // ---- multiplayer presence (cross-tab + ambient) ----
+  // ---- multiplayer presence (live, over the network) ----
   const { peers, publishCursor, publishNode, publishMove, clearCursor } = usePresence({
     client: clientFilter,
+    campaign: campaignFilter,
     enabled: clientFilter !== 'all',
+    // A share recipient appears here too, as a read-only guest — so you can see the client reading
+    // the campaign you sent them. usePresence puts them in the OWNER's room and refuses their
+    // moves at both ends; nothing here needs to know the difference.
+    shared: sharedView,
     bounds,
     nodeIds: nodes.filter((n) => n.kind !== 'add').map((n) => n.id),
     // A peer's drag is applied as a local nudge — last write wins.
     onRemoteMove: (id, x, y) => applyMoved({ ...movedRef.current, [id]: { x, y } }),
   })
+  // Only people on THIS board get drawn on it — see Peer.onBoard. The header still counts the rest.
   const peerByNode = new Map<string, Peer>()
-  for (const p of peers) if (p.nodeId) peerByNode.set(p.nodeId, p)
+  for (const p of peers) if (p.onBoard && p.nodeId) peerByNode.set(p.nodeId, p)
 
   // ---- pan / zoom / node-drag ----
   const onWheel = (e: React.WheelEvent) => {
@@ -2289,7 +2298,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
 
         {/* Live cursors (screen space, computed from world coords + the local viewport). */}
         {peers.map((p) =>
-          p.cursor ? (
+          p.onBoard && p.cursor ? (
             <div
               key={`cur-${p.id}`}
               className="cv-cursor"
@@ -2300,13 +2309,17 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
               </svg>
               <span className="cv-cursor-label" style={{ background: p.color }}>
                 {p.name}
+                {/* A guest followed a share link: they can see this board but cannot touch it, and
+                    the label says so rather than leaving you to wonder why their cursor never
+                    picks anything up. */}
+                {p.role === 'viewer' ? <em className="cv-cursor-guest">viewing</em> : null}
               </span>
             </div>
           ) : null,
         )}
 
-        {/* A fresh custom board starts blank — guide the build-out loop. */}
-        {isCustomBoard && scopeAudiences.length === 0 && (
+        {/* A fresh custom board starts blank — guide the build-out loop. Not for a share viewer. */}
+        {isCustomBoard && scopeAudiences.length === 0 && !sharedView && (
           <div className="cv-blank-hint">
             <strong>Build a branching journey</strong>
             <span>Marketing is routing, so a campaign is a tree, not a grid.</span>

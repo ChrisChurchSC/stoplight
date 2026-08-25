@@ -12320,6 +12320,15 @@ a.flow-top-credits.out:hover { color: var(--danger, #e5484d); opacity: 0.82; }
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
+.cv-cursor-guest {
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.72;
+  margin-left: 5px;
+}
+.cv-cursor-guest::before {
+  content: '· ';
+}
 .cv-node-presence {
   position: absolute;
   top: -9px;
@@ -25607,4 +25616,16 @@ table.aud-sheet td.stick .aud-cell {
 .lib-modal-overlay,
 .dg {
   overscroll-behavior: contain;
+}
+
+/* Live cursors on the campaign board. Outside .flow-stack so they keep their size at every zoom,
+   and above it: the stack is a stacking context at z-index auto, so a positive z-index here paints
+   over it even though this sibling comes first in the DOM. Never a mouse target — a cursor you can
+   click is a cursor that steals the click you meant for the card under it. */
+.flow-cursors {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 50;
 }

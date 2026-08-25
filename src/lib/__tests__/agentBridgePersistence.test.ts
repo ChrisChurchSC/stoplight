@@ -108,7 +108,10 @@ describe('an asset the browser could not store', () => {
       brand: 'Enid Blythe',
       campaign: 'Always-On',
       channel: 'instagram',
-      headline: 'The last unspecified object',
+      // primaryText, not headline: an Instagram post renders no headline, and add_asset now refuses
+      // a write it cannot store rather than noting it afterwards — which would fail this for the
+      // wrong reason. That the fixture ever passed `headline` is what the old silent note hid.
+      primaryText: 'The last unspecified object',
     })
     expect(failed.result).toBeUndefined()
     expect(failed.error).toMatch(/could not store|storage is full/i)
