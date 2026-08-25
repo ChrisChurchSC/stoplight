@@ -4211,7 +4211,7 @@ export function FlowsView() {
   // adds don't stack exactly on top of each other; the user drags it wherever from there.
   /**
    * Where a newly added card lands. It used to cascade from a FIXED point (300, 120) by
-   * `objects.length` * a 28x34 step, which failed three ways: the step is far smaller than a 236px
+   * `objects.length` * a 28x34 step, which failed three ways: the step is far smaller than a 200px
    * card so every card buried the last one, the anchor ignored pan and zoom so cards could land
    * off-screen or on top of the brief, and indexing by `objects.length` meant deleting cards reset
    * the cascade and dropped the next one back on an existing pile.
@@ -4225,8 +4225,13 @@ export function FlowsView() {
     const cw = cv?.clientWidth ?? 900
     const ch = cv?.clientHeight ?? 600
     const s = zoom / 100
-    // Reserve box: the widest card (236px) plus a gap, scaled to what's on screen right now.
-    const bw = 252 * s
+    // Reserve box: the card that is actually about to land, plus a gap, scaled to what's on screen
+    // right now. Both callers drop CONTEXT cards — addObject from the toolbar, pasteObjects from the
+    // clipboard — and those are 200px since inputs and outputs stopped sharing a silhouette (see the
+    // CARD ROLES block in index.css). Outputs are never placed through here; they are laid out by
+    // the column. Occupancy below is measured off the live DOM, so it already accounts for the wider
+    // output cards without being told their width.
+    const bw = 216 * s
     const bh = 132 * s
     const pad = 14 * s
     // Measure live rather than reading the `rects` STATE. rects is written by a layout effect, so
