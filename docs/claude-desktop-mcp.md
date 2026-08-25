@@ -108,6 +108,40 @@ already reach.
 
 Omit `BREADCRUMBS_TOKEN` and everything works exactly as before, against `localhost:5173`.
 
+### If the connector shows no logo
+
+The server sends its icon inline, as a base64 PNG read from `public/favicon.png`, in the
+`initialize` response. You can check it is being sent without involving a client at all:
+
+```
+node mcp/breadcrumbs-server.mjs
+```
+
+then paste one line and read the reply:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}
+```
+
+`serverInfo.icons` should hold one `image/png` entry with a `data:` src. If it does, the server has
+done its part and the rest is the client.
+
+**Two things to try, in order.** Icons are read once, during `initialize`, so a connection that was
+open before the icon existed keeps not having one: quit Desktop entirely (not just the window) and
+start a NEW conversation. If that changes nothing, the client may be fetching remote icons while
+ignoring inline ones - those two look identical from the server. Set `BREADCRUMBS_ICON_URL` to an
+`https` URL and it sends that instead:
+
+```json
+"env": {
+  "BREADCRUMBS_ICON_URL": "https://your-site/favicon.png"
+}
+```
+
+Deliberately not derived from `BREADCRUMBS_BRIDGE_URL`: that points at a dev server which is often
+not running and is not https, and a checkout should not arrive pointed at somebody's deployment.
+Unset, the inline PNG is used, which is the right default for a server that has to work offline.
+
 ### What a token can do, and how to stop it
 
 A token carries **the same authority over that workspace that you do** — every action the connector
