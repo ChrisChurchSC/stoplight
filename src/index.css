@@ -25749,3 +25749,50 @@ table.aud-sheet td.stick .aud-cell {
 .flow-brief-node.live::before {
   background: var(--green);
 }
+/* The pencil beside a card's name in the inspector. Quiet until the header is hovered, for the same
+   reason the connect ports are: an affordance on every panel all the time competes with the panel. */
+.flow-panel-rename {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.flow-panel-rename svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+.flow-panel-head:hover .flow-panel-rename,
+.flow-panel-rename:focus-visible {
+  opacity: 1;
+}
+.flow-panel-rename:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+/* The field replaces the title, so it has to hold the same line rather than resize the header. */
+.flow-panel-title-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 3px 7px;
+}
+.flow-panel-title-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
