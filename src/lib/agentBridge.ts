@@ -198,10 +198,21 @@ function cardNameArg(a: Args, kind: CanvasObjectKind): string {
   return titleFromDoc(str(a.documentName).trim() || 'Pasted text', text, `Untitled ${kind}`)
 }
 
-/** A free-ish spot for a new card, so a board written over MCP is readable rather than a pile. */
+/**
+ * A free-ish spot for a new card, so a board written over MCP is readable rather than a pile.
+ *
+ * A COLUMN BESIDE THE FLOW, not a grid across it. It used to march right in rows of five, 280px at a
+ * time, which walks straight into the campaign's own spine: the brief and its assets are laid out by
+ * the flow, not by these coordinates, so nothing here knew they were there. Two cards in and a
+ * Pattern card was sitting underneath the asset column, half-hidden behind copy it was supposed to
+ * be informing.
+ *
+ * Left of the spine and straight down. It cannot collide with a layout it cannot see, and context
+ * reads as a column feeding the campaign, which is what it is.
+ */
 function nextSlot(pos: Record<string, { x: number; y: number }>): { x: number; y: number } {
   const n = Object.keys(pos ?? {}).length
-  return { x: 60 + (n % 5) * 280, y: 60 + Math.floor(n / 5) * 220 }
+  return { x: -360, y: 60 + n * 200 }
 }
 
 /** What an object-card write reports back: what it still owes, in the card's own vocabulary. */
@@ -1967,6 +1978,21 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       // Laid out rather than stacked at the origin: a board of cards all at 0,0 is one card as far
       // as anyone looking at it is concerned.
       pos: { ...board.pos, [made.id]: nextSlot(board.pos) },
+      /**
+       * AND WIRED TO THE CAMPAIGN, which adding a card in the app does and this did not.
+       *
+       * A context card reaches the writing by being connected: upstreamCardIds walks the connectors
+       * into the campaign, and a card with no edge is read by nothing. So a board built over MCP came
+       * out as a brief, a column of assets, and a set of audiences and patterns sitting beside them
+       * informing none of it - which looks like a messy board and is actually a disconnected one.
+       *
+       * Only the edge is added here. Binding a Brand card to the campaign and merging a card's refs
+       * into the campaign's own list are the app's, and they run on open; the wire is what makes the
+       * card count, and it is the part that was missing.
+       */
+      connectors: board.connectors.some((c) => c.from === made.id && c.to === 'campaign')
+        ? board.connectors
+        : [...board.connectors, { from: made.id, to: 'campaign' }],
     })
     await assertBoardLanded(campaign, made.id, board)
     return {
