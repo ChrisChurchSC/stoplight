@@ -74,6 +74,7 @@ import { SourceMark } from './SourceMark'
 import { DatasetRead } from './DatasetRead'
 import { DataSourceFace } from './DataSourceFace'
 import { CopyFields } from './CopyFields'
+import { CardCreative } from './CardCreative'
 import { Hint } from './Hint'
 import { FlowSteps } from './FlowSteps'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
@@ -9702,6 +9703,14 @@ export function FlowsView() {
             about which CARDS instruct this post, which is a different question from what a person
             has to build. */}
         {renderCtas(selPost)}
+
+        {/* THE FINISHED ARTWORK, directly under the copy it runs beside and the controls it sits
+            on — everything above this describes the post, and this is the post. It was the one
+            part of an asset that lived somewhere else entirely (a Drive folder, a Slack thread),
+            which is why "is this ready?" was a question you had to ask a person rather than a
+            card. Above "Connected to" for the same reason the CTAs are: what this asset IS comes
+            before which cards instructed it. */}
+        <CardCreative rowId={selPost.id} />
 
         {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
             This asked the wrong question and answered it confidently. It read only the
