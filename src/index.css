@@ -25706,3 +25706,46 @@ table.aud-sheet td.stick .aud-cell {
   width: 12px;
   height: 12px;
 }
+
+/* The format pill, beside a channel pill that now carries the family hue. Colour would be the same
+   colour twice; this keeps the shape and drops the shout. */
+.flow-node-kind-quiet {
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--text-faint) 10%, transparent);
+}
+
+/**
+ * WHERE AN ASSET HAS GOT TO, on the leading edge, in the vocabulary the live stripe started.
+ *
+ * Same geometry as .flow-brief-node.live deliberately: one edge, one language, so a board with four
+ * states on it still reads as one system rather than four decorations. The rule that stripe set is
+ * kept too, that a mark on the majority is not a mark, so draft gets nothing at all and the marks
+ * are reserved for the cards that are waiting on somebody, stuck, ready, or already out.
+ */
+.flow-brief-node.st-review::before,
+.flow-brief-node.st-blocked::before,
+.flow-brief-node.st-ready::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+}
+/* Waiting on a person. */
+.flow-brief-node.st-review::before {
+  background: var(--amber, #d97706);
+}
+/* Stuck: rejected, or a publish that errored. */
+.flow-brief-node.st-blocked::before {
+  background: var(--red, #c9302c);
+}
+/* Ready, not yet out. Blue rather than green so it cannot be mistaken for having shipped. */
+.flow-brief-node.st-ready::before {
+  background: var(--blue, #2f6fe0);
+}
+/* Out already wins: a posted card is posted whatever it was approved as on the way. */
+.flow-brief-node.live::before {
+  background: var(--green);
+}
