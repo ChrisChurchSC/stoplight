@@ -3734,6 +3734,18 @@ export function FlowsView() {
     if (to === 'campaign') {
       if (!detachFromCampaign(from, connectors)) return
     } else if (isContextNode(from)) detachFromTarget(from, to, connectors)
+    /**
+     * And cut the journey with the line, or the two disagree. A linksTo left behind by a wire
+     * somebody deleted is worse than one that was never written: it goes on demanding a CTA for a
+     * handoff that is no longer on the board, and there is no line left to delete to clear it.
+     * Only when it still names the card this wire pointed at, so a link edited by hand elsewhere is
+     * not quietly undone by tidying up a line.
+     */
+    {
+      const src = viewRowsRef.current.find((x) => x.id === from)
+      const dst = viewRowsRef.current.find((x) => x.id === to)
+      if (src && dst && src.linksTo === dst.assetName) void updateRow(src.id, { linksTo: undefined })
+    }
     setConnectors((c) => c.filter((x) => !(x.from === from && x.to === to)))
     setSelEdge(null)
   }
@@ -10091,6 +10103,27 @@ export function FlowsView() {
           // drawable and already saved; nothing acted on it, so it looked connected and changed
           // nothing about the copy.
           if (ok && pair.to !== 'campaign' && isContextNode(pair.from)) attachToTarget(pair.from, pair.to)
+          /**
+           * BOTH ENDS AN ASSET: record the journey, not just the line.
+           *
+           * A wire between two cards drew, saved, and meant nothing. Asset-to-asset relationships
+           * come from handoffsFrom, which reads row.linksTo and row.branchOf and never looks at the
+           * board's connectors - so you could join two cards, watch the line render, select the one
+           * it points at, and be told nothing was connected to it. The wire was decoration.
+           *
+           * linksTo is the field for what this says: A leads to B. It is matched by asset NAME
+           * rather than by id, the same as branchOf, so the name is what gets written.
+           *
+           * This is the one place the gesture gains consequences beyond the picture. linksTo also
+           * feeds the CTA requirements, the coherence check and review_campaign, so drawing a line
+           * can now raise "this link needs a CTA". That is the point rather than a side effect: a
+           * link a reader cannot follow is exactly the gap those checks exist to find.
+           */
+          if (ok) {
+            const src = viewRowsRef.current.find((x) => x.id === pair.from)
+            const dst = viewRowsRef.current.find((x) => x.id === pair.to)
+            if (src && dst && src.linksTo !== dst.assetName) void updateRow(src.id, { linksTo: dst.assetName })
+          }
           if (ok) setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
         }
         drawingFrom.current = null
