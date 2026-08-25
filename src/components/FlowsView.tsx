@@ -1967,6 +1967,14 @@ export function FlowsView() {
   groupsRef.current = groups
   const groupSeq = useRef(0)
   /** The group whose frame label is being renamed inline. */
+  /**
+   * The card whose name is being edited in the inspector, or null.
+   *
+   * Kept as an id rather than a boolean because the panel re-renders for whatever is selected: hold
+   * "editing" as a flag and selecting a different card mid-rename leaves the next one's header in an
+   * input, holding the name of a card you are no longer looking at.
+   */
+  const [renamingPost, setRenamingPost] = useState<string | null>(null)
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
   // ids = nodes whose OWN pos we move; visualIds = every node that visually shifts by the drag
   // delta (the moved nodes plus any children carried along inside a moved parent's transform), so
@@ -9497,7 +9505,58 @@ export function FlowsView() {
     <>
       <div className="flow-panel-head">
         <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? GROUP_TONE.Paid : GROUP_TONE.Social} channel={selPost.channel as ChannelId} />
-        <span className="flow-panel-title">{selPost.assetName}</span>
+        {/**
+          * THE NAME WAS THE ONE THING ON THIS PANEL YOU COULD NOT CHANGE. Everything under it edits
+          * in place - the dates, the copy, the records, the mode - while the title sat as plain text,
+          * so renaming a card meant going somewhere else to do it.
+          *
+          * A pencil rather than a double-click: a double-click is the pattern the group frame uses,
+          * and it works there because a frame's label is obviously a label. A title in a header reads
+          * as a heading, and a heading that silently accepts a double-click is a feature nobody finds.
+          * The pencil says it is editable without anyone having to guess.
+          */}
+        {renamingPost === selPost.id ? (
+          <input
+            className="flow-panel-title-input"
+            defaultValue={selPost.assetName}
+            autoFocus
+            aria-label="Card name"
+            onFocus={(e) => e.currentTarget.select()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={(e) => {
+              const next = e.currentTarget.value.trim()
+              setRenamingPost(null)
+              // An empty name is not a rename, it is a card you can no longer find. Blank reverts.
+              if (next && next !== selPost.assetName) void updateRow(selPost.id, { assetName: next })
+            }}
+            onKeyDown={(e) => {
+              // The board is listening for Delete, Escape and Cmd-G; none of that is meant for a
+              // field somebody is typing a name into.
+              e.stopPropagation()
+              if (e.key === 'Enter') e.currentTarget.blur()
+              else if (e.key === 'Escape') {
+                e.currentTarget.value = selPost.assetName
+                e.currentTarget.blur()
+              }
+            }}
+          />
+        ) : (
+          <>
+            <span className="flow-panel-title" title={selPost.assetName}>{selPost.assetName}</span>
+            <button
+              className="flow-panel-rename"
+              title="Rename this card"
+              aria-label="Rename this card"
+              onClick={() => setRenamingPost(selPost.id)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+              </svg>
+            </button>
+          </>
+        )}
       </div>
       {/**
         * PLANNER OR ACTIVE — the first thing in the panel, because it governs everything under it.

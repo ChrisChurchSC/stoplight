@@ -7246,8 +7246,7 @@ button.mf-open:focus-visible,
   border-radius: 6px;
   padding: 0;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: color 0.12s ease, border-color 0.12s ease;
 }
 .flow-home-rename svg {
   width: 12px;
@@ -25748,4 +25747,51 @@ table.aud-sheet td.stick .aud-cell {
 /* Out already wins: a posted card is posted whatever it was approved as on the way. */
 .flow-brief-node.live::before {
   background: var(--green);
+}
+/* The pencil beside a card's name in the inspector.
+   ALWAYS VISIBLE. Hiding it until hover was borrowed from the connect ports, and the two are not the
+   same case: a port is one of four on every card and would clutter the board drawn all the time,
+   while this is one control on one panel that is already open because you are working in it. Renaming
+   is also not a thing you go looking for having already decided to do it - you notice it is possible
+   because the pencil is there. Quiet rather than hidden: it sits at text-faint and comes up to full
+   contrast on hover. */
+.flow-panel-rename {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.flow-panel-rename svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+.flow-panel-rename:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+/* The field replaces the title, so it has to hold the same line rather than resize the header. */
+.flow-panel-title-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 3px 7px;
+}
+.flow-panel-title-input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
