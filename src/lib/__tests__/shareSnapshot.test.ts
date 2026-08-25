@@ -161,4 +161,16 @@ describe('maybeHydrateShare — leaving a share view', () => {
 
     expect(sessionStorage.getItem('stoplight.shareView')).toBeNull()
   })
+
+  it('clears the presence room, so the tab stops announcing itself into a workspace it left', async () => {
+    // A guest is now a visible participant, which means a tab that has left a share view is a tab
+    // that could otherwise keep broadcasting a cursor into somebody else's workspace room. The room
+    // id goes out with the flag and for the same reason.
+    sessionStorage.setItem('stoplight.shareView', '1')
+    sessionStorage.setItem('stoplight.presence.shareRoom', '97ffd48c-4093-4b10-9e85-8f681074f2b7')
+
+    await maybeHydrateShare()
+
+    expect(sessionStorage.getItem('stoplight.presence.shareRoom')).toBeNull()
+  })
 })

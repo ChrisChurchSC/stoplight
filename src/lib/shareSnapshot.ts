@@ -1,6 +1,7 @@
 import type { Role } from '../domain/access'
 import { brandFromBoard, isBrandless } from '../domain/brand'
 import { DRAFTS_SPACE, clientForCampaign } from '../domain/clients'
+import { SHARE_ROOM_KEY } from '../domain/livePresence'
 import { decideShareView } from '../domain/shareAccess'
 import { decodeShareToken } from './shareLink'
 import { getActiveWorkspaceId } from './session'
@@ -294,6 +295,9 @@ function forgetSeededSnapshot(): void {
    */
   try {
     sessionStorage.removeItem(SHARE_VIEW_FLAG)
+    // Out with the flag, for the same reason: left behind, this tab would keep announcing itself
+    // into the presence room of a workspace it no longer holds a grant for.
+    sessionStorage.removeItem(SHARE_ROOM_KEY)
   } catch {
     /* no sessionStorage — nothing was ever flagged */
   }
@@ -369,10 +373,18 @@ export async function maybeHydrateShare(): Promise<void> {
     /* treat as anonymous */
   }
 
+  /**
+   * Looked up unconditionally now, where it used to be skipped for anonymous viewers as a saved
+   * round trip. The decision below still does not need it for them — no session is always the
+   * snapshot — but live presence does: it is the room a guest joins, and the only way a recipient
+   * can be shown to the owner as reading the thing they were sent. The call is granted to anon and
+   * returns an opaque uuid to somebody already holding the link it belongs to (migrations/0014).
+   */
+  const owner = await snapshotOwner(grant.id)
+
   const source = decideShareView({
     signedIn,
-    // Only worth two round trips when there is a session to disqualify; anonymous is always the snapshot.
-    ownerWorkspaceId: signedIn ? await snapshotOwner(grant.id) : null,
+    ownerWorkspaceId: signedIn ? owner : null,
     viewerWorkspaceIds: signedIn ? await viewerWorkspaces() : [],
   })
 
@@ -381,6 +393,7 @@ export async function maybeHydrateShare(): Promise<void> {
     // runs against the backend rather than localStorage.
     try {
       sessionStorage.removeItem(SHARE_VIEW_FLAG)
+      sessionStorage.removeItem(SHARE_ROOM_KEY)
     } catch {
       /* ignore */
     }
@@ -391,6 +404,10 @@ export async function maybeHydrateShare(): Promise<void> {
   // workspace that does not contain any of this. This flag puts its data layer in localStorage mode.
   try {
     sessionStorage.setItem(SHARE_VIEW_FLAG, '1')
+    // The room this guest will appear in. Absent when the owner could not be resolved, which
+    // leaves presence off for them rather than guessing at a channel.
+    if (owner) sessionStorage.setItem(SHARE_ROOM_KEY, owner)
+    else sessionStorage.removeItem(SHARE_ROOM_KEY)
   } catch {
     /* ignore */
   }

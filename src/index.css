@@ -12320,6 +12320,15 @@ a.flow-top-credits.out:hover { color: var(--danger, #e5484d); opacity: 0.82; }
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
+.cv-cursor-guest {
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.72;
+  margin-left: 5px;
+}
+.cv-cursor-guest::before {
+  content: '· ';
+}
 .cv-node-presence {
   position: absolute;
   top: -9px;
