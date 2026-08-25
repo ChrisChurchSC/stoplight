@@ -5431,7 +5431,15 @@ export function FlowsView() {
         title={`${o.name}: drag onto the board, or double-click to open`}
         onDragStart={(e) => {
           e.dataTransfer.setData(SMART_OBJECT_DND, o.id)
-          e.dataTransfer.effectAllowed = 'copy'
+          /**
+           * copyMove, not copy. Every drop target here sets dropEffect 'move' — the folder heads, the
+           * unfiled area, and now the rungs — and a dropEffect the drag does not allow is reset to
+           * 'none' by the browser, which CANCELS the drop. Declared 'copy' for the canvas, which
+           * copies, this quietly made every filing and every rung change a no-op in a real drag.
+           * Synthetic DataTransfer does not enforce the pairing, so a test that dispatches its own
+           * events cannot see this.
+           */
+          e.dataTransfer.effectAllowed = 'copyMove'
           setDragObjectId(o.id)
         }}
         onDragEnd={() => { setDragObjectId(null); setObjDropFolder(null) }}
@@ -5498,7 +5506,13 @@ export function FlowsView() {
    * A folder head is a drop target for the same drag that places an object on the canvas, so one
    * gesture does both jobs depending on where you let go.
    */
-  const renderObjectShelf = (list: SmartObject[]) => {
+  /**
+   * `rung` is the scope of the section this shelf is rendering. The folder and unfiled drop targets
+   * fill that section's body and stop propagation, so they — not the section — are what a real drag
+   * lands on. They have to know which rung they are in, or dropping a campaign object onto the brand
+   * section quietly filed it instead of promoting it.
+   */
+  const renderObjectShelf = (list: SmartObject[], rung: SmartObjectScope) => {
     const tree = buildFolderTree(list.map((o) => o.folder).filter((f): f is string => !!f), list, (o) => o.folder)
     const unfiled = list.filter((o) => !o.folder)
     const folderDrop = (path: string | undefined) => ({
@@ -5514,9 +5528,18 @@ export function FlowsView() {
         const id = e.dataTransfer.getData(SMART_OBJECT_DND)
         setObjDropFolder(null)
         setDragObjectId(null)
+        setRungDropTarget(null)
         if (!id) return
         e.preventDefault()
         e.stopPropagation()
+        // ONE DROP, THE WHOLE MEANING: it lands on this rung, in this folder. This handler covers the
+        // section's body, so a cross-rung drag lands here rather than on the section — and doing only
+        // the filing half made dropping a local object into the brand section look like nothing had
+        // happened, or worse, like it had been filed somewhere it could not be seen.
+        const o = smartObjects.find((x) => x.id === id)
+        if (o && scopeOf(o) !== rung && !(rung === 'brand' && !brand && !o.brand)) {
+          setSmartObjectScope(id, rung, { brand: o.brand || brand, campaign: boardKey })
+        }
         setSmartObjectFolder(id, path)
       },
     })
@@ -10521,7 +10544,7 @@ export function FlowsView() {
                             : `Nothing on this rung yet. Move one here from its panel to let ${r.key === 'shared' ? 'every brand' : 'every campaign'} use it.`}
                         </div>
                       ) : (
-                        <div className="flow-lib-objects">{renderObjectShelf(r.list)}</div>
+                        <div className="flow-lib-objects">{renderObjectShelf(r.list, r.key)}</div>
                       )}
                     </div>
                   ))
