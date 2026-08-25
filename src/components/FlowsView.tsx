@@ -11164,6 +11164,23 @@ export function FlowsView() {
                         <div className="flow-branch-list">
                           {posts.map((r) => {
                             const c = viewPostCopy(r)
+                            /**
+                             * WHAT THIS IS AND WHERE IT GOES, said on the card rather than left to
+                             * be worked out. The card carried a hardcoded "Post" and a channel
+                             * LOGO, so the channel was a small mark you had to recognise and the
+                             * asset type — the thing that actually says whether this is a homepage,
+                             * an article or a cart page — was not on the board at all. Both are one
+                             * lookup away and the inspector has been showing them as "Channel ·
+                             * Type" all along.
+                             */
+                            const chanLabel = CHANNELS[r.channel as ChannelId]?.label ?? r.channel
+                            // The channel's OWN colour, not the motion tone the rest of the card
+                            // uses. The tone groups a family — paid, email, web — which is the right
+                            // frame for the work but cannot tell LinkedIn from Instagram, and
+                            // telling channels apart at a glance is the whole point of colouring
+                            // the thing that names one.
+                            const chanColor = CHANNELS[r.channel as ChannelId]?.color ?? d.tone
+                            const typeName = typeLabel(r.channel as ChannelId, r.assetType) || r.assetType || ''
                             return (
                               <div className="flow-branch-row" key={r.id}>
                                 <span className="flow-branch-port" style={{ borderColor: d.tone }} />
@@ -11206,9 +11223,17 @@ export function FlowsView() {
                                       motion it belongs to, not one purple for every post: a post
                                       under a paid ad and a post under a newsletter are different
                                       work, and the board now says so before you read a word. */}
-                                  <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 15%, transparent)` }}>
-                                    Post
+                                  <span className="flow-node-chan" style={{ color: chanColor, background: `color-mix(in srgb, ${chanColor} 16%, transparent)` }}>
+                                    {chanLabel}
                                   </span>
+                                  {/* Only when there is one to name. An asset that never picked a
+                                      type would otherwise get an empty pill, which reads as a
+                                      missing value rather than as a question nobody asked yet. */}
+                                  {typeName ? (
+                                    <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 15%, transparent)` }}>
+                                      {typeName}
+                                    </span>
+                                  ) : null}
                                   {/* An unanswered question has to be visible from across the board,
                                       or the thread rots and the team goes back to Slack. */}
                                   {openCommentCount(cardComments, boardKey, r.id) > 0 && (
