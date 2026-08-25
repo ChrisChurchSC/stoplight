@@ -5,7 +5,7 @@ import { CHANNELS } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, opensRecordStep, pruneBoard, remapBuiltTargets, renameEndpoint,
+  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, flattenChannelNodes, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, opensRecordStep, pruneBoard, remapBuiltTargets, renameEndpoint,
 } from '../domain/flowBoard'
 import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
@@ -443,6 +443,28 @@ const CampaignTile = () => (
 )
 
 type ViewDeliverable = { key: string; label: string; tone: string; channel: ChannelId; assetType: string; count: number; rows: TrafficRow[] }
+
+/**
+ * WHERE AN ASSET HAS GOT TO, as a mark on the card's leading edge.
+ *
+ * Seven statuses reach this board and none of them were on it: the only status-ish thing a card
+ * carried was a spinner while its copy regenerated. So the one question you actually work from -
+ * what needs doing - was the one the board could not answer.
+ *
+ * DRAFT IS DELIBERATELY UNMARKED, and that rule is inherited rather than invented: the live stripe
+ * beside this one already says it, that planning is what nearly every card on a board is, and a mark
+ * on the majority is not a mark. Green is left alone for the same reason - it means this has
+ * actually gone out, and moving it to "approved" would quietly retire the one status mark that
+ * already earned its place.
+ *
+ * So four marks and a silent majority: waiting on a person, blocked, ready to go, and out.
+ */
+const statusMark = (r: TrafficRow): string => {
+  if (r.status === 'in_review') return ' st-review'
+  if (r.status === 'rejected' || r.status === 'failed') return ' st-blocked'
+  if (r.status === 'approved' || r.status === 'scheduled') return ' st-ready'
+  return ''
+}
 
 // An ingested / real posted asset (from the Library), as opposed to a generated idea.
 const isIngestedPost = (r: TrafficRow): boolean =>
@@ -1950,6 +1972,14 @@ export function FlowsView() {
   groupsRef.current = groups
   const groupSeq = useRef(0)
   /** The group whose frame label is being renamed inline. */
+  /**
+   * The card whose name is being edited in the inspector, or null.
+   *
+   * Kept as an id rather than a boolean because the panel re-renders for whatever is selected: hold
+   * "editing" as a flag and selecting a different card mid-rename leaves the next one's header in an
+   * input, holding the name of a card you are no longer looking at.
+   */
+  const [renamingPost, setRenamingPost] = useState<string | null>(null)
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
   // ids = nodes whose OWN pos we move; visualIds = every node that visually shifts by the drag
   // delta (the moved nodes plus any children carried along inside a moved parent's transform), so
@@ -2380,17 +2410,34 @@ export function FlowsView() {
   }
   // Leaving the campaign mid-drag must not leave the listeners behind on the window.
   useEffect(() => () => releaseGesture.current(), [])
-  const startConnect = (e: ReactMouseEvent, from: string) => {
+  /**
+   * Begin a connection from a POINT, rather than from the event that happened to start it.
+   *
+   * Split out because the plus on a card's right edge has to decide what gesture it is in the middle
+   * of one: a click adds a next step, a drag draws a wire, and which it turns out to be is not known
+   * on mousedown. So the drag path starts a connection several pixels and one mousemove later, with
+   * no React event of its own to hand over.
+   */
+  const beginConnectAt = (from: string, clientX: number, clientY: number) => {
     if (spaceHeld.current) return
-    e.stopPropagation()
     const cv = canvasRef.current
     if (!cv) return
     const cr = cv.getBoundingClientRect()
     drawingFrom.current = from
-    connectStart.current = { x: e.clientX, y: e.clientY }
+    connectStart.current = { x: clientX, y: clientY }
     captureGesture()
-    setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+    setDrawing({ from, x: clientX - cr.left, y: clientY - cr.top })
   }
+  const startConnect = (e: ReactMouseEvent, from: string) => {
+    if (spaceHeld.current) return
+    e.stopPropagation()
+    beginConnectAt(from, e.clientX, e.clientY)
+  }
+  /**
+   * Set while the plus is being dragged, so the click it fires on release does not ALSO open the
+   * picker. A drag that ends by adding a card nobody asked for is worse than one that does nothing.
+   */
+  const plusDragged = useRef(false)
   const startDrag = (e: ReactMouseEvent, id: string) => {
     if (tool !== 'select' || spaceHeld.current) return
     if ((e.target as HTMLElement).closest('input, textarea, button, select')) return
@@ -6624,10 +6671,24 @@ export function FlowsView() {
     const openingRows = useTrafficStore
       .getState()
       .rows.filter((r) => (r.campaign ?? '').trim() === n && !r.archivedAt)
-    return pruneBoard(board, {
+    /**
+     * The channel is not a node any more, so anything still pointing at one is moved down onto the
+     * assets it stood for BEFORE the prune runs. Order matters: pruneBoard deletes endpoints it does
+     * not recognise, so flattening afterwards would be flattening what was already thrown away.
+     * targetIds is row ids alone for the same reason it used to include channel keys, which is that
+     * it lists what an edge may legally point at, and a channel is no longer one of those things.
+     */
+    const assetIdsByChannel = new Map<string, string[]>()
+    for (const r of openingRows) {
+      const k = deliverableKeyFor(r)
+      const cur = assetIdsByChannel.get(k)
+      if (cur) cur.push(r.id)
+      else assetIdsByChannel.set(k, [r.id])
+    }
+    return pruneBoard(flattenChannelNodes(board, assetIdsByChannel), {
       objectKinds: new Set(Object.keys(OBJECT_META)),
       smartObjectIds: new Set(smartObjects.map((o) => o.id)),
-      targetIds: new Set(openingRows.flatMap((r) => [r.id, deliverableKeyFor(r)])),
+      targetIds: new Set(openingRows.map((r) => r.id)),
     })
   }
   const openView = (n: string) => {
@@ -9464,7 +9525,58 @@ export function FlowsView() {
     <>
       <div className="flow-panel-head">
         <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? GROUP_TONE.Paid : GROUP_TONE.Social} channel={selPost.channel as ChannelId} />
-        <span className="flow-panel-title">{selPost.assetName}</span>
+        {/**
+          * THE NAME WAS THE ONE THING ON THIS PANEL YOU COULD NOT CHANGE. Everything under it edits
+          * in place - the dates, the copy, the records, the mode - while the title sat as plain text,
+          * so renaming a card meant going somewhere else to do it.
+          *
+          * A pencil rather than a double-click: a double-click is the pattern the group frame uses,
+          * and it works there because a frame's label is obviously a label. A title in a header reads
+          * as a heading, and a heading that silently accepts a double-click is a feature nobody finds.
+          * The pencil says it is editable without anyone having to guess.
+          */}
+        {renamingPost === selPost.id ? (
+          <input
+            className="flow-panel-title-input"
+            defaultValue={selPost.assetName}
+            autoFocus
+            aria-label="Card name"
+            onFocus={(e) => e.currentTarget.select()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={(e) => {
+              const next = e.currentTarget.value.trim()
+              setRenamingPost(null)
+              // An empty name is not a rename, it is a card you can no longer find. Blank reverts.
+              if (next && next !== selPost.assetName) void updateRow(selPost.id, { assetName: next })
+            }}
+            onKeyDown={(e) => {
+              // The board is listening for Delete, Escape and Cmd-G; none of that is meant for a
+              // field somebody is typing a name into.
+              e.stopPropagation()
+              if (e.key === 'Enter') e.currentTarget.blur()
+              else if (e.key === 'Escape') {
+                e.currentTarget.value = selPost.assetName
+                e.currentTarget.blur()
+              }
+            }}
+          />
+        ) : (
+          <>
+            <span className="flow-panel-title" title={selPost.assetName}>{selPost.assetName}</span>
+            <button
+              className="flow-panel-rename"
+              title="Rename this card"
+              aria-label="Rename this card"
+              onClick={() => setRenamingPost(selPost.id)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+              </svg>
+            </button>
+          </>
+        )}
       </div>
       {/**
         * PLANNER OR ACTIVE — the first thing in the panel, because it governs everything under it.
@@ -11141,70 +11253,64 @@ export function FlowsView() {
                           posts and their ports, so a whole motion reads as one family on the
                           board: paid red, email teal, web orange. See GROUP_TONE. */}
                       <div
-                        className="flow-branched"
-                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: (posts.length > 0 || variantRows.length > 0) ? `${posts.length * 168 + (varTreeH[d.key] ?? 0) + (variantRows.length ? 40 : 0)}px` : undefined, ['--tone']: d.tone } as React.CSSProperties}
+                        /**
+                         * NO CHANNEL NODE AND NO FRAME. Adding a card used to bring a box with it:
+                         * the channel it belongs to, drawn as a dashed rim with a header and a
+                         * count, which is the same thing a Cmd-G group looks like. So every new
+                         * asset arrived already grouped, by something nobody grouped.
+                         *
+                         * The channel is on the card now, as its own labelled and coloured badge
+                         * beside the asset type, which is where it can be read without costing a
+                         * box and a hop. What is left here is the grouping the LAYOUT still needs,
+                         * with nothing drawn around it.
+                         */
+                        className="flow-branched flow-flat"
+                        /**
+                         * The reserved min-height went with the branch list going into normal flow.
+                         * It existed only because the posts were positioned ABSOLUTELY off to the
+                         * right, so the column had to be told by hand how much room they would take
+                         * or the next channel drew straight over them. Stacked inside the frame they
+                         * take exactly the room they need and the browser works it out — and the
+                         * arithmetic that guessed it (168px a post, plus a variant tree, plus 40)
+                         * cannot drift out of step with the card it was estimating any more.
+                         */
+                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, ['--tone']: d.tone } as React.CSSProperties}
                       >
-                        <div
-                          className={`flow-node flow-tier-deliv${connectOver === d.key ? ' drop-target' : ''}${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}${trailCls(d.key)}`}
-                          data-node-id={d.key}
-                          data-role="output"
-                          onMouseDown={(e) => startDrag(e, d.key)}
-                          onClick={(e) => clickSelect(e, d.key)}
-                        >
-                          {/* CHANNEL, not Deliverable. Internal ids stay `deliverable` and
-                              DELIVERABLE_PRESETS, the same split Flows kept when it became
-                              Campaigns: rename what a person reads, leave what the code keys on. */}
-                          <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 15%, transparent)` }}>
-                            Channel
-                          </span>
-                          <div className="flow-node-main">
-                            <div className="flow-node-text">
-                              <div className="flow-node-label">{d.label}</div>
-                              <div className="flow-node-desc">
-                                ×{d.count}
-                                {(() => {
-                                  // A deliverable stands for several assets, so the count is the
-                                  // useful signal rather than a spinner on the group.
-                                  const busy = d.rows.filter((r) => regenIds.has(r.id)).length
-                                  return busy ? <span className="flow-deliv-busy">Writing {busy}…</span> : null
-                                })()}
-                                {/* The deliverable summarises its assets, so it summarises their
-                                    flags too: a collapsed group must not hide that the copy under
-                                    it is stale. */}
-                                {(() => {
-                                  const stale = d.rows.filter((r) => r.recheckFlag).length
-                                  if (!stale) return null
-                                  return (
-                                    <span className="flow-deliv-stale" title={`${stale} out of date. Generate to refresh ${stale === 1 ? 'it' : 'them'}.`}>
-                                      {stale} out of date
-                                    </span>
-                                  )
-                                })()}
-                              </div>
-                              {/* No record tags here, for the same reason the campaign card lost
-                                  its own: audience and proof are context you attach by connecting
-                                  a card to the campaign. A deliverable inherits the campaign's
-                                  records, and the per-deliverable OVERRIDE still lives in the
-                                  inspector, where it reads as the exception it is rather than as
-                                  two amber "Needs a..." prompts on every card on the board. */}
-                            </div>
-                          </div>
-                          {/* A channel could always be connected TO and never FROM: it was a drop
-                              target with no handles of its own, so the one direction you could not
-                              draw was the one going onward. Same four handles every other card has. */}
-                          {CONNECT_SIDES.map((side) => (
-                            <button
-                              key={side}
-                              className={`flow-note-port flow-out-port side-${side}`}
-                              title="Draw a connection"
-                              aria-label={`Draw a connection from the ${side}`}
-                              onMouseDown={(e) => startConnect(e, d.key)}
-                            />
-                          ))}
-                        </div>
                         <div className="flow-branch-list">
                           {posts.map((r) => {
                             const c = viewPostCopy(r)
+                            /**
+                             * WHAT THIS IS AND WHERE IT GOES, said on the card rather than left to
+                             * be worked out. The card carried a hardcoded "Post" and a channel
+                             * LOGO, so the channel was a small mark you had to recognise and the
+                             * asset type — the thing that actually says whether this is a homepage,
+                             * an article or a cart page — was not on the board at all. Both are one
+                             * lookup away and the inspector has been showing them as "Channel ·
+                             * Type" all along.
+                             */
+                            const chanLabel = CHANNELS[r.channel as ChannelId]?.label ?? r.channel
+                            // The channel's OWN colour, not the motion tone the rest of the card
+                            // uses. The tone groups a family — paid, email, web — which is the right
+                            // frame for the work but cannot tell LinkedIn from Instagram, and
+                            // telling channels apart at a glance is the whole point of colouring
+                            // the thing that names one.
+                            /**
+                             * THE FAMILY TONE, NOT THE PLATFORM BRAND COLOUR.
+                             *
+                             * Brand colours are the obvious choice and the wrong one, because the
+                             * platforms picked them independently and most picked blue: LinkedIn
+                             * #0a66c2, Meta #1877f2, Email #3b82f6, Website #0284c7. Four channels,
+                             * one colour, on the pill you read first. GROUP_TONE was built for this
+                             * and has nine hues that separate: social blue, email teal, content
+                             * purple, web orange, paid red, video violet, lead magnets gold, events
+                             * deep teal, sales indigo.
+                             *
+                             * Nothing is lost by dropping the brand colour. The pill carries the
+                             * platform's own mark and its name, which identify it far better than a
+                             * blue four other channels also answer to.
+                             */
+                            const chanColor = d.tone
+                            const typeName = typeLabel(r.channel as ChannelId, r.assetType) || r.assetType || ''
                             return (
                               <div className="flow-branch-row" key={r.id}>
                                 <span className="flow-branch-port" style={{ borderColor: d.tone }} />
@@ -11225,7 +11331,7 @@ export function FlowsView() {
                                     predicate the inspector opens on, so the board and the panel
                                     cannot disagree about which an asset is. */}
                                 <div
-                                  className={`flow-node flow-brief-node${isLiveAsset(r) ? ' live' : ''}${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
+                                  className={`flow-node flow-brief-node${isLiveAsset(r) ? ' live' : ''}${statusMark(r)}${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
                                   data-node-id={r.id}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
@@ -11247,9 +11353,28 @@ export function FlowsView() {
                                       motion it belongs to, not one purple for every post: a post
                                       under a paid ad and a post under a newsletter are different
                                       work, and the board now says so before you read a word. */}
-                                  <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 15%, transparent)` }}>
-                                    Post
+                                  {/* The mark and the name are one thing, so they are one pill. They were a
+                                      pill and a separate 30px tile below it, which read as two facts about the
+                                      card when it is one fact said twice: the Instagram glyph and the word
+                                      Instagram. The glyph earns its place inside the pill, where it is the
+                                      thing you recognise before you read, and the tile's whole row goes. */}
+                                  <span className="flow-node-chan" style={{ color: chanColor, background: `color-mix(in srgb, ${chanColor} 16%, transparent)` }}>
+                                    <ChannelIcon channel={r.channel as ChannelId} size={12} color={chanColor} />
+                                    {chanLabel}
                                   </span>
+                                  {/* Only when there is one to name. An asset that never picked a
+                                      type would otherwise get an empty pill, which reads as a
+                                      missing value rather than as a question nobody asked yet. */}
+                                  {/* QUIET, now that the channel pill beside it carries the same hue.
+                                      Two pills in one colour read as one shape, and the format is the
+                                      smaller fact of the two: which channel this goes out on is what
+                                      you scan for, what shape it takes is what you check once you
+                                      have found it. */}
+                                  {typeName ? (
+                                    <span className="flow-node-kind flow-node-kind-quiet">
+                                      {typeName}
+                                    </span>
+                                  ) : null}
                                   {/* An unanswered question has to be visible from across the board,
                                       or the thread rots and the team goes back to Slack. */}
                                   {openCommentCount(cardComments, boardKey, r.id) > 0 && (
@@ -11271,7 +11396,6 @@ export function FlowsView() {
                                     <span className="flow-node-stale" title={`Out of date: ${r.recheckFlag.reason}. Generate to refresh it.`} aria-label="Out of date" />
                                   )}
                                   <div className="flow-node-main">
-                                    <PresetTile tone={d.tone} channel={r.channel as ChannelId} />
                                     <div className="flow-node-text">
                                       {r.lineage?.bpStep && <div className="flow-node-step">{r.lineage.bpStep}</div>}
                                       <div className="flow-node-label">{c.head}</div>
@@ -11317,9 +11441,49 @@ export function FlowsView() {
                                     className="flow-branch-plus"
                                     title="Add a next step from this asset"
                                     aria-label="Add a next step from this asset"
-                                    onMouseDown={(e) => e.stopPropagation()}
+                                    /**
+                                     * THE PLUS WAS SITTING ON TOP OF THE ONE PORT PEOPLE REACH FOR.
+                                     *
+                                     * A card has four connect ports, one per edge, and the right-hand
+                                     * one lives at right:-7px. The plus lives at right:-11px and is
+                                     * 20px across, so it covers it completely: dragging off the right
+                                     * edge of a card - the obvious way to draw a line to the next one
+                                     * - hit the plus and did nothing, and the port underneath could
+                                     * never be reached at all.
+                                     *
+                                     * So the plus answers both. It cannot know on mousedown which
+                                     * gesture it is in, so it waits: past a few pixels of movement it
+                                     * hands over to the connection machinery, and released without
+                                     * moving it is still the click that adds a next step. The
+                                     * threshold is what separates a drag from a hand that moved while
+                                     * clicking.
+                                     */
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation()
+                                      if (e.button !== 0) return
+                                      plusDragged.current = false
+                                      const sx = e.clientX
+                                      const sy = e.clientY
+                                      const stop = () => {
+                                        document.removeEventListener('mousemove', onMove)
+                                        document.removeEventListener('mouseup', stop)
+                                      }
+                                      const onMove = (ev: MouseEvent) => {
+                                        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return
+                                        stop()
+                                        plusDragged.current = true
+                                        beginConnectAt(r.id, ev.clientX, ev.clientY)
+                                      }
+                                      document.addEventListener('mousemove', onMove)
+                                      document.addEventListener('mouseup', stop)
+                                    }}
                                     onClick={(e) => {
                                       e.stopPropagation()
+                                      // The release that ended a drag is not a click on the plus.
+                                      if (plusDragged.current) {
+                                        plusDragged.current = false
+                                        return
+                                      }
                                       setConnectFrom(r.id)
                                       setSel(null)
                                       setBriefCollapsed(false)

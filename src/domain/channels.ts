@@ -90,7 +90,7 @@ const CHANNELS_DEFS: Record<ChannelId, ChannelConfig> = {
     color: '#1877f2', accepts: ['text', 'image', 'video', 'link'], bestTimes: [t(13)],
   },
   linkedin: {
-    id: 'linkedin', label: 'LinkedIn post', short: 'LI', kind: 'organic', platform: 'LinkedIn',
+    id: 'linkedin', label: 'LinkedIn', short: 'LI', kind: 'organic', platform: 'LinkedIn',
     color: '#0a66c2', accepts: ['text', 'image', 'link', 'video'], bestTimes: [t(8, 30), t(12)],
   },
   x: {
@@ -128,7 +128,7 @@ const CHANNELS_DEFS: Record<ChannelId, ChannelConfig> = {
     color: '#0284c7', accepts: ['link', 'text', 'image'], bestTimes: [t(10)],
   },
   blog: {
-    id: 'blog', label: 'Blog article', short: 'BLOG', kind: 'owned', platform: 'Web',
+    id: 'blog', label: 'Blog', short: 'BLOG', kind: 'owned', platform: 'Web',
     color: '#8b5cf6', accepts: ['text', 'image', 'link'], bestTimes: [t(8), t(11)],
   },
   'landing-page': {
@@ -153,7 +153,7 @@ const CHANNELS_DEFS: Record<ChannelId, ChannelConfig> = {
     color: '#4f46e5', accepts: ['text', 'link'], bestTimes: [t(8), t(16)],
   },
   'sales-collateral': {
-    id: 'sales-collateral', label: 'Sales collateral', short: 'COLLAT', kind: 'sales', platform: 'Sales',
+    id: 'sales-collateral', label: 'Sales', short: 'COLLAT', kind: 'sales', platform: 'Sales',
     color: '#0f766e', accepts: ['text', 'image', 'link', 'video'], bestTimes: [t(10)],
   },
   proposal: {
@@ -191,6 +191,18 @@ function fallbackChannel(id: string): ChannelConfig {
  * `undefined` (which would crash every `CHANNELS[id].prop` call site). Only `get`
  * is trapped, so `id in CHANNELS` and Object.keys/values still reflect the real
  * channels — lists and validation stay clean.
+ */
+/*
+ * A CHANNEL'S LABEL NAMES A PLACE, NOT A FORMAT.
+ *
+ * Two of them had a format baked in: 'LinkedIn post' and 'Blog article'. Everywhere the label stands
+ * alone that reads fine, and it is why nobody noticed. Put it next to the asset type on a card — the
+ * thing that says whether this is a post, a document or a poll — and it comes out as "LinkedIn post
+ * · post", which is both redundant and wrong: the channel is LinkedIn, and the format is one of
+ * several it takes.
+ *
+ * The old strings stay reachable as aliases below, so anything that named a channel by its label —
+ * an import, a pasted brief, a tool call — still resolves.
  */
 export const CHANNELS: Record<ChannelId, ChannelConfig> = new Proxy(CHANNELS_DEFS, {
   get(target, prop, receiver) {
@@ -232,6 +244,12 @@ const CHANNEL_ALIASES: Record<string, ChannelId> = {
   ig: 'instagram',
   twitter: 'x',
   'x (twitter)': 'x',
+  // The labels these two channels used to carry. Renaming a label is not free: data stores channels
+  // loosely — a label, a sub-format, a pasted brief — so anything that named one by its old display
+  // name has to keep resolving. Asserted in channels.test.ts rather than left as a good intention.
+  'sales collateral': 'sales-collateral',
+  'linkedin post': 'linkedin',
+  'blog article': 'blog',
   web: 'website',
   site: 'website',
   'landing page': 'landing-page',

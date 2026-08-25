@@ -7297,8 +7297,7 @@ button.mf-open:focus-visible,
   border-radius: 6px;
   padding: 0;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: color 0.12s ease, border-color 0.12s ease;
 }
 .flow-home-rename svg {
   width: 12px;
@@ -9024,8 +9023,24 @@ a.flow-top-credits.out:hover { color: var(--danger, #e5484d); opacity: 0.82; }
   pointer-events: none;
   z-index: 5;
 }
+/**
+ * THE BEAD AT THE END OF A WIRE IS FOR WIRING, NOT FOR READING.
+ *
+ * It marks where a connector lands on a card. That used to be the channel node, one bead per
+ * channel; with the channel gone the wire reaches each asset, so every card grew a grey dot floating
+ * just off its left edge at rest. Four cards, four dots, attached to nothing you were doing.
+ *
+ * It cannot be revealed by hovering the card it sits against: the beads are drawn in an SVG overlay
+ * that is a SIBLING of the cards, so no selector on a card can reach one. What it can key on is the
+ * mode, which is the honest condition anyway. While the Link tool is live the endpoints are exactly
+ * what you are aiming at; the rest of the time they are decoration on somebody else's line.
+ */
 .flow-edge-dot {
   fill: var(--text-faint);
+  opacity: 0;
+}
+.flow-canvas.connecting .flow-edge-dot {
+  opacity: 1;
 }
 .flow-edge {
   fill: none;
@@ -23403,7 +23418,14 @@ table.aud-sheet td.stick .aud-cell {
    plate, a card outside a deliverable) looks exactly as it did. */
 .flow-node.flow-tier-campaign { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 18%, var(--border)); border-radius: 14px; padding: 12px 13px 13px; }
 .flow-node.flow-tier-deliv { background: color-mix(in srgb, var(--tone, var(--accent-3)) 16%, var(--surface)); border-color: color-mix(in srgb, var(--tone, var(--accent-3)) 40%, var(--border)); }
-.flow-node.flow-brief-node { background: color-mix(in srgb, var(--tone, var(--accent-2)) 7%, var(--surface)); border-color: color-mix(in srgb, var(--tone, var(--accent-2)) 18%, var(--border)); }
+/* ONE SURFACE FOR EVERY ASSET CARD.
+   The card used to be tinted with its channel family, so an Instagram post sat on blue and a
+   newsletter on green and a row of cards read as several kinds of object. It is one kind of object:
+   a piece of work. The channel is already said outright, in its own colour, in the pill at the top
+   of the card, which is a better place for colour to live than the whole surface behind the copy.
+   Tone still drives the family cues elsewhere on the board; it stops deciding what a card is made
+   of. */
+.flow-node.flow-brief-node { background: var(--surface); border-color: var(--border); }
 /* Selected + click-held (drag) glow match the card's own hue, so selecting a paid ad rings red
    and selecting a newsletter rings teal. A bold 2px ring + soft outer glow + a lightly tinted
    body make a selection read at a glance. */
@@ -25631,4 +25653,148 @@ table.aud-sheet td.stick .aud-cell {
   overflow: hidden;
   pointer-events: none;
   z-index: 50;
+}
+
+/**
+ * A CHANNEL IS NOT A BOX ROUND THE WORK.
+ *
+ * It was a card in the spine with its posts hanging off to the right, then a dashed frame around
+ * them. The frame was the better of the two and still wrong: a dashed rim with a header and a count
+ * is exactly what a Cmd-G group looks like, so every card added to the board arrived already inside
+ * something nobody had grouped. Three requests in a row came back to the same point, and they were
+ * right each time.
+ *
+ * The channel is on the card instead, as a coloured badge beside the asset type, which says the same
+ * thing without costing a box or a hop. What stays here is the grouping the layout still needs, with
+ * nothing drawn around it: the posts sit in the spine, and the elbows that drew the branch are gone
+ * because there is no longer a branch for them to draw.
+ *
+ * What was filed under the channel is not lost with it. See flattenChannelNodes: wires drawn to a
+ * channel move onto its assets, detached-from-brief moves with them, and the position of a card
+ * nobody draws any more is dropped.
+ */
+.flow-flat .flow-branch-list {
+  position: static;
+  gap: 8px;
+}
+.flow-flat .flow-branch-list::before,
+.flow-flat .flow-branch-list::after,
+.flow-flat .flow-branch-row::before {
+  content: none;
+}
+.flow-flat .flow-branch-port {
+  display: none;
+}
+/* The channel's name beside the asset type. Same pill as .flow-node-kind so the pair reads as one
+   row of facts about the card rather than two competing marks, with the gap that keeps them apart. */
+.flow-node-chan {
+  /* inline-FLEX, so the mark and the name sit on one baseline inside the one pill. */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: 7px;
+  margin-right: 5px;
+  padding: 2px 9px;
+  border-radius: 6px;
+}
+/* The mark is small enough to read as part of the label rather than as a second element beside it,
+   and never shrinks: a squashed brand glyph is worse than no glyph. */
+.flow-node-chan svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+}
+
+/* The format pill, beside a channel pill that now carries the family hue. Colour would be the same
+   colour twice; this keeps the shape and drops the shout. */
+.flow-node-kind-quiet {
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--text-faint) 10%, transparent);
+}
+
+/**
+ * WHERE AN ASSET HAS GOT TO, on the leading edge, in the vocabulary the live stripe started.
+ *
+ * Same geometry as .flow-brief-node.live deliberately: one edge, one language, so a board with four
+ * states on it still reads as one system rather than four decorations. The rule that stripe set is
+ * kept too, that a mark on the majority is not a mark, so draft gets nothing at all and the marks
+ * are reserved for the cards that are waiting on somebody, stuck, ready, or already out.
+ */
+.flow-brief-node.st-review::before,
+.flow-brief-node.st-blocked::before,
+.flow-brief-node.st-ready::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+}
+/* Waiting on a person. */
+.flow-brief-node.st-review::before {
+  background: var(--amber, #d97706);
+}
+/* Stuck: rejected, or a publish that errored. */
+.flow-brief-node.st-blocked::before {
+  background: var(--red, #c9302c);
+}
+/* Ready, not yet out. Blue rather than green so it cannot be mistaken for having shipped. */
+.flow-brief-node.st-ready::before {
+  background: var(--blue, #2f6fe0);
+}
+/* Out already wins: a posted card is posted whatever it was approved as on the way. */
+.flow-brief-node.live::before {
+  background: var(--green);
+}
+/* The pencil beside a card's name in the inspector.
+   ALWAYS VISIBLE. Hiding it until hover was borrowed from the connect ports, and the two are not the
+   same case: a port is one of four on every card and would clutter the board drawn all the time,
+   while this is one control on one panel that is already open because you are working in it. Renaming
+   is also not a thing you go looking for having already decided to do it - you notice it is possible
+   because the pencil is there. Quiet rather than hidden: it sits at text-faint and comes up to full
+   contrast on hover. */
+.flow-panel-rename {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.flow-panel-rename svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+.flow-panel-rename:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+/* The field replaces the title, so it has to hold the same line rather than resize the header. */
+.flow-panel-title-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 3px 7px;
+}
+.flow-panel-title-input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
