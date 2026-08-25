@@ -1924,9 +1924,14 @@ interface TrafficState {
   /**
    * Move an object up or down the ladder. Replaces promoteSmartObject, which could only reach
    * 'brand' — with three rungs, an action named for one of them is an action that will be copied.
+   *
    * `brand` is required going TO 'brand' (that is the library it lands in) and ignored otherwise.
+   * `campaign` is required going TO 'campaign' for the same reason: a campaign-scoped object is
+   * visible on exactly one board, and the board it lands on is the one doing the demoting. Without
+   * it the object kept whatever board it was BUILT on, so demoting a shared object from a different
+   * campaign made it vanish — scoped to a board you are not standing on.
    */
-  setSmartObjectScope: (id: string, scope: SmartObjectScope, brand?: string) => void
+  setSmartObjectScope: (id: string, scope: SmartObjectScope, opts?: { brand?: string; campaign?: string }) => void
   /**
    * File a smart object under a folder path in its brand's library. undefined = unfiled. Folders are
    * not registered anywhere: filing the last object out of one is what removes it.
@@ -3778,13 +3783,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveSmartObjects(smartObjects)
       return { smartObjects }
     }),
-  setSmartObjectScope: (id, scope, brand) =>
+  setSmartObjectScope: (id, scope, opts) =>
     set((s) => {
       const smartObjects = s.smartObjects.map((o) =>
-        // `campaign` is kept, not cleared: it records where the object came from, which is what the
-        // inspector's provenance line reads. `brand` is kept for the same reason on the way up —
-        // a shared object still came from somewhere.
-        o.id === id ? { ...o, scope, brand: brand ?? o.brand } : o,
+        // `campaign` is kept EXCEPT when landing on 'campaign', where it decides visibility rather
+        // than recording provenance. Everywhere else it is provenance — where the object came from,
+        // which is what the inspector's line reads — and so is `brand` on the way up.
+        o.id === id
+          ? { ...o, scope, brand: opts?.brand ?? o.brand, campaign: scope === 'campaign' ? opts?.campaign ?? o.campaign : o.campaign }
+          : o,
       )
       saveSmartObjects(smartObjects)
       return { smartObjects }

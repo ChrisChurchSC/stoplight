@@ -2292,6 +2292,8 @@ export function FlowsView() {
   // a live drop target. A custom mime type rather than text/plain: the board already accepts a
   // campaign NAME as text/plain on the campaigns page, and a stray text drop must not place an object.
   const [dragObjectId, setDragObjectId] = useState<string | null>(null)
+  /** The rung a dragged smart object is currently over, so the section it would land on says so. */
+  const [rungDropTarget, setRungDropTarget] = useState<SmartObjectScope | null>(null)
   // The folder head currently under a dragged object ('__unfiled__' for the loose group).
   const [objDropFolder, setObjDropFolder] = useState<string | null>(null)
   // Right-click menu on a shelf row: which object, and where to draw it.
@@ -5495,7 +5497,10 @@ export function FlowsView() {
             {node.name}
             <span className="flow-lib-objfolder-n">{countDeep(node)}</span>
           </div>
-          {node.items.map(renderShelfObject)}
+          {/* The tiles get their own grid container. They sit among things that are not tiles — this
+              folder's head, its nested folders, the unfiled header — and a grid on the shared parent
+              would lay those out as cells too. */}
+          {node.items.length > 0 && <div className="flow-lib-objgrid">{node.items.map(renderShelfObject)}</div>}
           {node.children.map(renderNode)}
         </div>
       )
@@ -5513,7 +5518,7 @@ export function FlowsView() {
           onDragLeave={() => setObjDropFolder((p) => (p === '__unfiled__' ? null : p))}
         >
           {tree.length > 0 && unfiled.length > 0 && <div className="flow-lib-objects-h">{DRAFTS}</div>}
-          {unfiled.map(renderShelfObject)}
+          {unfiled.length > 0 && <div className="flow-lib-objgrid">{unfiled.map(renderShelfObject)}</div>}
           {tree.length > 0 && unfiled.length === 0 && (
             <div className="flow-lib-folder-empty">Drag here to take an object out of its folder.</div>
           )}
@@ -8845,7 +8850,7 @@ export function FlowsView() {
                 scope={scopeOf(so)}
                 canUseBrand={!!(so.brand || brand)}
                 onMake={() => {}}
-                onMove={(rung) => setSmartObjectScope(so.id, rung, rung === 'brand' ? so.brand || brand : undefined)}
+                onMove={(rung) => setSmartObjectScope(so.id, rung, { brand: so.brand || brand, campaign: boardKey })}
                 onOpen={() => setOpenGroupId(g.id)}
                 onDetach={() => releasePlacement(g.id)}
               />
@@ -10353,7 +10358,7 @@ export function FlowsView() {
                   const match = (o: SmartObject) =>
                     !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q)
                   const byName = (x: SmartObject, y: SmartObject) => x.name.localeCompare(y.name)
-                  const rungs: { key: string; title: string; hint: string; list: SmartObject[] }[] = [
+                  const rungs: { key: SmartObjectScope; title: string; hint: string; list: SmartObject[] }[] = [
                     {
                       key: 'campaign',
                       title: viewName ? viewName.replace(`${brand} — `, '') : 'This campaign',
@@ -10373,8 +10378,48 @@ export function FlowsView() {
                       list: smartObjects.filter((o) => scopeOf(o) === 'shared').filter(match).sort(byName),
                     },
                   ]
+                  /**
+                   * A RUNG IS A DROP TARGET, so the ladder can be climbed by dragging as well as from
+                   * the menu on the object's panel. The same drag already means two things depending
+                   * on where you let go — the canvas places it, a folder head files it — so a third
+                   * destination is the pattern, not a new one.
+                   *
+                   * Dropping on the rung it already sits on is a no-op rather than a write: it is the
+                   * commonest miss, and re-saving the same scope would still bump the board's history.
+                   * The brand rung refuses when no brand is in view, because that is the one that
+                   * needs somewhere to land.
+                   */
+                  const rungDrop = (to: SmartObjectScope) => ({
+                    onDragOver: (e: ReactDragEvent) => {
+                      if (!e.dataTransfer.types.includes(SMART_OBJECT_DND)) return
+                      if (to === 'brand' && !brand) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      e.dataTransfer.dropEffect = 'move'
+                      if (rungDropTarget !== to) setRungDropTarget(to)
+                    },
+                    onDragLeave: () => setRungDropTarget((v) => (v === to ? null : v)),
+                    onDrop: (e: ReactDragEvent) => {
+                      const id = e.dataTransfer.getData(SMART_OBJECT_DND)
+                      setRungDropTarget(null)
+                      setDragObjectId(null)
+                      if (!id) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      const o = smartObjects.find((x) => x.id === id)
+                      if (!o || scopeOf(o) === to) return
+                      if (to === 'brand' && !brand && !o.brand) return
+                      // The board doing the demoting is the board it becomes visible on, which is
+                      // the only honest reading of dropping it on "this campaign".
+                      setSmartObjectScope(id, to, { brand: o.brand || brand, campaign: boardKey })
+                    },
+                  })
                   return rungs.map((r) => (
-                    <div className="flow-lib-rung" key={r.key}>
+                    <div
+                      className={`flow-lib-rung${rungDropTarget === r.key ? ' drop' : ''}`}
+                      key={r.key}
+                      {...rungDrop(r.key)}
+                    >
                       <label className="flow-inspect-label">
                         {r.title}
                         <span className="flow-lib-rung-count">{r.list.length}</span>
