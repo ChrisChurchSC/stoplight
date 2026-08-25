@@ -27,25 +27,36 @@ import type { FlowReference, FlowRefType } from './clients'
  * `kind`, so no record picker offers it.
  */
 /**
- * WHERE a smart object lives. The ladder has two rungs and you climb it deliberately.
+ * WHERE a smart object lives. Three rungs, climbed deliberately, one at a time.
  *
  * 'campaign' is where every object starts: made on one board, usable only there. That is the honest
  * default, because most bundles are made in the middle of thinking and are not yet worth anyone
- * else's attention. 'brand' is the promotion: it moves into the brand folder and every campaign can
- * reach it, and from then on an edit reaches all of them.
+ * else's attention. 'brand' is the first promotion: it moves into the brand folder and every campaign
+ * for that brand can reach it, and from then on an edit reaches all of them.
+ *
+ * 'shared' is the second: reachable from every campaign of EVERY brand. For the bundles that are
+ * genuinely about the house rather than about a client — a legal disclaimer, a channel convention,
+ * a way of writing a CTA.
  *
  * Cmd+G used to write straight to the brand library, so every bundle anyone made anywhere became
  * part of the brand's shared vocabulary the moment it existed. The library filled with one-offs and
- * stopped being worth reading.
+ * stopped being worth reading. The same argument applies with more force a rung up, which is why
+ * 'shared' is reached from 'brand' and never from the keystroke.
+ *
+ * SHARED IS NOT A HOLE IN BRAND SCOPING. Every record list in this app is filtered to the brand in
+ * view on purpose — "an agency's dropdown offering one client's positioning while writing another's
+ * is the leak this app is otherwise careful about everywhere" (FlowsView). A shared object is the
+ * one thing that crosses, and it crosses because somebody said so twice, on the object, in a library
+ * that shows which rung it is on.
  */
-export type SmartObjectScope = 'campaign' | 'brand'
+export type SmartObjectScope = 'campaign' | 'brand' | 'shared'
 
 export interface SmartObject {
   id: string
   /**
    * The brand whose library owns it. Set once it is promoted; a campaign-scoped object may carry it
-   * too (it is where it will land), so `scope` is what decides visibility, never the presence of
-   * this field.
+   * too (it is where it will land), and a SHARED object keeps it as provenance — where it came from,
+   * not who may see it. So `scope` is what decides visibility, never the presence of this field.
    */
   brand?: string
   /** Which rung it sits on. Absent on objects written before the ladder existed: those were all
@@ -126,6 +137,28 @@ export function freshSmartObjectId(): string {
  * library's worth of objects vanish from the pickers that offer them.
  */
 export const scopeOf = (o: SmartObject): SmartObjectScope => o.scope ?? 'brand'
+
+/**
+ * CAN THIS BOARD SEE THIS OBJECT? The single answer, so a rung cannot be forgotten by one caller.
+ *
+ * Visibility was decided inline at each site — `o.brand === b.name && scopeOf(o) === 'brand'` in the
+ * shelf, `scopeOf(o) === 'campaign' && o.campaign === boardKey` a few lines above it — which is fine
+ * for as long as nobody adds a rung. Adding one turns every one of those into a place a shared object
+ * silently does not appear, and the failure is invisible: the object exists, the library just never
+ * lists it.
+ *
+ * `campaign` is the BOARD KEY, not a campaign name — that is what a campaign-scoped object stores.
+ */
+export function visibleOn(o: SmartObject, where: { brand?: string; campaign?: string }): boolean {
+  switch (scopeOf(o)) {
+    case 'shared':
+      return true
+    case 'brand':
+      return !!where.brand && o.brand === where.brand
+    case 'campaign':
+      return !!where.campaign && o.campaign === where.campaign
+  }
+}
 
 /**
  * The object's kind, given its refs: the lead ref's type, preferring the first one present in a

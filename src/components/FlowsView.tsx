@@ -36,7 +36,7 @@ import { type BrandObject } from '../domain/brandObject'
 import { AI_MODELS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
-import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
+import { type SmartObject, type SmartObjectScope, describeSmartObject, scopeOf, visibleOn } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverableGroup, type DeliverablePreset, type FlowDeliverable, freshNodeId, GROUP_TONE, nodeAssetCount, presetByKey, toneForPreset } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
@@ -84,6 +84,7 @@ import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { PanelHead } from './PanelHead'
+import { ComponentMenu } from './ComponentMenu'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
 import type { ChannelId, TrafficRow } from '../domain/types'
@@ -684,6 +685,10 @@ const CONNECT_SIDES = ['left', 'right', 'top', 'bottom'] as const
  * places and a definition typed twice is a definition that disagrees with itself later.
  */
 const CAMPAIGN_BRIEF_DESC = 'What the campaign is for, and what it makes'
+
+/** The definition line on a component's panel. Same job as OBJECT_META's menuDesc for a card kind:
+ *  say what this panel is, once, in the header rather than as the body's first paragraph. */
+const COMPONENT_DESC = 'A bundle you can reuse instead of rebuilding it'
 
 /**
  * HOW LONG AGO IT SAVED, spelled out. A status line is read as a sentence, so "1 min ago" rather
@@ -1308,7 +1313,7 @@ export function FlowsView() {
   const addSmartObject = useTrafficStore((s) => s.addSmartObject)
   const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
-  const promoteSmartObject = useTrafficStore((s) => s.promoteSmartObject)
+  const setSmartObjectScope = useTrafficStore((s) => s.setSmartObjectScope)
   const setSmartObjectFolder = useTrafficStore((s) => s.setSmartObjectFolder)
   // Record-create actions, so a card can make the thing it needs instead of dead-ending on
   // "No audiences established yet".
@@ -5530,7 +5535,13 @@ export function FlowsView() {
    * natural way to start one you will add to. Only cards, since a deliverable is not context.
    * Falls back to the single active selection so Cmd+G works without a marquee.
    */
-  const convertSelection = () => {
+  /**
+   * `rung` is chosen at creation now, from the component menu. The keystroke and the right-click menu
+   * still make a LOCAL one and always will: ⌘G used to write straight to the brand library, so every
+   * bundle anyone made anywhere joined the brand's shared vocabulary the moment it existed, and the
+   * library filled with one-offs. A rung is a decision, and a decision belongs to a menu you opened.
+   */
+  const convertSelection = (rung: SmartObjectScope = 'campaign') => {
     const pool = selected.size ? [...selected] : sel ? [sel] : []
     const ids = pool.filter((id) => objects.some((n) => n.id === id) && !placementOf(id))
     if (!ids.length) return
@@ -5551,7 +5562,7 @@ export function FlowsView() {
     // The CARDS go in as well as the records they resolve to. Records alone would drop every member
     // that carries none — a message, a voice, a note — so bundling "the RevOps angle" out of a
     // message and a proof point would have quietly kept the proof and thrown the message away.
-    const smartObjectId = addSmartObject(brand, suggestPlacementName(ids), refs, 'campaign', boardKey, members)
+    const smartObjectId = addSmartObject(brand, suggestPlacementName(ids), refs, rung, boardKey, members)
     setPlacements((g) => [...g, { id, smartObjectId, memberIds: ids }])
     setPos((p) => ({ ...p, [id]: spot }))
     // Members keep their own pos: it becomes their layout INSIDE the object.
@@ -8091,19 +8102,13 @@ export function FlowsView() {
           tag={nt.kind === 'data-source' ? <span className="flow-panel-wip">Work in progress</span> : undefined}
           actions={
             promoteCount > 0 ? (
-              <button
-                className="flow-panel-action"
-                title={`${promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}  ⌘⇧B`}
-                aria-label={promoteCount > 1 ? `Bundle ${promoteCount} cards into a smart object` : 'Make a smart object'}
-                onClick={() => convertSelection()}
-              >
-                {/* Two diamonds, one inside the other: an instance of a thing. Drawn to the same
-                    extent as the collapse glyph beside it, 4 to 20 on the 24 grid. */}
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 4 20 12 12 20 4 12z" />
-                  <path d="M12 9 15 12 12 15 9 12z" />
-                </svg>
-              </button>
+              <ComponentMenu
+                canUseBrand={!!brand}
+                onMake={(rung) => convertSelection(rung)}
+                onMove={() => {}}
+                onOpen={() => {}}
+                onDetach={() => {}}
+              />
             ) : undefined
           }
         />
@@ -8822,14 +8827,35 @@ export function FlowsView() {
     const members = g.memberIds.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n)
     return (
       <>
-        <div className="flow-panel-head">
-          <span className="flow-note-ic flow-insp-ic" style={{ color: 'var(--accent-2)' }} aria-hidden="true">
+        {/* The component control sits here, on the panel it made — which is the whole point. It used
+            to be on the CARD's panel and gated on "is there anything to convert", so making a
+            component turned the cards into this placement, the gate read false, and the button
+            disappeared into a panel that never had it. */}
+        <PanelHead
+          key={g.id}
+          tone="var(--accent-2)"
+          icon={
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
             </svg>
-          </span>
-          <span className="flow-panel-title">{placementName(g)}</span>
-        </div>
+          }
+          title={placementName(g)}
+          sub={COMPONENT_DESC}
+          actions={(() => {
+            const so = smartObjectFor(g)
+            if (!so) return undefined
+            return (
+              <ComponentMenu
+                scope={scopeOf(so)}
+                canUseBrand={!!(so.brand || brand)}
+                onMake={() => {}}
+                onMove={(rung) => setSmartObjectScope(so.id, rung, rung === 'brand' ? so.brand || brand : undefined)}
+                onOpen={() => setOpenGroupId(g.id)}
+                onDetach={() => releasePlacement(g.id)}
+              />
+            )
+          })()}
+        />
         <div className="flow-inspect">
           {/* "Bundled" only describes a MULTI-card object. Said of one card it was simply untrue, and
               it made a legitimate single-card object look like a mistake. */}
@@ -8872,55 +8898,49 @@ export function FlowsView() {
           {(() => {
             const so = smartObjectFor(g)
             if (!so) return null
-            return scopeOf(so) === 'brand' ? (
-              <div className="flow-inspect-note">
-                In the brand library{so.campaign ? `, promoted from ${shortCampaignName(so.campaign)}` : ''}. Editing it
-                changes every campaign using it, not just this one.
-              </div>
-            ) : (
+            /**
+             * ONE RUNG AT A TIME, and every rung says what it costs before you take it.
+             *
+             * The step from a brand's library to every brand's is the one worth being slow about.
+             * Every record list in this app is filtered to the brand in view on purpose, so an object
+             * that crosses is the exception — and it should be reached by choosing it here, on the
+             * object, after it has already earned a place in one library. Never from ⌘G, which is
+             * how the brand library filled with one-offs the first time.
+             *
+             * The way back down is offered beside it. A rung you cannot step off is a decision you
+             * have to be sure about before you can try it.
+             */
+            const scope = scopeOf(so)
+            const from = so.campaign ? `, promoted from ${shortCampaignName(so.campaign)}` : ''
+            if (scope === 'shared') {
+              return (
+                <>
+                  <div className="flow-inspect-note">
+                    Shared with every brand{so.brand ? `, made for ${so.brand}` : ''}. Editing it changes every campaign
+                    that uses it, whoever it belongs to.
+                  </div>
+                </>
+              )
+            }
+            if (scope === 'brand') {
+              return (
+                <>
+                  <div className="flow-inspect-note">
+                    In the brand library{from}. Editing it changes every campaign using it, not just this one.
+                  </div>
+                </>
+              )
+            }
+            return (
               <>
                 <div className="flow-inspect-note">Only on this campaign. Edit it freely: nothing else uses it.</div>
-                <button
-                  className="flow-obj-promote"
-                  title="Move to the brand library: every campaign can use it"
-                  onClick={() => promoteSmartObject(so.id, brand)}
-                  disabled={!brand}
-                >
-                  Add to the brand library
-                </button>
               </>
             )
           })()}
-          <button className="flow-insp-del" onClick={() => releasePlacement(g.id)}>Release</button>
-          {/* Deleting the OBJECT, as opposed to releasing it back into loose cards. This lived on the
-              card's inspector next to its smart-object picker; the picker is gone, so it moved to the
-              object's own panel, which is where it belonged anyway. Counted across boards rather than
-              described vaguely, because it reaches campaigns you cannot see from here. */}
-          {(() => {
-            const so = smartObjectFor(g)
-            if (!so) return null
-            // Guarded: a board persisted without `placements` (an older shape, or one written by a
-            // partial save) made this throw and took the whole inspector with it, which is what
-            // "grouping a card breaks" looked like from the outside.
-            const usedOn = flowBoards.filter((b) => (b.placements ?? []).some((p) => p.smartObjectId === so.id)).length
-            const armed = confirmDeleteObject === so.id
-            return (
-              <button
-                className={`flow-obj-del${armed ? ' armed' : ''}`}
-                onClick={() => {
-                  if (!armed) { setConfirmDeleteObject(so.id); return }
-                  setConfirmDeleteObject(null)
-                  deleteSmartObject(so.id)
-                  placements.filter((p) => p.smartObjectId === so.id).forEach((p) => releasePlacement(p.id))
-                  setObjects((os) => os.map((o) => (o.smartObjectId === so.id ? { ...o, smartObjectId: undefined } : o)))
-                }}
-              >
-                {armed
-                  ? `Click again to delete${usedOn > 1 ? ` from all ${usedOn} campaigns` : ''}`
-                  : 'Delete this smart object'}
-              </button>
-            )
-          })()}
+          {/* NO DELETE HERE. Destroying a component reaches campaigns you cannot see from this
+              board, so it belongs where the component lives: the library. Detaching is the board's
+              answer — it spills the cards back and leaves the component alone for everyone still
+              using it, which is also how you fork one into something new. */}
         </div>
       </>
     )
@@ -10326,7 +10346,7 @@ export function FlowsView() {
                     means. Brand folders below hold the promoted ones, which every campaign can reach. */}
                 {(() => {
                   const here = smartObjects
-                    .filter((o) => scopeOf(o) === 'campaign' && o.campaign === boardKey)
+                    .filter((o) => scopeOf(o) === 'campaign' && visibleOn(o, { campaign: boardKey }))
                     .filter((o) => !q || o.name.toLowerCase().includes(q))
                     .sort((x, y) => x.name.localeCompare(y.name))
                   return (
@@ -10344,6 +10364,26 @@ export function FlowsView() {
                       ) : (
                         <div className="flow-lib-objects">{renderObjectShelf(here)}</div>
                       )}
+                    </>
+                  )
+                })()}
+                {/* SHARED, ABOVE THE BRANDS, because that is where it is on the ladder: reachable from
+                    every campaign of every brand. Listed even when empty is wrong — an empty shelf is
+                    a promise nobody kept, the same argument the folders make — so it appears once
+                    something is on it. */}
+                {(() => {
+                  const shared = smartObjects
+                    .filter((o) => scopeOf(o) === 'shared')
+                    .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
+                    .sort((x, y) => x.name.localeCompare(y.name))
+                  if (!shared.length) return null
+                  return (
+                    <>
+                      <div className="flow-lib-brandshead">
+                        <span className="flow-library-secttl">Shared with every brand</span>
+                        <span className="flow-lib-folder-count">{shared.length}</span>
+                      </div>
+                      <div className="flow-lib-objects">{renderObjectShelf(shared)}</div>
                     </>
                   )
                 })()}
@@ -10375,7 +10415,7 @@ export function FlowsView() {
                     // canvas from — a duplicate of the Campaigns page and the tab strip, both of
                     // which open a campaign already. Nothing was reachable only from here.
                     const shelf = smartObjects
-                      .filter((o) => o.brand === b.name && scopeOf(o) === 'brand')
+                      .filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand: b.name }))
                       .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
                       .sort((x, y) => x.name.localeCompare(y.name))
                     if (q && shelf.length === 0 && !b.name.toLowerCase().includes(q)) return null
@@ -10394,7 +10434,7 @@ export function FlowsView() {
                             <span className="flow-lib-folder-name">{b.name}</span>
                             {/* Objects, not campaigns: the folder holds objects, so a campaign count
                                 here described something that is no longer in it. */}
-                            <span className="flow-lib-folder-count">{smartObjects.filter((o) => o.brand === b.name && scopeOf(o) === 'brand').length}</span>
+                            <span className="flow-lib-folder-count">{smartObjects.filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand: b.name })).length}</span>
                           </button>
                         </div>
                         {open && (
@@ -11144,11 +11184,21 @@ export function FlowsView() {
                       </svg>
                     </span>
                     <span className="flow-note-kind">Smart object</span>
-                    {/* A brand object is a LINKED copy: the chain says an edit here is an edit
+                    {/* A promoted object is a LINKED copy: the chain says an edit here is an edit
                         everywhere, which is exactly the thing you want to know before you touch it.
-                        A local object wears nothing, because there is nothing to warn about. */}
-                    {scope === 'brand' && (
-                      <span className="flow-obj-linked" title="In the brand library: edits reach every campaign using it" aria-label="In the brand library">
+                        A local object wears nothing, because there is nothing to warn about.
+
+                        SHARED WEARS IT TOO. This read `scope === 'brand'`, so the rung with the widest
+                        reach of the three — every campaign of every brand — was the one card on the
+                        board carrying no warning at all. */}
+                    {scope !== 'campaign' && (
+                      <span
+                        className="flow-obj-linked"
+                        title={scope === 'shared'
+                          ? 'Shared with every brand: edits reach every campaign using it, whoever it belongs to'
+                          : 'In the brand library: edits reach every campaign using it'}
+                        aria-label={scope === 'shared' ? 'Shared with every brand' : 'In the brand library'}
+                      >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
                           <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
@@ -12444,6 +12494,39 @@ export function FlowsView() {
               <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); openObjectTab(o.id) }}>
                 Open in its own tab<span className="flow-ctx-kbd">dbl-click</span>
               </button>
+              {/* DELETE LIVES HERE AND NOWHERE ELSE. It used to sit on the board's own panel, where
+                  it destroyed a component across campaigns you could not see from the board you were
+                  standing on. You have to come to the library — where the thing actually lives, and
+                  where the count below is true — to end it.
+
+                  It detaches as it goes rather than leaving placements pointing at nothing. Two
+                  presses, with the count on the second: this is the one action here that cannot be
+                  undone by making it again, because the boards using it lose their wiring too. */}
+              {(() => {
+                const usedOn = flowBoards.filter((b) => (b.placements ?? []).some((p) => p.smartObjectId === o.id)).length
+                const armed = confirmDeleteObject === o.id
+                return (
+                  <>
+                    <div className="flow-ctx-sep" />
+                    <button
+                      className={`flow-ctx-item danger${armed ? ' armed' : ''}`}
+                      role="menuitem"
+                      onClick={() => {
+                        if (!armed) { setConfirmDeleteObject(o.id); return }
+                        setConfirmDeleteObject(null)
+                        deleteSmartObject(o.id)
+                        placements.filter((p) => p.smartObjectId === o.id).forEach((p) => releasePlacement(p.id))
+                        setObjects((os) => os.map((x) => (x.smartObjectId === o.id ? { ...x, smartObjectId: undefined } : x)))
+                        close()
+                      }}
+                    >
+                      {armed
+                        ? `Click again to delete${usedOn ? ` · detaches ${usedOn} board${usedOn === 1 ? '' : 's'}` : ''}`
+                        : 'Delete this component'}
+                    </button>
+                  </>
+                )
+              })()}
             </div>
           </>
         )

@@ -149,7 +149,7 @@ import {
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
 import { type Product, freshProductId } from '../domain/product'
 import { type BrandObject, freshBrandObjectId } from '../domain/brandObject'
-import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
+import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, scopeOf, withContents } from '../domain/smartObject'
 import { makeObjectReference, type ObjectReference } from '../domain/objectReference'
 import { indexRecordDocs } from '../domain/recordDocs'
 import { type BrandDataset, type DatasetSource, blankDataset } from '../domain/brandDataset'
@@ -1921,7 +1921,12 @@ interface TrafficState {
    * edit reaches all of them. One-way: there is no demote, because campaigns may already be using it
    * by the time you would want one, and silently taking it back would break their briefs.
    */
-  promoteSmartObject: (id: string, brand: string) => void
+  /**
+   * Move an object up or down the ladder. Replaces promoteSmartObject, which could only reach
+   * 'brand' — with three rungs, an action named for one of them is an action that will be copied.
+   * `brand` is required going TO 'brand' (that is the library it lands in) and ignored otherwise.
+   */
+  setSmartObjectScope: (id: string, scope: SmartObjectScope, brand?: string) => void
   /**
    * File a smart object under a folder path in its brand's library. undefined = unfiled. Folders are
    * not registered anywhere: filing the last object out of one is what removes it.
@@ -2946,7 +2951,12 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
   const brandRecords = s.brandRecords.filter((b) => b.name.trim() !== name)
   // Smart objects are keyed by brand NAME, so leaving them would hand a RECREATED brand of the same
   // name a library of bundles pointing at records that no longer exist.
-  const smartObjects = s.smartObjects.filter((o) => o.brand !== name)
+  //
+  // EXCEPT THE SHARED ONES. A shared object keeps `brand` as provenance — where it was made — and
+  // deleting that brand would take the house's own bundles with it, from every other brand's boards,
+  // because of where it happened to be built. Its records may well be gone; that is a broken shared
+  // object, which is a thing you can see and fix, and not the same as a deleted one.
+  const smartObjects = s.smartObjects.filter((o) => o.brand !== name || scopeOf(o) === 'shared')
   const driveLinks = dropKey(s.driveLinks)
   const clientProfiles = dropKey(s.clientProfiles)
   const clientAudiences = dropKey(s.clientAudiences)
@@ -3768,12 +3778,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveSmartObjects(smartObjects)
       return { smartObjects }
     }),
-  promoteSmartObject: (id, brand) =>
+  setSmartObjectScope: (id, scope, brand) =>
     set((s) => {
       const smartObjects = s.smartObjects.map((o) =>
         // `campaign` is kept, not cleared: it records where the object came from, which is what the
-        // inspector's provenance line reads.
-        o.id === id ? { ...o, scope: 'brand' as const, brand } : o,
+        // inspector's provenance line reads. `brand` is kept for the same reason on the way up —
+        // a shared object still came from somewhere.
+        o.id === id ? { ...o, scope, brand: brand ?? o.brand } : o,
       )
       saveSmartObjects(smartObjects)
       return { smartObjects }
