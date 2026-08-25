@@ -8973,8 +8973,24 @@ a.flow-top-credits.out:hover { color: var(--danger, #e5484d); opacity: 0.82; }
   pointer-events: none;
   z-index: 5;
 }
+/**
+ * THE BEAD AT THE END OF A WIRE IS FOR WIRING, NOT FOR READING.
+ *
+ * It marks where a connector lands on a card. That used to be the channel node, one bead per
+ * channel; with the channel gone the wire reaches each asset, so every card grew a grey dot floating
+ * just off its left edge at rest. Four cards, four dots, attached to nothing you were doing.
+ *
+ * It cannot be revealed by hovering the card it sits against: the beads are drawn in an SVG overlay
+ * that is a SIBLING of the cards, so no selector on a card can reach one. What it can key on is the
+ * mode, which is the honest condition anyway. While the Link tool is live the endpoints are exactly
+ * what you are aiming at; the rest of the time they are decoration on somebody else's line.
+ */
 .flow-edge-dot {
   fill: var(--text-faint);
+  opacity: 0;
+}
+.flow-canvas.connecting .flow-edge-dot {
+  opacity: 1;
 }
 .flow-edge {
   fill: none;
@@ -25663,7 +25679,10 @@ table.aud-sheet td.stick .aud-cell {
 /* The channel's name beside the asset type. Same pill as .flow-node-kind so the pair reads as one
    row of facts about the card rather than two competing marks, with the gap that keeps them apart. */
 .flow-node-chan {
-  display: inline-block;
+  /* inline-FLEX, so the mark and the name sit on one baseline inside the one pill. */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-label);
   font-size: 11px;
   font-weight: 700;
@@ -25672,4 +25691,11 @@ table.aud-sheet td.stick .aud-cell {
   margin-right: 5px;
   padding: 2px 9px;
   border-radius: 6px;
+}
+/* The mark is small enough to read as part of the label rather than as a second element beside it,
+   and never shrinks: a squashed brand glyph is worse than no glyph. */
+.flow-node-chan svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
 }
