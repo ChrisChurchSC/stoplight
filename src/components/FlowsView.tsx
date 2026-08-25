@@ -1304,9 +1304,6 @@ export function FlowsView() {
   const openProject = useTrafficStore((s) => s.openProject)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const setBrandTab = useTrafficStore((s) => s.setBrandTab)
-  const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
-  const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const allBrandDatasets = useTrafficStore((s) => s.brandDatasets)
   const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
   // Brand-library smart objects: the reusable bundles a card picks from.
@@ -1490,7 +1487,6 @@ export function FlowsView() {
   }
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
-  const openBrandTab = useTrafficStore((s) => s.openBrandTab)
   const openDatasetTab = useTrafficStore((s) => s.openDatasetTab)
   const openObjectTab = useTrafficStore((s) => s.openObjectTab)
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
@@ -1840,15 +1836,6 @@ export function FlowsView() {
   const [briefSummoned, setBriefSummoned] = useState(false)
   // Search box on the Assets brand-library view.
   const [librarySearch, setLibrarySearch] = useState('')
-  // Assets is organized by brand folders. Which brand folders are expanded (the active brand starts
-  // open), and the inline "New brand" folder-creation input.
-  const [openBrandFolders, setOpenBrandFolders] = useState<Set<string>>(() => new Set())
-  const [addingBrand, setAddingBrand] = useState(false)
-  const [newBrandName, setNewBrandName] = useState('')
-  // The active brand's folder starts expanded (the user can still collapse it).
-  useEffect(() => {
-    if (brand) setOpenBrandFolders((prev) => (prev.has(brand) ? prev : new Set([...prev, brand])))
-  }, [brand])
   // Refs so the Cmd+. shortcut reads the panels' current state without re-binding the listener.
   const briefCollapsedRef = useRef(briefCollapsed)
   briefCollapsedRef.current = briefCollapsed
@@ -4996,6 +4983,16 @@ export function FlowsView() {
    * itself stays the source of truth, and the cards are views onto it.
    */
   const placeSmartObject = (o: SmartObject, at: { x: number; y: number }) => {
+    /**
+     * A BOARD ONLY PLACES WHAT IT MAY SEE. This took whatever it was handed, and the library used to
+     * show every brand's shelf — so another client's bundle could be dragged onto this campaign, and
+     * its records would then feed this campaign's copy. That is precisely the leak every record list
+     * in this file is filtered to avoid.
+     *
+     * The panel no longer offers them, which fixes the path people would actually take. This is the
+     * rule itself, in the one place that does the placing, so a future surface cannot reopen it.
+     */
+    if (!visibleOn(o, { brand, campaign: boardKey })) return
     recordHistory(true)
     const cards = objectCards(o).map((c) => ({ ...c, id: freshObjectId() }))
     const pid = freshGroupId()
@@ -7983,20 +7980,10 @@ export function FlowsView() {
     )
   }
 
-  // Assets is a brand-organized library browser: each brand is a folder of its campaign libraries.
-  const toggleBrandFolder = (b: string) =>
-    setOpenBrandFolders((prev) => {
-      const next = new Set(prev)
-      next.has(b) ? next.delete(b) : next.add(b)
-      return next
-    })
-  // Clicking a brand opens it as a canvas tab: its brand page on the Data tab (the flexible data
-  // sets), with the preset basics one tab over. Scoped to the clicked brand.
-  const openBrand = (b: string) => {
-    if (b !== brand) setClientFilter(b)
-    openBrandTab(b)
-    setBrandTab('data')
-  }
+  /* The Assets panel's brand-folder browser is gone: it is organised by RUNG now, so there is no
+     folder head to expand and no brand row to open from here. toggleBrandFolder, openBrand and
+     createBrandFolder went with it — the last of those minted a brand record and re-scoped the
+     workspace, which is the brand rail's job and never belonged behind a click in this panel. */
   // Double-clicking a Data source card opens its linked data set as a full-page spreadsheet tab. If
   // it isn't linked to a data set yet (empty, or a connector), spin one up, link it, and open it.
   const openDataCard = (nt: CanvasObject) => {
@@ -8015,20 +8002,6 @@ export function FlowsView() {
     const id = addBrandDataset(brand)
     setObjectRef(nt.id, id)
     openDatasetTab(id)
-  }
-  // "Start a folder for a new brand": create + register the brand, then drop into its brand page on
-  // the About tab so its basics (the dropdowns Gretel reads) are right there to fill out.
-  const createBrandFolder = () => {
-    const nm = newBrandName.trim()
-    if (!nm) return
-    const id = addBrandRecord({ name: nm })
-    updateBrandRecord(id, { name: nm })
-    setOpenBrandFolders((prev) => new Set([...prev, nm]))
-    setNewBrandName('')
-    setAddingBrand(false)
-    setClientFilter(nm)
-    openBrandTab(nm)
-    setBrandTab('about')
   }
 
   // The outline (campaign + its deliverables) — a map of the board's contents, shown in the
@@ -10448,126 +10421,66 @@ export function FlowsView() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="M15 9l-2 3 2 3" /></svg>
                 </button>
               </div>
+              {/* ONE SECTION PER RUNG, in the order the ladder climbs. The panel used to open on this
+                  campaign, then jump to a directory of BRANDS with a folder each — which is a
+                  different axis from the one the smart object menu teaches, so the panel quietly
+                  re-taught a second model of the same thing.
+
+                  It also showed you other brands' shelves, which you cannot use: brand-scoped means
+                  brand-scoped. Dragging one onto this board was possible and was a cross-brand leak
+                  (see placeSmartObject, which now refuses it). Rung-first closes that by only ever
+                  showing what this board may actually reach.
+
+                  What went with the brand tree: opening a brand's page from a folder row, which
+                  re-scoped the whole workspace from a click that looked like an accordion, and "New
+                  brand", which minted a brand record from inside a smart object panel. Neither is a
+                  smart object concern; both live on the brand rail. */}
               <div className="flow-library-body">
-                {/* Libraries organized by brand: one folder per brand, each holding its campaigns.
-                    "New brand" starts a folder for a brand you don't have yet. */}
-                {/* THIS CAMPAIGN FIRST. A campaign-scoped object exists only on the board you are
-                    looking at, so burying it under a brand folder said the opposite of what scoping
-                    means. Brand folders below hold the promoted ones, which every campaign can reach. */}
                 {(() => {
-                  const here = smartObjects
-                    .filter((o) => scopeOf(o) === 'campaign' && visibleOn(o, { campaign: boardKey }))
-                    .filter((o) => !q || o.name.toLowerCase().includes(q))
-                    .sort((x, y) => x.name.localeCompare(y.name))
-                  return (
-                    <>
-                      <div className="flow-lib-brandshead">
-                        <span className="flow-library-secttl">
-                          {viewName ? viewName.replace(`${brand} — `, '') : 'This campaign'}
-                        </span>
-                        <span className="flow-lib-folder-count">{here.length}</span>
-                      </div>
-                      {/* The empty state points at the control that now decides the RUNG, not only at
-                          the shortcut. ⌘G still works and still makes a local one, which is why it is
-                          named second rather than dropped: it is the fast path once you know the
-                          rungs, and the wrong first thing to teach. */}
-                      {here.length === 0 ? (
+                  const match = (o: SmartObject) =>
+                    !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q)
+                  const byName = (x: SmartObject, y: SmartObject) => x.name.localeCompare(y.name)
+                  const rungs: { key: string; title: string; hint: string; list: SmartObject[] }[] = [
+                    {
+                      key: 'campaign',
+                      title: viewName ? viewName.replace(`${brand} — `, '') : 'This campaign',
+                      hint: 'Only this board can use these',
+                      list: smartObjects.filter((o) => scopeOf(o) === 'campaign' && visibleOn(o, { campaign: boardKey })).filter(match).sort(byName),
+                    },
+                    {
+                      key: 'brand',
+                      title: brand || 'This brand',
+                      hint: brand ? `Every campaign for ${brand}` : 'Every campaign for this brand',
+                      list: smartObjects.filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand })).filter(match).sort(byName),
+                    },
+                    {
+                      key: 'shared',
+                      title: 'Every brand',
+                      hint: 'Any campaign, whoever it belongs to',
+                      list: smartObjects.filter((o) => scopeOf(o) === 'shared').filter(match).sort(byName),
+                    },
+                  ]
+                  return rungs.map((r) => (
+                    <div className="flow-lib-rung" key={r.key}>
+                      <label className="flow-inspect-label">
+                        {r.title}
+                        <span className="flow-lib-rung-count">{r.list.length}</span>
+                      </label>
+                      {/* The rung's own sentence, because "This brand" does not say who else is
+                          affected and that is the whole difference between the three. */}
+                      <div className="flow-lib-rung-hint">{r.hint}</div>
+                      {r.list.length === 0 ? (
                         <div className="flow-lib-folder-empty">
-                          Nothing here yet. Select a card, then use the smart object button at the top
-                          of its panel to choose who can reuse it. ⌘G makes one for this campaign.
+                          {r.key === 'campaign'
+                            ? 'Nothing here yet. Select a card, then use the smart object button at the top of its panel to choose who can reuse it.'
+                            : `Nothing on this rung yet. Move one here from its panel to let ${r.key === 'shared' ? 'every brand' : 'every campaign'} use it.`}
                         </div>
                       ) : (
-                        <div className="flow-lib-objects">{renderObjectShelf(here)}</div>
+                        <div className="flow-lib-objects">{renderObjectShelf(r.list)}</div>
                       )}
-                    </>
-                  )
+                    </div>
+                  ))
                 })()}
-                {/* SHARED, ABOVE THE BRANDS, because that is where it is on the ladder: reachable from
-                    every campaign of every brand. Listed even when empty is wrong — an empty shelf is
-                    a promise nobody kept, the same argument the folders make — so it appears once
-                    something is on it. */}
-                {(() => {
-                  const shared = smartObjects
-                    .filter((o) => scopeOf(o) === 'shared')
-                    .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
-                    .sort((x, y) => x.name.localeCompare(y.name))
-                  if (!shared.length) return null
-                  return (
-                    <>
-                      <div className="flow-lib-brandshead">
-                        <span className="flow-library-secttl">Shared with every brand</span>
-                        <span className="flow-lib-folder-count">{shared.length}</span>
-                      </div>
-                      <div className="flow-lib-objects">{renderObjectShelf(shared)}</div>
-                    </>
-                  )
-                })()}
-                <div className="flow-lib-brandshead">
-                  <span className="flow-library-secttl">Brands</span>
-                  <button className="flow-lib-newbrand" onClick={() => setAddingBrand((v) => !v)}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                    New brand
-                  </button>
-                </div>
-                {addingBrand && (
-                  <input
-                    className="flow-lib-newbrand-input"
-                    autoFocus
-                    placeholder="Brand name…"
-                    value={newBrandName}
-                    onChange={(e) => setNewBrandName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); createBrandFolder() }
-                      if (e.key === 'Escape') { setAddingBrand(false); setNewBrandName('') }
-                    }}
-                    onBlur={() => { if (!newBrandName.trim()) setAddingBrand(false) }}
-                  />
-                )}
-                <div className="flow-lib-folders">
-                  {brands.map((b) => {
-                    // A brand folder holds SMART OBJECTS, nothing else. It used to also list the
-                    // brand's campaigns, which made the folder a second navigation tree to work the
-                    // canvas from — a duplicate of the Campaigns page and the tab strip, both of
-                    // which open a campaign already. Nothing was reachable only from here.
-                    const shelf = smartObjects
-                      .filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand: b.name }))
-                      .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
-                      .sort((x, y) => x.name.localeCompare(y.name))
-                    if (q && shelf.length === 0 && !b.name.toLowerCase().includes(q)) return null
-                    const open = openBrandFolders.has(b.name) || !!q
-                    return (
-                      <div className="flow-lib-folder" key={b.name}>
-                        <div className={`flow-lib-folder-head${b.name === brand ? ' current' : ''}`}>
-                          <button className={`flow-lib-chev${open ? ' open' : ''}`} title={open ? 'Collapse' : 'Expand'} aria-label={open ? 'Collapse' : 'Expand'} onClick={() => toggleBrandFolder(b.name)}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
-                          </button>
-                          {/* The brand row itself opens the brand's page (basics + data sets). */}
-                          <button className="flow-lib-folder-open" title={`Open ${b.name}`} onClick={() => openBrand(b.name)}>
-                            <span className="flow-lib-folder-ic" aria-hidden="true">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
-                            </span>
-                            <span className="flow-lib-folder-name">{b.name}</span>
-                            {/* Objects, not campaigns: the folder holds objects, so a campaign count
-                                here described something that is no longer in it. */}
-                            <span className="flow-lib-folder-count">{smartObjects.filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand: b.name })).length}</span>
-                          </button>
-                        </div>
-                        {open && (
-                          <div className="flow-lib-folder-body">
-                            {shelf.length === 0 ? (
-                              <div className="flow-lib-folder-empty">
-                                No smart objects yet. Promote one from a campaign to share it here.
-                              </div>
-                            ) : (
-                              <div className="flow-lib-objects">{renderObjectShelf(shelf)}</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  {brands.length === 0 && <div className="flow-library-empty">No brands yet. Start one above.</div>}
-                </div>
               </div>
             </aside>
           )
