@@ -84,7 +84,7 @@ import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { PanelHead } from './PanelHead'
-import { ComponentMenu } from './ComponentMenu'
+import { SmartObjectMenu } from './SmartObjectMenu'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
 import type { ChannelId, TrafficRow } from '../domain/types'
@@ -686,9 +686,9 @@ const CONNECT_SIDES = ['left', 'right', 'top', 'bottom'] as const
  */
 const CAMPAIGN_BRIEF_DESC = 'What the campaign is for, and what it makes'
 
-/** The definition line on a component's panel. Same job as OBJECT_META's menuDesc for a card kind:
+/** The definition line on a smart object's panel. Same job as OBJECT_META's menuDesc for a card kind:
  *  say what this panel is, once, in the header rather than as the body's first paragraph. */
-const COMPONENT_DESC = 'A bundle you can reuse instead of rebuilding it'
+const SMART_OBJECT_DESC = 'A bundle you can reuse instead of rebuilding it'
 
 /**
  * HOW LONG AGO IT SAVED, spelled out. A status line is read as a sentence, so "1 min ago" rather
@@ -5426,6 +5426,29 @@ export function FlowsView() {
             </span>
           )}
         </span>
+        {/* A VISIBLE WAY IN. Every action on a row was a hidden gesture — drag to place, double-click
+            to open, right-click for everything else including delete — and a tooltip you only meet by
+            hovering and waiting is not a way to learn three of them. Right-click still works; this is
+            the same menu, on a control you can see.
+
+            Appears on hover and on keyboard focus, so it is reachable without a mouse and does not
+            clutter a shelf you are only reading. */}
+        <button
+          className="flow-lib-object-more-btn"
+          title="More"
+          aria-label={`More for ${o.name || 'this smart object'}`}
+          aria-haspopup="menu"
+          onClick={(e) => {
+            e.stopPropagation()
+            const r = e.currentTarget.getBoundingClientRect()
+            setShelfMenu({ id: o.id, x: Math.round(r.right - 6), y: Math.round(r.bottom + 4) })
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
+          </svg>
+        </button>
       </div>
     )
   }
@@ -8102,7 +8125,7 @@ export function FlowsView() {
           tag={nt.kind === 'data-source' ? <span className="flow-panel-wip">Work in progress</span> : undefined}
           actions={
             promoteCount > 0 ? (
-              <ComponentMenu
+              <SmartObjectMenu
                 canUseBrand={!!brand}
                 onMake={(rung) => convertSelection(rung)}
                 onMove={() => {}}
@@ -8840,12 +8863,12 @@ export function FlowsView() {
             </svg>
           }
           title={placementName(g)}
-          sub={COMPONENT_DESC}
+          sub={SMART_OBJECT_DESC}
           actions={(() => {
             const so = smartObjectFor(g)
             if (!so) return undefined
             return (
-              <ComponentMenu
+              <SmartObjectMenu
                 scope={scopeOf(so)}
                 canUseBrand={!!(so.brand || brand)}
                 onMake={() => {}}
@@ -10357,9 +10380,14 @@ export function FlowsView() {
                         </span>
                         <span className="flow-lib-folder-count">{here.length}</span>
                       </div>
+                      {/* The empty state points at the control that now decides the RUNG, not only at
+                          the shortcut. ⌘G still works and still makes a local one, which is why it is
+                          named second rather than dropped: it is the fast path once you know the
+                          rungs, and the wrong first thing to teach. */}
                       {here.length === 0 ? (
                         <div className="flow-lib-folder-empty">
-                          No smart objects here yet. Select cards on the canvas and press ⌘G.
+                          Nothing here yet. Select a card, then use the smart object button at the top
+                          of its panel to choose who can reuse it. ⌘G makes one for this campaign.
                         </div>
                       ) : (
                         <div className="flow-lib-objects">{renderObjectShelf(here)}</div>
@@ -12495,7 +12523,7 @@ export function FlowsView() {
                 Open in its own tab<span className="flow-ctx-kbd">dbl-click</span>
               </button>
               {/* DELETE LIVES HERE AND NOWHERE ELSE. It used to sit on the board's own panel, where
-                  it destroyed a component across campaigns you could not see from the board you were
+                  it destroyed a smart object across campaigns you could not see from the board you were
                   standing on. You have to come to the library — where the thing actually lives, and
                   where the count below is true — to end it.
 
@@ -12522,7 +12550,7 @@ export function FlowsView() {
                     >
                       {armed
                         ? `Click again to delete${usedOn ? ` · detaches ${usedOn} board${usedOn === 1 ? '' : 's'}` : ''}`
-                        : 'Delete this component'}
+                        : 'Delete this smart object'}
                     </button>
                   </>
                 )

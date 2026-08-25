@@ -4782,15 +4782,15 @@ button.mf-open:focus-visible,
    control up there, and plainly crooked next to a second icon that is laid out in the title row. */
 .flow-panel-collapse { position: absolute; top: 16px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .flow-panel-collapse:hover { background: var(--surface-2); color: var(--text); }
-/* THE COMPONENT CONTROL. The button reuses .flow-panel-action so it sits with the collapse control
+/* THE SMART OBJECT CONTROL. The button reuses .flow-panel-action so it sits with the collapse control
    exactly as the old icon did; `on` is the filled state, which is the whole signal — filled means
-   "this is a component", and which RUNG it is on is said in words in the menu it opens. */
-.flow-cmp { position: relative; display: inline-flex; flex: 0 0 auto; margin-left: auto }
-.flow-cmp-btn.on { color: var(--accent) }
-.flow-cmp-btn[aria-expanded='true'] { background: var(--surface-2); color: var(--text) }
+   "this is one", and which RUNG it is on is said in words in the menu it opens. */
+.flow-so { position: relative; display: inline-flex; flex: 0 0 auto; margin-left: auto }
+.flow-so-btn.on { color: var(--accent) }
+.flow-so-btn[aria-expanded='true'] { background: var(--surface-2); color: var(--text) }
 
 /* Hangs off the button rather than the panel, so it stays put when the panel scrolls under it. */
-.flow-cmp-menu {
+.flow-so-menu {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
@@ -4802,7 +4802,7 @@ button.mf-open:focus-visible,
   background: var(--surface);
   box-shadow: 0 12px 28px -10px rgba(16, 24, 40, 0.28);
 }
-.flow-cmp-menu .flow-ctx-item {
+.flow-so-menu .flow-ctx-item {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -4813,20 +4813,50 @@ button.mf-open:focus-visible,
 /* THE RUNG, IN WORDS, and the consequence under each choice. The icon deliberately does not encode
    which rung this is, so the menu has to — and a rung is a decision about who else is affected,
    which is not a thing to infer from a label like "This brand". */
-.flow-cmp-menu-head {
+.flow-so-menu-head {
   padding: 6px 9px 7px;
   font-size: 11px;
   font-weight: 650;
   color: var(--text-muted);
 }
-.flow-cmp-menu-hint { font-size: 10.5px; line-height: 1.35; color: var(--text-faint) }
-.flow-cmp-menu .flow-ctx-item:disabled { opacity: 0.45; cursor: default }
-.flow-cmp-menu .flow-ctx-item:disabled .flow-cmp-menu-hint { color: var(--text-faint) }
-.flow-cmp-menu-sep { height: 1px; margin: 5px -5px; background: var(--border) }
+.flow-so-menu-hint { font-size: 10.5px; line-height: 1.35; color: var(--text-faint) }
+.flow-so-menu .flow-ctx-item:disabled { opacity: 0.45; cursor: default }
+.flow-so-menu .flow-ctx-item:disabled .flow-so-menu-hint { color: var(--text-faint) }
+.flow-so-menu-sep { height: 1px; margin: 5px -5px; background: var(--border) }
 
 /* Armed delete in the shelf menu: quiet until the first press, then unmistakable. Two presses because
    this is the one action here that cannot be undone by making the thing again — the boards using it
    lose their wiring too. */
+/* The row's visible menu button. Hidden until the row is hovered or the button is focused: a shelf
+   you are reading should not be a column of controls, and a shelf you are acting on should not make
+   you guess. */
+.flow-lib-object { position: relative }
+.flow-lib-object-more-btn {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+.flow-lib-object-more-btn svg { width: 15px; height: 15px }
+.flow-lib-object:hover .flow-lib-object-more-btn,
+.flow-lib-object-more-btn:focus-visible { opacity: 1 }
+.flow-lib-object-more-btn:hover { color: var(--text); background: var(--surface-2) }
+.flow-lib-object-more-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+/* Room for it, so a long name does not run under the button. */
+.flow-lib-object .flow-lib-object-txt { padding-right: 22px }
+
 .flow-ctx-item.danger.armed {
   color: var(--red);
   background: color-mix(in srgb, var(--red) 12%, transparent);
