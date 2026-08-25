@@ -25629,3 +25629,105 @@ table.aud-sheet td.stick .aud-cell {
   pointer-events: none;
   z-index: 50;
 }
+
+/**
+ * A CHANNEL IS A BOUNDARY, NOT A STOP ON THE JOURNEY.
+ *
+ * It used to be a card in the spine with its posts hanging off to the right, which meant a campaign
+ * with four assets drew seven boxes and put a hop between the brief and every piece of work — the
+ * channel is not a step anybody takes, it is a label for the ones they do. At four assets that cost
+ * more than the grouping was worth, and the board was hard to read.
+ *
+ * So the card becomes the frame around its own posts: same information (the name, the count, what is
+ * being written, what is stale), no extra box and no extra hop. The posts connect to the brief.
+ *
+ * The frame is still the deliverable NODE underneath — same data-node-id, same connect handles, same
+ * position entry. That is not incidental: connectors are stored against the deliverable key, and so
+ * is whether a channel is detached from the brief, and pruneBoard deletes any edge whose endpoint
+ * stopped existing. Keeping the key is what lets this be a restyle rather than a migration.
+ */
+.flow-chan {
+  border: 1.5px dashed color-mix(in srgb, var(--tone, var(--border-strong)) 42%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tone, var(--text-faint)) 6%, transparent);
+  padding: 8px 10px 10px;
+  gap: 8px;
+}
+/* The card flattens into the frame's header strip: it is labelling the box it sits on now, so the
+   surface, border and shadow that made it read as a separate thing all come off. */
+.flow-chan > .flow-node.flow-tier-deliv {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  padding: 0 2px 4px;
+  border-radius: 0;
+}
+/* Selected still has to read, and without a surface to tint it is the rim that says so. */
+.flow-chan > .flow-node.flow-tier-deliv.sel,
+.flow-chan > .flow-node.flow-tier-deliv.multi {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.flow-chan:has(> .flow-node.flow-tier-deliv.sel),
+.flow-chan:has(> .flow-node.flow-tier-deliv.multi) {
+  border-style: solid;
+  border-color: var(--tone, var(--accent));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
+}
+/* Posts stack inside the frame rather than hanging off its right edge. */
+.flow-chan .flow-branch-list {
+  position: static;
+  gap: 8px;
+}
+/* The elbows drew the hop that no longer exists — a stub of pipework pointing at nothing. */
+.flow-chan .flow-branch-list::before,
+.flow-chan .flow-branch-list::after,
+.flow-chan .flow-branch-row::before {
+  content: none;
+}
+.flow-chan .flow-branch-port {
+  display: none;
+}
+/* The list and its rows fill the frame, so the cards open out to their own max width inside it
+   rather than sitting at their minimum with a strip of tint beside them. Safe now that the frame's
+   width is stated outright: there is no longer a loop where the frame measures what it contains. */
+.flow-chan .flow-branch-list,
+.flow-chan .flow-branch-row {
+  width: 100%;
+}
+/**
+ * THE FRAME IS SIZED IN PIXELS, ON PURPOSE.
+ *
+ * Every intrinsic option loops. The wrapper around each channel shrink-wraps to its content, the
+ * frame then fills the wrapper, so the frame's own width is derived from a box that was derived from
+ * the frame. Whichever intrinsic keyword goes on the frame, the number that comes back is the widest
+ * thing inside laid out on ONE line — which is the header, not the cards: "LinkedIn post · post ×2"
+ * unwrapped is 340px against a 214px card, and a max-width on the header does not clamp what it
+ * contributes to that measurement.
+ *
+ * So the width is stated. 250 is the post card's own max-width, plus the frame's 10px padding either
+ * side and its 1.5px rim: the cards open out to fill it exactly, the channel name wraps inside it,
+ * and there is no band of empty tint down the right-hand side. If .flow-brief-node's max-width
+ * changes, this changes with it.
+ *
+ * The selector carries .flow-branched too because .flow-vcol .flow-branched sets width:100% and
+ * outranks a single class: every earlier attempt at this was landing in the stylesheet, matching the
+ * element, and losing on specificity, which looks exactly like the rule not being applied at all.
+ */
+.flow-branched.flow-chan,
+.flow-vcol .flow-branched.flow-chan {
+  width: 273px;
+}
+.flow-chan > .flow-node.flow-tier-deliv {
+  max-width: 100%;
+}
+.flow-chan > .flow-node.flow-tier-deliv .flow-node-label {
+  white-space: normal;
+}
+/* The card is a flex item in its row and would not grow on its own, so it sat at its 214px minimum
+   inside a 250px opening — the strip of tint down its right-hand side being the very thing the frame
+   was meant to stop drawing. Let it take the room. */
+.flow-chan .flow-branch-row > .flow-node {
+  flex: 1 1 auto;
+}
