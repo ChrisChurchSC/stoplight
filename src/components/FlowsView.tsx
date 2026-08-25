@@ -7184,6 +7184,33 @@ export function FlowsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowBoards, boardsHydrated, viewName])
 
+  /**
+   * AND THE SAME FOR CONNECTORS, for exactly the same reason one line up.
+   *
+   * link_assets draws its line by writing a connector to the stored board. With the campaign open,
+   * that write lands in the store while this component is holding its own copy - so the line never
+   * appeared, and the next autosave from here wrote this copy back over it. The link was made, the
+   * tool reported it, and the connector vanished. The comment above describes that failure for
+   * object cards; connectors were the half nobody had hit yet, and the MCP requires an open tab, so
+   * every link made through it went through this window.
+   *
+   * Merges rather than reloads, and only ever ADDS, on the same terms: a wire deleted in this
+   * session is gone from local state on purpose, so the keys seen at load are remembered and never
+   * re-added, or tidying up a line would bring it straight back.
+   */
+  const seenConnectorKeys = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!boardsHydrated || !viewName) return
+    const stored = boardFor(flowBoards, viewName)
+    const key = (c: { from: string; to: string }) => `${c.from}→${c.to}`
+    const known = new Set(connectors.map(key))
+    const fresh = stored.connectors.filter((c) => !known.has(key(c)) && !seenConnectorKeys.current.has(key(c)))
+    for (const c of stored.connectors) seenConnectorKeys.current.add(key(c))
+    if (!fresh.length) return
+    setConnectors((cs) => [...cs, ...fresh])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowBoards, boardsHydrated, viewName])
+
   // Measure node positions (canvas-local) so the SVG connectors track them as nodes
   // move, pan, and zoom. During an active drag we SKIP the remeasure — re-reading every node's
   // bounding rect each frame can't keep 60fps on a large flow, so connectors would trail the
