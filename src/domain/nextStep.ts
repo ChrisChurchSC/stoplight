@@ -96,6 +96,19 @@ export interface WorkspaceSnapshot {
   /** Funnel stages with no channel yet, and what would fill them. */
   uncoveredStages: { label: string; suggest: string[] }[]
   /**
+   * How many of the campaign assets are on the journey at all: carrying a linksTo or a branchOf,
+   * or named by another asset one.
+   *
+   * Generation does not draw the journey. add_asset, generate_assets and fan_out all make assets
+   * and none of them writes linksTo or branchOf, because what leads to what is a decision rather
+   * than a consequence of existing. link_assets is the only tool that draws one. So a campaign can
+   * be generated end to end and come out as a pile of cards with no route between them, which is
+   * exactly what this ladder exists to catch and could not see: the journey rung asked only whether
+   * every funnel STAGE had a channel, so a campaign with full coverage and no links passed it
+   * without a word.
+   */
+  linkedAssets: number
+  /**
    * Whether a review has been run FOR THIS SCOPE, and what it found. A run against a different
    * campaign says nothing about this one.
    */
@@ -132,7 +145,13 @@ function rungsFor(s: WorkspaceSnapshot): Rung[] {
     // a board whose cards ask for none (a Voice, a Concept) is not unfinished.
     { key: 'direction', label: LABELS.direction, done: s.cardsAskingDirection === 0 || s.cardsWithDirection > 0 },
     { key: 'assets', label: LABELS.assets, done: s.assetCount > 0 },
-    { key: 'journey', label: LABELS.journey, done: s.uncoveredStages.length === 0 },
+    // Two ways to have no journey: a stage nothing runs at, or assets nothing connects. One asset
+    // cannot be linked to anything, so a campaign of one is not unfinished for having no route.
+    {
+      key: 'journey',
+      label: LABELS.journey,
+      done: s.uncoveredStages.length === 0 && (s.assetCount < 2 || s.linkedAssets > 0),
+    },
     { key: 'finish', label: LABELS.finish, done: s.assetCount > 0 && s.unfinishedAssets === 0 },
     { key: 'review', label: LABELS.review, done: s.reviewRun && !s.reviewStale && s.reviewFindings === 0 },
     { key: 'approve', label: LABELS.approve, done: s.assetCount > 0 && s.approvedAssets >= s.assetCount },
@@ -262,6 +281,18 @@ export function nextStep(s: WorkspaceSnapshot): NextStep {
 
     case 'journey': {
       const gaps = s.uncoveredStages
+      // A gap in coverage is the louder problem and is answered first: there is no point asking what
+      // leads to what while a whole stage of the funnel has nothing running at it.
+      if (gaps.length === 0)
+        return step({
+          headline: `Nothing on ${campaign} leads anywhere: ${s.assetCount} assets, no links between them.`,
+          why: 'Assets that never say where they lead are a pile of posts that each read fine and take the reader nowhere. The line is also what makes a CTA owed, so an unlinked campaign passes a review it should not.',
+          ask: 'Which asset should lead to which?',
+          actions: [
+            { call: `link_assets(campaign: ${campaign}, from: "…", to: "…")`, what: 'Draw the route between two assets' },
+            { call: `link_assets(campaign: ${campaign}, from: "…", to: "…", as: "branch")`, what: 'Branch one asset into several next steps' },
+          ],
+        })
       return step({
         headline: `Nothing runs at ${gaps.map((g) => g.label.toLowerCase()).join(' or ')} on ${campaign}.`,
         why: 'A journey with a missing stage asks the reader to jump a gap the campaign never built.',

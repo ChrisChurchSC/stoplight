@@ -29,6 +29,8 @@ const snap = (over: Partial<WorkspaceSnapshot> = {}): WorkspaceSnapshot => ({
   unfinishedAssets: 0,
   approvedAssets: 6,
   uncoveredStages: [],
+  // Linked by default, so every test that is not about the journey keeps the rung it expects.
+  linkedAssets: 6,
   reviewRun: true,
   reviewFindings: 0,
   ...over,
@@ -194,5 +196,46 @@ describe('what every answer carries', () => {
     expect(step.ladder).toHaveLength(10)
     expect(step.ladder.find((r) => r.key === 'brand')!.done).toBe(true)
     expect(step.ladder.find((r) => r.key === 'goal')!.done).toBe(false)
+  })
+})
+
+/**
+ * A GENERATED CAMPAIGN COMES OUT UNLINKED, AND THE LADDER USED TO WALK STRAIGHT PAST IT.
+ *
+ * Nothing that makes assets draws the journey: add_asset, generate_assets and fan_out all create
+ * cards and none of them writes linksTo or branchOf, because what leads to what is a decision rather
+ * than a consequence of existing. link_assets is the only tool that draws one.
+ *
+ * So the common failure is a campaign built end to end by an agent that never called it: every stage
+ * covered, every asset written, and no route between any of them. The journey rung asked only about
+ * STAGE coverage, so that campaign passed it in silence and the ladder moved on to review.
+ */
+describe('the journey rung sees links, not just stage coverage', () => {
+  it('is unfinished when a campaign of several assets has no links at all', () => {
+    const step = nextStep(snap({ assetCount: 6, linkedAssets: 0 }))
+    expect(step.stage).toBe('journey')
+    expect(step.headline).toContain('leads anywhere')
+    expect(step.actions.some((a) => a.call.startsWith('link_assets'))).toBe(true)
+  })
+
+  it('answers the missing STAGE first when both are wrong', () => {
+    // No point asking what leads to what while a whole stage has nothing running at it.
+    const step = nextStep(
+      snap({ assetCount: 6, linkedAssets: 0, uncoveredStages: [{ label: 'Conversion', suggest: ['Landing page'] }] }),
+    )
+    expect(step.stage).toBe('journey')
+    expect(step.headline).toContain('Conversion'.toLowerCase())
+    expect(step.actions.some((a) => a.call.startsWith('add_asset'))).toBe(true)
+  })
+
+  it('does not ask a one-asset campaign to link anything', () => {
+    // One asset cannot lead to another. A rung nobody can finish is worse than no rung.
+    const step = nextStep(snap({ assetCount: 1, linkedAssets: 0, approvedAssets: 1 }))
+    expect(step.stage).not.toBe('journey')
+  })
+
+  it('is finished once anything is linked', () => {
+    const step = nextStep(snap({ assetCount: 6, linkedAssets: 2 }))
+    expect(step.stage).not.toBe('journey')
   })
 })

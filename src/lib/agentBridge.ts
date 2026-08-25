@@ -1721,6 +1721,18 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       unfinishedAssets: unfinished,
       approvedAssets: rows.filter((r) => r.status === 'approved').length,
       uncoveredStages: uncovered,
+      // On the journey at all: leads somewhere, came from somewhere, or is somewhere another asset
+      // leads. Counted by NAME because that is how linksTo and branchOf store it.
+      linkedAssets: (() => {
+        const named = new Set<string>()
+        for (const r of rows) {
+          if (r.linksTo?.trim()) named.add(r.linksTo.trim().toLowerCase())
+          if (r.branchOf?.trim()) named.add(r.branchOf.trim().toLowerCase())
+        }
+        return rows.filter(
+          (r) => r.linksTo?.trim() || r.branchOf?.trim() || named.has((r.assetName ?? '').trim().toLowerCase()),
+        ).length
+      })(),
       reviewRun: reviewedHere,
       reviewFindings: reviewedHere ? (st.claudeBreaks ?? []).length : 0,
       reviewStale,
