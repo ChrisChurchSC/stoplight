@@ -11091,8 +11091,17 @@ export function FlowsView() {
                           posts and their ports, so a whole motion reads as one family on the
                           board: paid red, email teal, web orange. See GROUP_TONE. */}
                       <div
-                        className="flow-branched"
-                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: (posts.length > 0 || variantRows.length > 0) ? `${posts.length * 168 + (varTreeH[d.key] ?? 0) + (variantRows.length ? 40 : 0)}px` : undefined, ['--tone']: d.tone } as React.CSSProperties}
+                        className="flow-branched flow-chan"
+                        /**
+                         * The reserved min-height went with the branch list going into normal flow.
+                         * It existed only because the posts were positioned ABSOLUTELY off to the
+                         * right, so the column had to be told by hand how much room they would take
+                         * or the next channel drew straight over them. Stacked inside the frame they
+                         * take exactly the room they need and the browser works it out — and the
+                         * arithmetic that guessed it (168px a post, plus a variant tree, plus 40)
+                         * cannot drift out of step with the card it was estimating any more.
+                         */
+                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, ['--tone']: d.tone } as React.CSSProperties}
                       >
                         <div
                           className={`flow-node flow-tier-deliv${connectOver === d.key ? ' drop-target' : ''}${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}${trailCls(d.key)}`}
