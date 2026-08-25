@@ -261,10 +261,50 @@ Drafts land for a human to confirm. Say what you changed and what is still outst
  * Fail soft. An icon is decoration, and a server that will not start because it could not find its
  * own picture would be a poor trade — the tools are the point.
  */
+/**
+ * Width and height out of a PNG's own header, so the size we DECLARE cannot drift from the file we
+ * are sending. It was the literal '130x130', which was true of the file that happened to be there
+ * and would have quietly become a lie the first time somebody dropped in a bigger logo.
+ *
+ * IHDR is fixed-position in every PNG: the 8-byte signature, a 4-byte length, the type, then width
+ * and height as big-endian uint32s at byte 16 and byte 20.
+ */
+function pngSize(buf) {
+  if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47) return undefined
+  return `${buf.readUInt32BE(16)}x${buf.readUInt32BE(20)}`
+}
+
 function serverIcons() {
+  /**
+   * A REMOTE ICON, when one is configured.
+   *
+   * The inline form below is correct and verifiably sent - a client that reads it gets a valid PNG
+   * in the initialize response. What no server can do is make a client render it, and a client that
+   * fetches an https icon while skipping an inline one looks identical from here to a client with no
+   * icon support at all. So this is the way to tell those two apart, and the way to have an icon at
+   * all if it turns out to be the former.
+   *
+   * Configured rather than hardcoded, and not derived from BREADCRUMBS_BRIDGE_URL. The bridge points
+   * at a dev server that is often not running and is not https, and a checkout should not arrive
+   * pointed at somebody's deployment - the same reason the bridge itself defaults to localhost.
+   *
+   * No sizes: the file is somebody else's and we have not read it. An unstated size is a client's
+   * problem to solve by fetching; a wrong one is a lie it cannot detect.
+   */
+  const remote = (process.env.BREADCRUMBS_ICON_URL || '').trim()
+  if (remote) {
+    return [{ src: remote, mimeType: remote.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png' }]
+  }
   try {
     const png = readFileSync(new URL('../public/favicon.png', import.meta.url))
-    return [{ src: `data:image/png;base64,${png.toString('base64')}`, mimeType: 'image/png', sizes: ['130x130'] }]
+    const size = pngSize(png)
+    return [
+      {
+        src: `data:image/png;base64,${png.toString('base64')}`,
+        mimeType: 'image/png',
+        ...(size ? { sizes: [size] } : {}),
+      },
+    ]
   } catch {
     return undefined
   }
