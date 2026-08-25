@@ -9,12 +9,6 @@ const FilesIco = () => (
     <path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" />
   </svg>
 )
-const AssetsIco = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3.5" y="3.5" width="7" height="7" rx="1.4" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.4" />
-    <rect x="3.5" y="13.5" width="7" height="7" rx="1.4" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.4" />
-  </svg>
-)
 const SparkIco = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
@@ -74,19 +68,15 @@ function CampaignNav() {
       >
         <span className="nav-ico"><FilesIco /></span>
       </button>
-      {/* ASSETS IS STILL PARKED. It works, but the canvas is what is being made good, and a rail
-          offering a door to somewhere unfinished invites people through it. Disabled with the
-          reason on the tooltip rather than hidden, because a control that vanishes reads as
-          something you broke, and it is coming back. Re-enable by deleting the disabled prop and
-          giving it the onClick the other two have. */}
-      <button
-        className="nav-item soon"
-        disabled
-        title="Assets: the brand's asset libraries. Coming soon."
-        aria-label="Assets, coming soon"
-      >
-        <span className="nav-ico"><AssetsIco /></span>
-      </button>
+      {/* ASSETS IS STILL PARKED, AND NO LONGER TAKES A SLOT WHILE IT WAITS.
+          It sat here disabled, on the reasoning that a control which vanishes reads as something
+          you broke, and that showing the reason on a tooltip is kinder than hiding it. That holds
+          when a disabled item is one of twenty. This rail has three, and a quarter of it doing
+          nothing is not a promise that it is coming back - it is a rail you learn not to trust,
+          and the tooltip explaining why is only read by whoever presses it once.
+          Bring it back by restoring a button here beside Files, with the same onClick shape:
+          setFlowView('flow') then setAssetsOpen(true). Its icon went with it and is in the history of
+          this file, next to this comment. */}
       {/* Gretel hands off rather than answering here: it opens a dialog with a question about what
           is on screen and a door to Claude or ChatGPT, where the Breadcrumbs connector gives them
           this workspace. So unlike Files and Assets it changes nothing about the canvas — no panel

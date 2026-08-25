@@ -25407,15 +25407,6 @@ table.aud-sheet td.stick .aud-cell {
   border-color: color-mix(in srgb, var(--accent) 70%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
 }
-/* Parked rail items: visibly present, visibly not available. Dimmed rather than hidden, because a
-   control that vanishes reads as something you broke, and these are coming back. */
-.nav-item.soon {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.nav-item.soon:hover {
-  background: none;
-}
 /* The AI fill box's label. Above the field, because what a control does has to be readable before
    you use it, and the placeholder it replaced disappeared on the first keystroke. It ran a second
    line of caveats until they were cut, which is why the head is still a column: one child now, and
