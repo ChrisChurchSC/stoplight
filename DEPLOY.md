@@ -38,6 +38,13 @@ Vercel CLI; promote to production / `main` once it's proven.
 1. **Provision Supabase** (enables auth + data sync). Create a project, open the SQL editor, and run
    `supabase/schema.sql`. Copy the project **URL** and **anon key** (Project → Settings → API). The
    anon key is public by design; RLS protects the data.
+
+   `schema.sql` also creates the **`creative` storage bucket** — where a card's finished artwork
+   goes. On an existing database, run `supabase/migrations/0015_creative_storage.sql` once instead.
+   Until it exists, uploads still work but stay on the uploader's device and the card says so, so
+   nobody else can open them. The bucket allows objects up to 200MB; the project's own global upload
+   limit (Settings → Storage) is separate and lower by default, so raise it too if finished video
+   needs to land.
 2. **Set environment variables** in Vercel (`vercel env add …`, or Project → Settings → Environment
    Variables). At minimum `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (turns on sign-in + sync) and
    `ANTHROPIC_API_KEY` (turns on the AI features). See the table below.

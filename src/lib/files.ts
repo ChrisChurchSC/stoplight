@@ -18,8 +18,10 @@ const TEXT_EXT = /\.(md|markdown|txt|html?|json)$/i
 const PDF_RE = /^application\/pdf$|\.pdf$/i
 
 /** Read an image's natural pixel size off its object URL. Resolves null on
- *  error so a corrupt file can't hang the ingest await. */
-function readImageSize(url: string): Promise<{ width: number; height: number } | null> {
+ *  error so a corrupt file can't hang the ingest await.
+ *  Exported because a card's uploaded creative wants the same two numbers, and reading them a
+ *  second way would be a second set of edge cases (see store.addCardMedia). */
+export function readImageSize(url: string): Promise<{ width: number; height: number } | null> {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
@@ -28,8 +30,9 @@ function readImageSize(url: string): Promise<{ width: number; height: number } |
   })
 }
 
-/** Read a video's dimensions + duration off its object URL (metadata only). */
-function readVideoMeta(
+/** Read a video's dimensions + duration off its object URL (metadata only). Exported alongside
+ *  readImageSize, and for the same reason. */
+export function readVideoMeta(
   url: string,
 ): Promise<{ width: number; height: number; durationSec: number } | null> {
   return new Promise((resolve) => {
