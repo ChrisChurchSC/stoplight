@@ -17,6 +17,41 @@ import { isCtaField } from '../domain/messaging'
 import { ctaForHandoff } from '../domain/assetCtas'
 import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { boardFor, freshObjectId, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
+
+/**
+ * DRAW THE LINE THE LINK STANDS FOR, or the journey exists only in the data.
+ *
+ * link_assets writes linksTo and branchOf, which is what every check reads: handoffsFrom, the CTA
+ * requirements, the coherence pass, review_campaign. What none of them do is put a line on the
+ * board, and nothing on the canvas derives one - linksTo appears nowhere in FlowsView. So a campaign
+ * linked through the MCP came out looking exactly like a campaign nobody had linked: the model knew
+ * the route, the person looking at the board could not see it.
+ *
+ * The canvas is the other half of the same pair. A wire drawn by hand writes linksTo; a link written
+ * by a tool draws the wire. Neither representation is derived from the other, because connectors are
+ * also drawn between things that are not assets at all, so both are kept in step at the two places
+ * that create one.
+ *
+ * Keyed on the campaign NAME, which is what FlowsView uses as its board key.
+ */
+function drawLinkOnBoard(campaign: string | undefined, fromId: string, toId: string): void {
+  const key = (campaign ?? '').trim()
+  if (!key) return
+  const store = useTrafficStore.getState()
+  const board = boardFor(store.flowBoards, key)
+  if (board.connectors.some((c) => c.from === fromId && c.to === toId)) return
+  store.saveFlowBoard({ ...board, connectors: [...board.connectors, { from: fromId, to: toId }] })
+}
+
+/** And take it away again, so an unlinked pair does not keep a line that means nothing. */
+function eraseLinkFromBoard(campaign: string | undefined, fromId: string, toId: string): void {
+  const key = (campaign ?? '').trim()
+  if (!key) return
+  const store = useTrafficStore.getState()
+  const board = boardFor(store.flowBoards, key)
+  const next = board.connectors.filter((c) => !(c.from === fromId && c.to === toId))
+  if (next.length !== board.connectors.length) store.saveFlowBoard({ ...board, connectors: next })
+}
 import { OBJECT_CARD_KINDS, applyDirection, describeObjectFields, directionCoverage, identityCoverage, objectCardView, recordTypeFor } from '../domain/objectFields'
 import { makeObjectReference, titleFromDoc } from '../domain/objectReference'
 import { rankSuggestions, reviewCampaign, type Suggestion } from '../domain/campaignReview'
@@ -1488,12 +1523,14 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         )
       }
       await useTrafficStore.getState().updateRow(from.id, { linksTo: to.assetName })
+      drawLinkOnBoard(from.campaign, from.id, to.id)
     } else {
       const parent = (to.branchOf ?? '').trim()
       if (parent && !same(parent, from.assetName)) {
         throw new Error(`"${to.assetName}" already branches off "${parent}". Unlink that first.`)
       }
       await useTrafficStore.getState().updateRow(to.id, { branchOf: from.assetName })
+      drawLinkOnBoard(from.campaign, from.id, to.id)
     }
     // What the line costs. A handoff is a promise that somebody builds a control at this end of it,
     // and naming it here is the difference between a journey that is drawn and one that works.
@@ -1520,10 +1557,12 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if ((from.linksTo ?? '').trim() && (!to || same(from.linksTo, to.assetName))) {
       cleared.push(`${from.assetName} → ${from.linksTo}`)
       await useTrafficStore.getState().updateRow(from.id, { linksTo: undefined })
+      if (to) eraseLinkFromBoard(from.campaign, from.id, to.id)
     }
     if (to && same(to.branchOf, from.assetName)) {
       cleared.push(`${from.assetName} → ${to.assetName} (branch)`)
       await useTrafficStore.getState().updateRow(to.id, { branchOf: undefined })
+      eraseLinkFromBoard(from.campaign, from.id, to.id)
     }
     if (!cleared.length) {
       throw new Error(
