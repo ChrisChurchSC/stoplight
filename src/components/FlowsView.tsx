@@ -443,6 +443,28 @@ const CampaignTile = () => (
 
 type ViewDeliverable = { key: string; label: string; tone: string; channel: ChannelId; assetType: string; count: number; rows: TrafficRow[] }
 
+/**
+ * WHERE AN ASSET HAS GOT TO, as a mark on the card's leading edge.
+ *
+ * Seven statuses reach this board and none of them were on it: the only status-ish thing a card
+ * carried was a spinner while its copy regenerated. So the one question you actually work from -
+ * what needs doing - was the one the board could not answer.
+ *
+ * DRAFT IS DELIBERATELY UNMARKED, and that rule is inherited rather than invented: the live stripe
+ * beside this one already says it, that planning is what nearly every card on a board is, and a mark
+ * on the majority is not a mark. Green is left alone for the same reason - it means this has
+ * actually gone out, and moving it to "approved" would quietly retire the one status mark that
+ * already earned its place.
+ *
+ * So four marks and a silent majority: waiting on a person, blocked, ready to go, and out.
+ */
+const statusMark = (r: TrafficRow): string => {
+  if (r.status === 'in_review') return ' st-review'
+  if (r.status === 'rejected' || r.status === 'failed') return ' st-blocked'
+  if (r.status === 'approved' || r.status === 'scheduled') return ' st-ready'
+  return ''
+}
+
 // An ingested / real posted asset (from the Library), as opposed to a generated idea.
 const isIngestedPost = (r: TrafficRow): boolean =>
   r.status === 'posted' || !!r.postedAt || (!!r.sourceUrl && r.source !== 'generated')
@@ -11146,7 +11168,22 @@ export function FlowsView() {
                             // frame for the work but cannot tell LinkedIn from Instagram, and
                             // telling channels apart at a glance is the whole point of colouring
                             // the thing that names one.
-                            const chanColor = CHANNELS[r.channel as ChannelId]?.color ?? d.tone
+                            /**
+                             * THE FAMILY TONE, NOT THE PLATFORM BRAND COLOUR.
+                             *
+                             * Brand colours are the obvious choice and the wrong one, because the
+                             * platforms picked them independently and most picked blue: LinkedIn
+                             * #0a66c2, Meta #1877f2, Email #3b82f6, Website #0284c7. Four channels,
+                             * one colour, on the pill you read first. GROUP_TONE was built for this
+                             * and has nine hues that separate: social blue, email teal, content
+                             * purple, web orange, paid red, video violet, lead magnets gold, events
+                             * deep teal, sales indigo.
+                             *
+                             * Nothing is lost by dropping the brand colour. The pill carries the
+                             * platform's own mark and its name, which identify it far better than a
+                             * blue four other channels also answer to.
+                             */
+                            const chanColor = d.tone
                             const typeName = typeLabel(r.channel as ChannelId, r.assetType) || r.assetType || ''
                             return (
                               <div className="flow-branch-row" key={r.id}>
@@ -11168,7 +11205,7 @@ export function FlowsView() {
                                     predicate the inspector opens on, so the board and the panel
                                     cannot disagree about which an asset is. */}
                                 <div
-                                  className={`flow-node flow-brief-node${isLiveAsset(r) ? ' live' : ''}${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
+                                  className={`flow-node flow-brief-node${isLiveAsset(r) ? ' live' : ''}${statusMark(r)}${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
                                   data-node-id={r.id}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
@@ -11202,8 +11239,13 @@ export function FlowsView() {
                                   {/* Only when there is one to name. An asset that never picked a
                                       type would otherwise get an empty pill, which reads as a
                                       missing value rather than as a question nobody asked yet. */}
+                                  {/* QUIET, now that the channel pill beside it carries the same hue.
+                                      Two pills in one colour read as one shape, and the format is the
+                                      smaller fact of the two: which channel this goes out on is what
+                                      you scan for, what shape it takes is what you check once you
+                                      have found it. */}
                                   {typeName ? (
-                                    <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 15%, transparent)` }}>
+                                    <span className="flow-node-kind flow-node-kind-quiet">
                                       {typeName}
                                     </span>
                                   ) : null}
