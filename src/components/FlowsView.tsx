@@ -42,6 +42,7 @@ import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
 import { canvasBrandScope, isBrandless, resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
+import { usePresence } from '../lib/usePresence'
 import { DRAFTS_SPACE, UNASSIGNED, campaignShortName, campaignStoredName, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, newAudience, type AudienceType } from '../domain/audiences'
 import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, INDUSTRIES, SENIORITIES } from '../domain/taxonomy'
@@ -1495,6 +1496,31 @@ export function FlowsView() {
   const boundBrand = viewName
     ? campaignList.find((c) => c.name === viewName)?.client?.trim() || clientForCampaign(viewName)
     : ''
+
+  /**
+   * WHO ELSE IS IN THIS CAMPAIGN.
+   *
+   * This board is the front door — page 'flows' is where the app opens and where the work happens —
+   * and it had no presence in it at all. The cursors were built against the older 'clients'
+   * workspace, so two people on the same campaign saw an empty room while the machinery worked
+   * perfectly one surface over. Live cursors nobody can reach are not a feature.
+   *
+   * Scoped to the campaign's OWN brand rather than the rail's, for the reason the long comment
+   * above gives: the rail disagrees with the campaign on two live paths, and a presence room is
+   * exactly the kind of thing that must not be keyed on a value that means different things
+   * depending on how you arrived. Off on the index, where there is no board to be in.
+   */
+  const sharedView = useTrafficStore((s) => !!s.sharedSession)
+  const { peers, publishCursor, clearCursor } = usePresence({
+    client: boundBrand,
+    campaign: viewName ?? '',
+    enabled: !!viewName && !!boundBrand,
+    shared: sharedView,
+    bounds: { w: 0, h: 0 },
+    nodeIds: [],
+    // Card positions on this board are not shared yet, so a peer's drag has nothing to apply to.
+    onRemoteMove: () => {},
+  })
   /**
    * THE INDEX BROWSES AT THE RAIL'S SCOPE, NOT THE LAST CAMPAIGN'S. viewName survives going home
    * (only the screen flips), so handing FlowsHome the campaign-first `brand` below re-scoped the
@@ -10124,6 +10150,19 @@ export function FlowsView() {
               <span className={cls} title={title}>{label}</span>
             )
           })()}
+          {/* WHO IS HERE, next to Share — the two belong together: one says who can get in, the
+              other says who already did. Counts everybody in the brand, not just this board, so a
+              colleague one campaign over still registers as around. */}
+          {peers.length > 0 && (
+            <div className="cv-presence" title={`${peers.length} here now`}>
+              {peers.slice(0, 4).map((pr) => (
+                <span key={pr.id} className="cv-avatar" style={{ background: pr.color }} title={pr.name}>
+                  {pr.name.charAt(0)}
+                </span>
+              ))}
+              <span className="cv-presence-n">{peers.length} here</span>
+            </div>
+          )}
           {can(role, 'share') && (
             <button
               className="flow-share-btn"
@@ -10343,6 +10382,20 @@ export function FlowsView() {
             // Canvas-relative, which is the space freeSlot and pendingPlace both work in.
             placeSmartObject(o, { x: e.clientX - cr.left, y: e.clientY - cr.top })
           }}
+          /**
+           * The cursor travels in WORLD coordinates, undoing this viewport before it goes out and
+           * re-applying the reader's on the way in. Send screen pixels instead and the pointer
+           * lands somewhere else on every machine, because no two people have the board panned or
+           * zoomed the same way — which is the one thing a shared cursor exists to get right.
+           */
+          onMouseMove={(e) => {
+            const r = canvasRef.current?.getBoundingClientRect()
+            if (!r) return
+            const z = zoom / 100
+            publishCursor((e.clientX - r.left - offset.x) / z, (e.clientY - r.top - offset.y) / z)
+          }}
+          // Off the canvas is off the board: better no cursor than one parked where you left.
+          onMouseLeave={() => clearCursor()}
           onContextMenu={(e) => {
             const el = (e.target as HTMLElement).closest('.flow-node[data-node-id]') as HTMLElement | null
             const id = el?.dataset.nodeId ?? null
@@ -10661,6 +10714,29 @@ export function FlowsView() {
           ))}
           {/* The outline (a map of the campaign's contents) now lives in the inspector's
               nothing-selected state instead of a floating canvas pill. */}
+          {/* Cursors sit OUTSIDE the scaled stack and are placed by hand, so they stay the same
+              size at every zoom — inside it they would shrink with the board and vanish at 10%.
+              An earlier sibling with a real z-index still paints above the stack, which is a
+              stacking context at z-index auto. */}
+          <div className="flow-cursors">
+            {peers.map((pr) =>
+              pr.onBoard && pr.cursor ? (
+                <div
+                  key={`fcur-${pr.id}`}
+                  className="cv-cursor"
+                  style={{ left: offset.x + pr.cursor.x * (zoom / 100), top: offset.y + pr.cursor.y * (zoom / 100) }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M1 1 L1 12 L4 9 L6.5 14 L8.5 13 L6 8 L10 8 Z" fill={pr.color} stroke="#fff" strokeWidth="1" />
+                  </svg>
+                  <span className="cv-cursor-label" style={{ background: pr.color }}>
+                    {pr.name}
+                    {pr.role === 'viewer' ? <em className="cv-cursor-guest">viewing</em> : null}
+                  </span>
+                </div>
+              ) : null,
+            )}
+          </div>
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
             {/* Campaign brief node — the board's root. Shown for an existing campaign (its real root)
                 or when explicitly summoned from the toolbar's "Brief" item. Adding primitives does NOT

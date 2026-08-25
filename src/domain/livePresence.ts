@@ -59,6 +59,19 @@ export interface Peer {
   color: string
   role: PresenceRole
   client: string
+  /** The campaign board this peer has open. */
+  campaign: string
+  /**
+   * Whether that is the board YOU have open.
+   *
+   * The roster is deliberately brand-wide and the cursors deliberately are not. Knowing a
+   * colleague is somewhere in the brand is worth showing — that is what the count in the header is
+   * for — but drawing their cursor while they work on a different campaign puts a pointer on your
+   * board that answers to nothing on it, moving over your cards because their board happens to
+   * have something at those coordinates. One flag, so the header can count everybody and the
+   * canvas can draw only the people actually in the room with you.
+   */
+  onBoard: boolean
   /** Cursor in world coordinates, or null when off-canvas. */
   cursor: { x: number; y: number } | null
   /** Node the peer is on (hovering or dragging), or null. */
@@ -67,7 +80,7 @@ export interface Peer {
 }
 
 /** The identity half of a peer — what arrives on the roster, before any cursor traffic. */
-export type PeerIdentity = PresenceIdentity & { client: string }
+export type PeerIdentity = PresenceIdentity & { client: string; campaign: string }
 
 /** The volatile half — what arrives on the high-frequency channel. */
 export interface PeerMotion {
@@ -118,6 +131,8 @@ export function mergePeers(input: {
   roster: PeerIdentity[]
   motion: Map<string, PeerMotion>
   client: string
+  /** The board you have open. Peers elsewhere in the brand still count; they just are not drawn. */
+  campaign: string
   selfId: string
 }): Peer[] {
   return input.roster
@@ -130,6 +145,8 @@ export function mergePeers(input: {
         color: colorFor(p.colorSeed),
         role: p.role,
         client: p.client,
+        campaign: p.campaign,
+        onBoard: p.campaign === input.campaign,
         cursor: m?.cursor ?? null,
         nodeId: m?.nodeId ?? null,
         ts: m?.ts ?? 0,
@@ -147,7 +164,7 @@ export function peersSignature(peers: Peer[]): string {
   return peers
     .map(
       (p) =>
-        `${p.id}:${p.name}:${p.role}:${p.color}:${
+        `${p.id}:${p.name}:${p.role}:${p.color}:${p.onBoard ? 1 : 0}:${
           p.cursor ? `${Math.round(p.cursor.x)},${Math.round(p.cursor.y)}` : '-'
         }:${p.nodeId ?? '-'}`,
     )
