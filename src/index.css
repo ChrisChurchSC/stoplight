@@ -4782,6 +4782,57 @@ button.mf-open:focus-visible,
    control up there, and plainly crooked next to a second icon that is laid out in the title row. */
 .flow-panel-collapse { position: absolute; top: 16px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .flow-panel-collapse:hover { background: var(--surface-2); color: var(--text); }
+/* THE COMPONENT CONTROL. The button reuses .flow-panel-action so it sits with the collapse control
+   exactly as the old icon did; `on` is the filled state, which is the whole signal — filled means
+   "this is a component", and which RUNG it is on is said in words in the menu it opens. */
+.flow-cmp { position: relative; display: inline-flex; flex: 0 0 auto; margin-left: auto }
+.flow-cmp-btn.on { color: var(--accent) }
+.flow-cmp-btn[aria-expanded='true'] { background: var(--surface-2); color: var(--text) }
+
+/* Hangs off the button rather than the panel, so it stays put when the panel scrolls under it. */
+.flow-cmp-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 244px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px -10px rgba(16, 24, 40, 0.28);
+}
+.flow-cmp-menu .flow-ctx-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+}
+/* THE RUNG, IN WORDS, and the consequence under each choice. The icon deliberately does not encode
+   which rung this is, so the menu has to — and a rung is a decision about who else is affected,
+   which is not a thing to infer from a label like "This brand". */
+.flow-cmp-menu-head {
+  padding: 6px 9px 7px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.flow-cmp-menu-hint { font-size: 10.5px; line-height: 1.35; color: var(--text-faint) }
+.flow-cmp-menu .flow-ctx-item:disabled { opacity: 0.45; cursor: default }
+.flow-cmp-menu .flow-ctx-item:disabled .flow-cmp-menu-hint { color: var(--text-faint) }
+.flow-cmp-menu-sep { height: 1px; margin: 5px -5px; background: var(--border) }
+
+/* Armed delete in the shelf menu: quiet until the first press, then unmistakable. Two presses because
+   this is the one action here that cannot be undone by making the thing again — the boards using it
+   lose their wiring too. */
+.flow-ctx-item.danger.armed {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  font-weight: 650;
+}
+
 /* A CARD-LEVEL ACTION, sharing the corner with the panel's own controls. Same size and hover as the
    collapse button beside it, and offset to clear it: the collapse is absolute at right 12 and 28
    wide, so this ends where that begins. In the header's flex row rather than absolute, so a long
@@ -23760,57 +23811,9 @@ table.aud-sheet td.stick .aud-cell {
 }
 .flow-obj-row-out:hover { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
 
-/* Delete the smart object itself. Quiet until armed, then unmistakably red: the second click
-   removes it from every campaign, not just this board. */
-.flow-obj-del {
-  margin-top: 8px;
-  width: 100%;
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 6px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
-}
-.flow-obj-del:hover {
-  border-color: var(--red);
-  color: var(--red);
-}
-.flow-obj-del.armed {
-  border-color: var(--red);
-  color: var(--red);
-  background: color-mix(in srgb, var(--red) 10%, transparent);
-}
-
-/* Promote a local object into the brand library. Reads as the constructive counterpart of the
-   delete below it: same shape, accent instead of red. */
-.flow-obj-promote {
-  margin-top: 8px;
-  width: 100%;
-  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--border));
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  padding: 6px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-.flow-obj-promote:hover:not(:disabled) {
-  border-style: solid;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-.flow-obj-promote:disabled {
-  border-color: var(--border);
-  color: var(--text-faint);
-  cursor: default;
-}
+/* The panel's own delete and promote buttons went with the controls they were: both live in the
+   component menu now, and delete lives in the library. `armed` still exists on .flow-ctx-item.danger,
+   which is what the library's delete uses. */
 
 /* The chain on a brand-library smart object: this card is a linked copy, so an edit travels. Sits
    between the kind label and the ✕ in the card head. */
