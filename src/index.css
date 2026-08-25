@@ -25751,13 +25751,15 @@ table.aud-sheet td.stick .aud-cell {
 .flow-brief-node.live::before {
   background: var(--green);
 }
-/* The pencil beside a card's name in the inspector.
-   ALWAYS VISIBLE. Hiding it until hover was borrowed from the connect ports, and the two are not the
-   same case: a port is one of four on every card and would clutter the board drawn all the time,
-   while this is one control on one panel that is already open because you are working in it. Renaming
-   is also not a thing you go looking for having already decided to do it - you notice it is possible
-   because the pencil is there. Quiet rather than hidden: it sits at text-faint and comes up to full
-   contrast on hover. */
+/* The pencil beside a card's name in the inspector, revealed on hover of the header.
+   It was permanent for a while, on the argument that you notice renaming is possible because the
+   pencil is there. On this panel that argument loses to the one against: the header carries the
+   card name, its channel mark and the collapse control already, and a fourth thing sitting in it
+   permanently competes with the name it is meant to label. Hovering the header is also already
+   where the pointer is when renaming is what you came to do.
+
+   Quiet rather than absent while hidden: it fades rather than appearing from nothing, and the
+   focus rule below keeps it reachable without a mouse. */
 .flow-panel-rename {
   flex: 0 0 auto;
   width: 24px;
@@ -25770,7 +25772,14 @@ table.aud-sheet td.stick .aud-cell {
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+/* Keyboard reach matters as much as the pointer: revealed only by hover, this is unreachable by
+   tab without the focus rule, which would make renaming impossible without a mouse. */
+.flow-panel-head:hover .flow-panel-rename,
+.flow-panel-rename:focus-visible {
+  opacity: 1;
 }
 .flow-panel-rename svg {
   width: 13px;
