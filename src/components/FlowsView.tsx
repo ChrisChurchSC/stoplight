@@ -15,6 +15,7 @@ import {
   describeClipboard, isEmptyClipboard, pasteObjects, pasteRows, type CanvasClipboard,
 } from '../domain/canvasClipboard'
 import { alignSnap, sameGuides, type Guide } from '../domain/alignGuides'
+import { distributeEvenly } from '../domain/distribute'
 import { cutForEdge, type EdgeCut } from '../domain/edgeCut'
 import { rimsFor } from '../domain/groupFrame'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
@@ -2569,6 +2570,32 @@ export function FlowsView() {
    * the top of the structure it sits above, and neither is measurable until the reset has laid out.
    */
   const tidyPhase = useRef<0 | 1 | 2>(0)
+  /**
+   * EVEN OUT THE SPACING of whatever is selected, along one axis.
+   *
+   * Tidy layout re-lays the whole board and takes your placement with it. This keeps every decision
+   * you made - which cards, what order, where the run starts and ends - and only equalises what is
+   * between them. Three or more, because two cards are already evenly distributed and a button that
+   * moved one of them would be doing something else under this name.
+   *
+   * rects are SCREEN pixels measured off the canvas; pos is in canvas units. So the movement comes
+   * back in the units it went in as and is divided by the zoom on the way into pos - the same
+   * conversion the drag handler does, for the same reason.
+   */
+  const distributeSelection = (axis: 'x' | 'y') => {
+    const boxes = [...selected].filter((id) => rects[id]).map((id) => ({ id, ...rects[id] }))
+    if (boxes.length < 3) return
+    const moves = distributeEvenly(boxes, axis)
+    const scale = zoom / 100
+    setPos((prev) => {
+      const next = { ...prev }
+      for (const [id, d] of Object.entries(moves)) {
+        const cur = prev[id] ?? { x: 0, y: 0 }
+        next[id] = axis === 'x' ? { x: cur.x + d / scale, y: cur.y } : { x: cur.x, y: cur.y + d / scale }
+      }
+      return next
+    })
+  }
   const organizeCards = () => {
     recordHistory(false)
     placedRef.current = new Set()
@@ -12919,6 +12946,27 @@ export function FlowsView() {
               <rect x="14" y="14" width="7" height="7" rx="1.5" />
             </svg>
           </button>
+          {/* Only with a run to even out. Shown rather than disabled: a control that is present and
+              dead on every board teaches people to ignore that corner of the toolbar, and there is
+              nothing to explain here that the appearing does not say. */}
+          {selected.size >= 3 && (
+            <>
+              <button className="flow-tb-tool" onClick={() => distributeSelection('x')} aria-label="Distribute evenly across" title="Even out the horizontal spacing of the selected cards">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="6" width="3.5" height="12" rx="1" />
+                  <rect x="10.25" y="6" width="3.5" height="12" rx="1" />
+                  <rect x="17.5" y="6" width="3.5" height="12" rx="1" />
+                </svg>
+              </button>
+              <button className="flow-tb-tool" onClick={() => distributeSelection('y')} aria-label="Distribute evenly down" title="Even out the vertical spacing of the selected cards">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="6" y="3" width="12" height="3.5" rx="1" />
+                  <rect x="6" y="10.25" width="12" height="3.5" rx="1" />
+                  <rect x="6" y="17.5" width="12" height="3.5" rx="1" />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
         {/* ALWAYS PRESENT. These three were gated on `viewing`, so the toolbar changed shape the
             moment a campaign was built and the controls that matter most were missing from the
