@@ -18,6 +18,7 @@ describe('channel labels name a place, not a format', () => {
   it('no longer carries a format in the label', () => {
     expect(CHANNELS.linkedin.label).toBe('LinkedIn')
     expect(CHANNELS.blog.label).toBe('Blog')
+    expect(CHANNELS['sales-collateral'].label).toBe('Sales')
   })
 
   it('still resolves the names those channels used to answer to', () => {
@@ -25,6 +26,8 @@ describe('channel labels name a place, not a format', () => {
     expect(resolveChannelId('linkedin post')).toBe('linkedin')
     expect(resolveChannelId('Blog article')).toBe('blog')
     expect(resolveChannelId('blog article')).toBe('blog')
+    expect(resolveChannelId('Sales collateral')).toBe('sales-collateral')
+    expect(resolveChannelId('sales collateral')).toBe('sales-collateral')
   })
 
   it('still resolves them by their new labels, and keeps paid separate from organic', () => {
@@ -32,5 +35,9 @@ describe('channel labels name a place, not a format', () => {
     expect(resolveChannelId('Blog')).toBe('blog')
     // The rename must not make the organic channel swallow the ad one.
     expect(resolveChannelId('LinkedIn Ads')).toBe('linkedin-ads')
+    // 'Sales' must not start answering for the other two channels that begin with the word.
+    expect(resolveChannelId('Sales')).toBe('sales-collateral')
+    expect(resolveChannelId('Sales outreach')).toBe('sales-outreach')
+    expect(resolveChannelId('Proposal & quote')).toBe('proposal')
   })
 })

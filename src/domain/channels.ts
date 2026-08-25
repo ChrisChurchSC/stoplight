@@ -153,7 +153,7 @@ const CHANNELS_DEFS: Record<ChannelId, ChannelConfig> = {
     color: '#4f46e5', accepts: ['text', 'link'], bestTimes: [t(8), t(16)],
   },
   'sales-collateral': {
-    id: 'sales-collateral', label: 'Sales collateral', short: 'COLLAT', kind: 'sales', platform: 'Sales',
+    id: 'sales-collateral', label: 'Sales', short: 'COLLAT', kind: 'sales', platform: 'Sales',
     color: '#0f766e', accepts: ['text', 'image', 'link', 'video'], bestTimes: [t(10)],
   },
   proposal: {
@@ -247,6 +247,7 @@ const CHANNEL_ALIASES: Record<string, ChannelId> = {
   // The labels these two channels used to carry. Renaming a label is not free: data stores channels
   // loosely — a label, a sub-format, a pasted brief — so anything that named one by its old display
   // name has to keep resolving. Asserted in channels.test.ts rather than left as a good intention.
+  'sales collateral': 'sales-collateral',
   'linkedin post': 'linkedin',
   'blog article': 'blog',
   web: 'website',
