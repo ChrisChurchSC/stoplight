@@ -4854,8 +4854,9 @@ button.mf-open:focus-visible,
 .flow-lib-object-more-btn:focus-visible { opacity: 1 }
 .flow-lib-object-more-btn:hover { color: var(--text); background: var(--surface-2) }
 .flow-lib-object-more-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
-/* Room for it, so a long name does not run under the button. */
-.flow-lib-object .flow-lib-object-txt { padding-right: 22px }
+/* The button sits in the tile's top-right corner, beside the glyph rather than over the name, so the
+   name gets the tile's full width. It kept a 22px inset from when a row was one line. */
+.flow-lib-object .flow-lib-object-ic { padding-right: 22px }
 
 .flow-ctx-item.danger.armed {
   color: var(--red);
@@ -24463,7 +24464,7 @@ table.aud-sheet td.stick .aud-cell {
 /* ONE RUNG PER SECTION, wearing the inspector's field vocabulary: a bold label, its own sentence
    under it, and an edge-to-edge rule between groups. The panel used its own heading style, which is
    how two panels in one product end up looking like two products. */
-.flow-lib-rung { padding: 16px 14px 4px }
+.flow-lib-rung { padding: 16px 12px 10px }
 .flow-lib-rung + .flow-lib-rung {
   border-top: 1px solid var(--border);
 }
@@ -24480,6 +24481,13 @@ table.aud-sheet td.stick .aud-cell {
 }
 /* The rung's consequence, in words. "This brand" does not say who else is affected, and that is the
    whole difference between the three. */
+/* The rung a dragged object would land on. Dashed like the folder heads, which is the same gesture
+   answering in the same way. */
+.flow-lib-rung.drop {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .flow-lib-rung-hint {
   font-size: 11px;
   line-height: 1.4;
@@ -24529,7 +24537,17 @@ table.aud-sheet td.stick .aud-cell {
 .flow-lib-folder-empty { font-size: 12.5px; color: var(--text-faint); padding: 6px 12px; }
 /* The brand's smart objects, shelved above its campaigns. A quiet group: it is reference material
    you check, not a list you click through, so the rows are not buttons. */
-.flow-lib-objects { padding: 2px 0 6px; }
+/* TWO ACROSS, SQUARE. A list of one-line rows spent the panel's width on whitespace and showed four
+   objects where eight fit; a shelf is something you scan, so it reads as tiles. At 300px the panel
+   gives each tile about 128px, which is why the sub-line went: "1 card, none filled in" cannot be
+   read at that width, and the chips underneath say what is inside more directly anyway. */
+.flow-lib-objects { padding: 2px 0 8px }
+/* Two across, on a container that holds nothing but tiles. */
+.flow-lib-objgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
 .flow-lib-objects-h {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text-faint); padding: 4px 12px 3px;
@@ -24538,30 +24556,34 @@ table.aud-sheet td.stick .aud-cell {
    what is inside — and is a drag handle onto the canvas, so it gets a card's affordances. */
 .flow-lib-object {
   display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 7px 10px;
-  margin: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 9px;
+  flex-direction: column;
+  gap: 4px;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
   cursor: grab;
+  transition: border-color 120ms ease, background 120ms ease;
 }
-.flow-lib-object:hover { border-color: var(--border); background: var(--surface-2); }
+.flow-lib-object:hover { border-color: var(--border-strong, var(--border)); }
 .flow-lib-object:active { cursor: grabbing; }
-.flow-lib-object-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent); opacity: 0.7; margin-top: 1px; }
-.flow-lib-object-ic svg { width: 14px; height: 14px; }
-.flow-lib-object-txt { display: flex; flex-direction: column; min-width: 0; }
+.flow-lib-object-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent); opacity: 0.7 }
+.flow-lib-object-ic svg { width: 15px; height: 15px; }
+/* The name takes the room the tile has left, and wraps rather than truncating at a word: two lines
+   of a real name beat one line plus an ellipsis when the tile is this narrow. */
+.flow-lib-object-txt { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 2px }
 .flow-lib-object-name {
-  font-size: 12.5px; color: var(--text);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px; line-height: 1.3; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;
 }
-.flow-lib-object-sub {
-  font-size: 11px; color: var(--text-faint);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+/* No room for it beside the chips, which say the same thing in less space. */
+.flow-lib-object-sub { display: none }
 /* One tinted glyph per card inside: an audience-plus-proof bundle reads differently from an
    audience-plus-message one without opening either. */
-.flow-lib-object-chips { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.flow-lib-object-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: auto; }
 .flow-lib-object-chip { display: inline-flex; }
 .flow-lib-object-chip svg { width: 12px; height: 12px; }
 .flow-lib-object-more { font-size: 10px; color: var(--text-faint); }
@@ -24572,7 +24594,7 @@ table.aud-sheet td.stick .aud-cell {
   display: flex; align-items: center; gap: 6px;
   font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--text-muted);
-  padding: 5px 10px 3px; margin: 2px 8px 0;
+  padding: 5px 2px 5px; margin: 2px 0 0;
   border: 1px dashed transparent; border-radius: 8px;
 }
 .flow-lib-objfolder-h.drop { border-color: var(--accent); color: var(--accent); }
