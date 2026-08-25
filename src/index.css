@@ -7246,8 +7246,7 @@ button.mf-open:focus-visible,
   border-radius: 6px;
   padding: 0;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: color 0.12s ease, border-color 0.12s ease;
 }
 .flow-home-rename svg {
   width: 12px;
@@ -25749,8 +25748,13 @@ table.aud-sheet td.stick .aud-cell {
 .flow-brief-node.live::before {
   background: var(--green);
 }
-/* The pencil beside a card's name in the inspector. Quiet until the header is hovered, for the same
-   reason the connect ports are: an affordance on every panel all the time competes with the panel. */
+/* The pencil beside a card's name in the inspector.
+   ALWAYS VISIBLE. Hiding it until hover was borrowed from the connect ports, and the two are not the
+   same case: a port is one of four on every card and would clutter the board drawn all the time,
+   while this is one control on one panel that is already open because you are working in it. Renaming
+   is also not a thing you go looking for having already decided to do it - you notice it is possible
+   because the pencil is there. Quiet rather than hidden: it sits at text-faint and comes up to full
+   contrast on hover. */
 .flow-panel-rename {
   flex: 0 0 auto;
   width: 24px;
@@ -25763,17 +25767,12 @@ table.aud-sheet td.stick .aud-cell {
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: color 0.12s ease, border-color 0.12s ease;
 }
 .flow-panel-rename svg {
   width: 13px;
   height: 13px;
   display: block;
-}
-.flow-panel-head:hover .flow-panel-rename,
-.flow-panel-rename:focus-visible {
-  opacity: 1;
 }
 .flow-panel-rename:hover {
   color: var(--text);
