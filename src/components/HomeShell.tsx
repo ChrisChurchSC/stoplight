@@ -74,16 +74,22 @@ function CampaignNav() {
       >
         <span className="nav-ico"><FilesIco /></span>
       </button>
-      {/* ASSETS IS STILL PARKED. It works, but the canvas is what is being made good, and a rail
-          offering a door to somewhere unfinished invites people through it. Disabled with the
-          reason on the tooltip rather than hidden, because a control that vanishes reads as
-          something you broke, and it is coming back. Re-enable by deleting the disabled prop and
-          giving it the onClick the other two have. */}
+      {/* UNPARKED. It was disabled while the canvas was being made good, on the grounds that "a rail
+          offering a door to somewhere unfinished invites people through it" — which was right at the
+          time and is the reason to say what changed rather than just delete the prop.
+
+          What it opens is the smart object library: every bundle you have made, on the rung you put
+          it on, and the place they are deleted from. The panel had the shelf and the search already;
+          what it did not have was a way in that anyone would find, or a visible way to act on a row.
+          Both of those are why it stayed shut, and both are now done.
+
+          Still one library, not "libraries": the published-content catalogue is its own page and has
+          not moved here. */}
       <button
-        className="nav-item soon"
-        disabled
-        title="Assets: the brand's asset libraries. Coming soon."
-        aria-label="Assets, coming soon"
+        className={`nav-item${assetsOpen ? ' active' : ''}`}
+        onClick={() => { setFlowView('flow'); setAssetsOpen(true) }}
+        title="Assets: the brand's smart object library"
+        aria-label="Assets"
       >
         <span className="nav-ico"><AssetsIco /></span>
       </button>
