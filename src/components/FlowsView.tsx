@@ -9985,9 +9985,7 @@ export function FlowsView() {
    */
   const renderLayers = () => (
     <>
-      <div className="flow-panel-head">
-        <span className="flow-panel-title">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</span>
-      </div>
+      <PanelHead title={viewing ? viewShort : name.trim() || 'Untitled campaign'} />
       <div className="flow-overview">
         <div className="flow-outline-list">
           <div className="flow-outline-head">Layers</div>
@@ -11841,15 +11839,17 @@ export function FlowsView() {
           ) : viewing ? (
             pickAt !== null ? (
               <>
-                <div className="flow-panel-head">
-                  <button className="flow-back" onClick={() => { setPickAt(null); setConnectFrom(null) }}>
-                    ‹ Back
-                  </button>
-                  {/* The card you branched from is the one selected on the board, right next to the
-                      line being drawn out of it, so naming it again in the title only made the title
-                      long enough to truncate. */}
-                  <span className="flow-panel-title">{connectFrom ? 'Next Step' : 'Add channel'}</span>
-                </div>
+                {/* The card you branched from is the one selected on the board, right next to the
+                    line being drawn out of it, so naming it again in the title only made the title
+                    long enough to truncate. */}
+                <PanelHead
+                  lead={
+                    <button className="flow-back" onClick={() => { setPickAt(null); setConnectFrom(null) }}>
+                      ‹ Back
+                    </button>
+                  }
+                  title={connectFrom ? 'Next Step' : 'Add channel'}
+                />
                 <div className="flow-picker-list">
                   {grouped.map(([group, presets]) => (
                     <div key={group} className="flow-pgroup">
@@ -11871,14 +11871,14 @@ export function FlowsView() {
               renderPostInspector(selPost)
             ) : selDeliv ? (
               <>
-                <div className="flow-panel-head">
-                  <PresetTile tone={selDeliv.tone} channel={selDeliv.channel} />
-                  <span className="flow-panel-title">{selDeliv.label}</span>
-                </div>
+                {/* The kind's definition line rides in the head rather than opening the body — see
+                    PanelHead's `sub`, and the ten other panels that already say it there. */}
+                <PanelHead
+                  lead={<PresetTile tone={selDeliv.tone} channel={selDeliv.channel} />}
+                  title={selDeliv.label}
+                  sub={`${CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} · ${typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}`}
+                />
                 <div className="flow-inspect">
-                  <p className="flow-inspect-desc">
-                    {CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} · {typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}
-                  </p>
                   {/* CUT OFF FROM THE BRIEF. The missing line says it on the canvas, but a missing
                       thing is a poor way to state a fact: you have to know it used to be there. The
                       panel says it in words, and offers the way back, because reconnecting by drawing
@@ -12180,12 +12180,14 @@ export function FlowsView() {
             )
           ) : pickAt !== null ? (
             <>
-              <div className="flow-panel-head">
-                <button className="flow-back" onClick={() => setPickAt(null)}>
-                  ‹ Back
-                </button>
-                <span className="flow-panel-title">Add channel</span>
-              </div>
+              <PanelHead
+                lead={
+                  <button className="flow-back" onClick={() => setPickAt(null)}>
+                    ‹ Back
+                  </button>
+                }
+                title="Add channel"
+              />
               <div className="flow-picker-list">
                 {grouped.map(([group, presets]) => (
                   <div key={group} className="flow-pgroup">
@@ -12311,9 +12313,7 @@ export function FlowsView() {
               if (!node || !p) {
                 return (
                   <>
-                    <div className="flow-panel-head">
-                      <span className="flow-panel-title">Post</span>
-                    </div>
+                    <PanelHead title="Post" />
                     <div className="flow-overview">
                       <div className="flow-ov-note">This post is no longer on the canvas.</div>
                     </div>
@@ -12327,13 +12327,15 @@ export function FlowsView() {
               const loading = !!pv?.loading && !(post?.headline || post?.primary || post?.components?.length)
               return (
                 <>
-                  <div className="flow-panel-head">
-                    <PresetTile tone={toneForPreset(p)} channel={p.channel} />
-                    <span className="flow-panel-title">{isPage ? 'Page' : `Post ${bi + 1}`}</span>
-                    <button className="flow-back flow-close" onClick={() => setSel(null)}>
-                      ✕
-                    </button>
-                  </div>
+                  <PanelHead
+                    lead={<PresetTile tone={toneForPreset(p)} channel={p.channel} />}
+                    title={isPage ? 'Page' : `Post ${bi + 1}`}
+                    actions={
+                      <button className="flow-back flow-close" onClick={() => setSel(null)}>
+                        ✕
+                      </button>
+                    }
+                  />
                   <div className="flow-inspect">
                     <button className="flow-back" onClick={() => setSel(node.id)}>
                       ‹ {p.label}
@@ -12395,13 +12397,15 @@ export function FlowsView() {
               const p = presetByKey(node.presetKey)!
               return (
                 <>
-                  <div className="flow-panel-head">
-                    <PresetTile tone={toneForPreset(p)} channel={p.channel} />
-                    <span className="flow-panel-title">{p.label}</span>
-                    <button className="flow-back flow-close" onClick={() => setSel(null)}>
-                      ✕
-                    </button>
-                  </div>
+                  <PanelHead
+                    lead={<PresetTile tone={toneForPreset(p)} channel={p.channel} />}
+                    title={p.label}
+                    actions={
+                      <button className="flow-back flow-close" onClick={() => setSel(null)}>
+                        ✕
+                      </button>
+                    }
+                  />
                   <div className="flow-inspect">
                     <textarea
                       className="flow-desc"
@@ -13095,15 +13099,15 @@ export function FlowsView() {
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
                 </button>
-                <div className="flow-panel-head">
-                  <span className="flow-panel-title">Add channel</span>
-                </div>
-                <div className="flow-picker-list">
-                  <div className="flow-inspect-desc">
-                    {assetPick.scheduledAt
+                <PanelHead
+                  title="Add channel"
+                  sub={
+                    assetPick.scheduledAt
                       ? `One asset, on ${new Date(assetPick.scheduledAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}. Pick the channel it goes out on.`
-                      : 'One asset in this campaign. Pick the channel it goes out on.'}
-                  </div>
+                      : 'One asset in this campaign. Pick the channel it goes out on.'
+                  }
+                />
+                <div className="flow-picker-list">
                   {grouped.map(([group, presets]) => (
                     <div key={group} className="flow-pgroup">
                       <div className="flow-pgroup-h">{group}</div>
@@ -13160,9 +13164,7 @@ export function FlowsView() {
                     if (!row) {
                       return (
                         <>
-                          <div className="flow-panel-head">
-                            <span className="flow-panel-title">Asset</span>
-                          </div>
+                          <PanelHead title="Asset" />
                           <div className="flow-inspect">
                             <p className="flow-inspect-note">That asset is no longer in this campaign.</p>
                           </div>
@@ -13177,12 +13179,13 @@ export function FlowsView() {
                      brand. Saying so beats inventing a card to satisfy the panel — see gridPick. */
                   return (
                     <>
-                      <div className="flow-panel-head">
-                        <span className="flow-note-ic flow-insp-ic" style={{ color: OBJECT_META[gridPick.kind].tone }} aria-hidden="true">
+                      <PanelHead
+                        tone={OBJECT_META[gridPick.kind].tone}
+                        icon={
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[gridPick.kind].icon}</svg>
-                        </span>
-                        <span className="flow-panel-title">{gridPick.label}</span>
-                      </div>
+                        }
+                        title={gridPick.label}
+                      />
                       <div className="flow-inspect">
                         <p className="flow-inspect-note">
                           {gridPick.kind === 'brand'
