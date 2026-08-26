@@ -23792,13 +23792,13 @@ table.aud-sheet td.stick .aud-cell {
   border-color: var(--obj-tone);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--obj-tone) 40%, transparent), 3px -3px 0 -1px var(--surface-2), 3px -3px 0 0 var(--border), 6px -6px 0 -1px var(--surface-2), 6px -6px 0 0 var(--border);
 }
+/* Text, not a field: the card reports its name and the inspector sets it, like every other card. */
 .flow-obj-name {
   margin: 0 9px 6px; width: calc(100% - 18px); box-sizing: border-box;
-  border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
-  padding: 0; cursor: text;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.flow-obj-name:focus { outline: none; }
-.flow-obj-name::placeholder { color: var(--text-faint); font-weight: 550; }
+.flow-obj-name.unnamed { color: var(--text-faint); font-weight: 550; }
 /* What's inside, at a glance: one tinted glyph per member plus a count. */
 .flow-obj-members { display: flex; align-items: center; gap: 4px; padding: 0 9px 9px; flex-wrap: wrap; }
 .flow-obj-chip {
