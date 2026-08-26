@@ -23552,7 +23552,16 @@ table.aud-sheet td.stick .aud-cell {
   /* .flow-node's padding (8px 10px 12px) double-pads these cards on top of each
      child's own inset. Reset here; children carry the whole inset below. */
   padding: 0;
-  background: var(--surface-2);
+  /* A NOD, NOT A LEGEND. 6% of the card's own tone mixed into the grey — enough that a board of
+     context reads as warm-and-various against the white it feeds, nowhere near enough to name a
+     kind by. It cannot be a legend and should not pretend to be one: NOTE_META gives Audience and
+     Company the SAME hex (#4c86f0), and Voice #0ea5a5 sits a hair from Data source #12a594, so at
+     this strength several pairs are the same colour. The spine and the glyph stay the identifier;
+     this is the surface agreeing with them.
+
+     6% because the Pattern card has been doing exactly this at 7% since it got its band, and it
+     reads as paper rather than as a status. Recipe borrowed from there wholesale. */
+  background: color-mix(in srgb, var(--note-tone) 6%, var(--surface-2));
   border: 1px solid var(--border);
   /* The accent moves from the top edge to a left spine. A full-width top rule now
      means "campaign root" and nothing else on this canvas. */
@@ -23572,8 +23581,25 @@ table.aud-sheet td.stick .aud-cell {
    neutralizes two exact tone collisions in NOTE_META: Audience and Company are
    both #4c86f0, and Voice #0ea5a5 sits a hair from Data source #12a594. */
 .flow-note[data-role='input'] .flow-note-kind { color: var(--text-muted); }
-/* No record picked yet: the card should read as empty rather than as done. */
-.flow-note[data-role='input']:not(.linked) { border-left-color: var(--border-strong); }
+/* No record picked yet: the card should read as empty rather than as done — so it keeps the plain
+   grey and the tint arrives with the record, which is what makes the tint worth anything. */
+.flow-note[data-role='input']:not(.linked) {
+  border-left-color: var(--border-strong);
+  background: var(--surface-2);
+}
+/* THE SPINE TELLS THE WHOLE STORY, in three steps: grey when nothing is picked, half-strength once
+   the card names a record, full tone once it actually feeds something. Empty → filled → working.
+
+   This exists because the lift that carries `attached` below is a SHADOW, and shadows do not
+   survive dark mode: --shadow there is black on a near-black board and reads as nothing at all. So
+   attachment needed one cue made of colour rather than light. The spine was already the card's
+   identifier and already had one unused step in it.
+
+   Pattern is excluded: its border is painted as a single tone-mixed edge under the zigzag band, and
+   a left-edge override at this specificity cuts a notch out of that. */
+.flow-note[data-role='input'].linked:not(.attached):not(.flow-note-pattern) {
+  border-left-color: color-mix(in srgb, var(--note-tone) 45%, var(--border));
+}
 .flow-note[data-role='input']:not(.linked) .flow-note-kind { color: var(--text-faint); }
 /* Selection stays FLAT (no --shadow tail), so a selected input never impersonates
    an output. 0-3-0 to out-specify .flow-note.sel and .flow-node.multi above.
@@ -23628,12 +23654,14 @@ table.aud-sheet td.stick .aud-cell {
 /* The warm paper tint under the band, so the card separates from the says-family cards it sits
    beside even where the band is scrolled out of view.
 
-   ⚠️ `.attached` sets `background: var(--surface)` on every input card and is declared BELOW this
-   block, so the tint has to OUT-SPECIFY it rather than merely precede it — hence the second arm,
-   which is (0,4,0) against its (0,3,0). Without it the tint vanished the moment the card was wired
-   to the campaign, which is most of the time and is exactly when you want to spot it. */
-.flow-note[data-role='input'].flow-note-pattern,
-.flow-note[data-role='input'].flow-note-pattern.attached {
+   This is now one notch above the 6% every input card carries rather than the only tinted card on
+   the board — the general rule took this card's recipe. Kept explicit at 7% because Pattern is the
+   one kind you hunt for rather than read in a set, and because deleting it would leave the card's
+   tint depending on a number set three hundred lines away.
+
+   The second arm this rule used to carry (`.flow-note-pattern.attached`) is gone with the white
+   `.attached` fill it existed to out-specify — see the WIRED IN block below. */
+.flow-note[data-role='input'].flow-note-pattern {
   background: color-mix(in srgb, var(--note-tone) 7%, var(--surface-2));
 }
 /* THE BAND: one painted layer, masked by two mask layers that union — a solid slab covering
@@ -23689,8 +23717,9 @@ table.aud-sheet td.stick .aud-cell {
    identifiable while it is still blank. A grey band was the first try and could not work: the
    label sits ON it, and --border-strong is near-white in the light theme and near-black in the
    dark one, so no single label colour is legible in both. */
-.flow-note[data-role='input'].flow-note-pattern:not(.linked),
-.flow-note[data-role='input'].flow-note-pattern:not(.linked).attached {
+/* Second arm dropped here too: it out-specified the white `.attached` fill, which no longer
+   exists. Plain grey when nothing is picked, same as every other unlinked input. */
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) {
   background: var(--surface-2);
 }
 .flow-note[data-role='input'].flow-note-pattern:not(.linked) { border-color: var(--border); }
@@ -23764,7 +23793,31 @@ table.aud-sheet td.stick .aud-cell {
 .flow.has-hub .flow-note-object:not(.attached) {
   opacity: 1;
 }
-.flow-note[data-role='input'].attached { background: var(--surface); }
+/* WIRED IN. This used to be said with `background: var(--surface)` — the card went WHITE the moment
+   it fed something. That was fine while every card was the same size and white meant nothing in
+   particular; it is not fine now that white is the output surface, because it made a wired-up
+   Audience card the same colour as a LinkedIn post. Fill now says role and only role.
+
+   So attachment moves to elevation, which was the one lever inputs deliberately did not use. The
+   old rule against that ("a selected input never impersonates an output", above) was written when
+   the two were the same width and a shadow was most of what told them apart. At 200 against 288
+   that is no longer true, and a 200px tinted card with a small lift cannot be read as a 288px white
+   one. --shadow, NOT --shadow-raise: a half step, already themed, and its own definition up top
+   reserves the raise for "a thing you ship". This is the rung below that, which is exactly what a
+   card that FEEDS the work is.
+
+   ⚠️ Smart objects are excluded by :not(.flow-note-object). Their box-shadow is not a shadow — it
+   is three offset pseudo-edges drawing the stack behind the card — and a plain `attached` rule
+   out-specifies it and wipes the stack. They keep the caption cue below. */
+.flow-note[data-role='input']:not(.flow-note-object).attached { box-shadow: var(--shadow); }
+/* Selection has to restate the lift or it drops it: these are 0-4-0 and beat the .sel/.multi rules
+   above no matter which is declared first, so the ring and the lift are spelled out together. */
+.flow-note[data-role='input']:not(.flow-note-object).attached.sel {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent), var(--shadow);
+}
+.flow-note[data-role='input']:not(.flow-note-object).attached.multi {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent), var(--shadow);
+}
 .flow-note[data-role='input'].attached .flow-note-kind { color: var(--note-tone, var(--text-muted)); }
 /* The hub's connection port. Sits on the brief's left edge, because context flows IN from the
    board toward the campaign, and the deliverables hang off its right. */
