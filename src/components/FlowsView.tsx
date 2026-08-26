@@ -8929,7 +8929,7 @@ export function FlowsView() {
               <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
             </svg>
           }
-          title={placementName(g)}
+          title="Smart object"
           sub={SMART_OBJECT_DESC}
           actions={(() => {
             const so = smartObjectFor(g)
@@ -8949,11 +8949,6 @@ export function FlowsView() {
         <div className="flow-inspect">
           {/* "Bundled" only describes a MULTI-card object. Said of one card it was simply untrue, and
               it made a legitimate single-card object look like a mistake. */}
-          <p className="flow-inspect-desc">
-            {members.length > 1
-              ? 'Several cards bundled and named, so you can reuse them instead of rebuilding them.'
-              : 'A named card you can reuse instead of rebuilding it. Drag more cards in to bundle them together.'}
-          </p>
           <label className="flow-inspect-label">Name</label>
           <input className="flow-inspect-input" value={placementName(g)} placeholder="Name this object…" onChange={(e) => renamePlacement(g.id, e.target.value)} />
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>Inside ({members.length})</label>
@@ -11303,13 +11298,24 @@ export function FlowsView() {
                     )}
 
                   </div>
-                  <input
-                    className="flow-obj-name"
-                    value={placementName(g)}
-                    placeholder="Name this object…"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => renamePlacement(g.id, e.target.value)}
-                  />
+                  {/* THE CARD SHOWS ITS NAME. It does not edit it, because no other card does: naming
+                      "moved to the inspector, where a board-local override belongs" (see the note on
+                      the input card's own name field), and every kind followed except this one. A
+                      field on one card type and not the others teaches that cards are editable in
+                      place, which is wrong everywhere else on the board.
+
+                      The panel already carries a labelled Name, so nothing is lost — and the input
+                      here was worse than redundant: it swallowed mousedown to keep from dragging the
+                      card, so the biggest target on a smart object was the one part you could not
+                      drag it by. */}
+                  {(() => {
+                    // The object's OWN name, not placementName's fallback: that returns the string
+                    // "Smart object" when there is no object to ask, so testing against it would
+                    // label an object somebody actually called "Smart object" as unnamed. A name of
+                    // '' is the real empty case and ?? does not catch it.
+                    const nm = smartObjectFor(g)?.name?.trim()
+                    return <div className={`flow-obj-name${nm ? '' : ' unnamed'}`}>{nm || 'Unnamed'}</div>
+                  })()}
                   {/* What's inside, at a glance: one tinted glyph per member. */}
                   <div className="flow-obj-members">
                     {members.map((m) => (
