@@ -13,6 +13,7 @@ import { type ReactNode } from 'react'
  * nodes, so a panel with an odd control does not have to teach this component about it.
  */
 export function PanelHead({
+  lead,
   icon,
   tone,
   title,
@@ -20,6 +21,15 @@ export function PanelHead({
   tag,
   actions,
 }: {
+  /**
+   * A LEADING ELEMENT THAT FRAMES ITSELF, where `icon` is a bare glyph this component frames.
+   *
+   * Two things in these panels want the slot an icon sits in but bring their own box: a channel's
+   * PresetTile, which is a 30px tinted tile, and a picker's back button. Passing either as `icon`
+   * puts it inside `.flow-insp-ic`, which frames an already-framed tile and sizes any svg inside it
+   * to 17px — so the distinction is not stylistic, it is the difference between a tile and a dent.
+   */
+  lead?: ReactNode
   /** The kind's glyph, drawn in the kind's own tone. Omitted where a panel has no icon. */
   icon?: ReactNode
   tone?: string
@@ -47,6 +57,7 @@ export function PanelHead({
 }) {
   return (
     <div className="flow-panel-head">
+      {lead}
       {icon && (
         <span className="flow-note-ic flow-insp-ic" style={{ color: tone }} aria-hidden="true">
           {icon}
