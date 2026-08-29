@@ -5586,6 +5586,43 @@ export function FlowsView() {
   }
   /** The brand-library object a canvas placement shows. */
   const smartObjectFor = (g: SmartPlacement) => smartObjects.find((o) => o.id === g.smartObjectId)
+  /**
+   * AN EMPTY BUNDLE IS A PROMISE NOBODY KEPT, so it does not get to sit on the board.
+   *
+   * You cannot make one — convertSelection refuses an empty selection — but you can arrive at one by
+   * deleting the member cards one at a time, and deleteObject drops a card from `objects` without
+   * touching the memberIds pointing at it. What was left was a card saying "0 inside": nothing to
+   * open, nothing to place, nothing to say. It is also the state that made the old open-on-the-board
+   * mode hide the entire canvas, which is how we found it.
+   *
+   * The library object goes too, but ONLY when it is campaign-scoped — that rung means this board is
+   * the only thing that can see it, so an empty one is unreachable rather than merely unused. A
+   * brand or shared object survives: another campaign may be placing it, and emptying it here is not
+   * a decision to destroy it for them.
+   *
+   * ⚠️ GATED ON HYDRATION. `objects` and `placements` are loaded from the same snapshot but land in
+   * separate commits, so before the board is hydrated every placement briefly looks memberless. Left
+   * ungated this effect would delete a board's entire set of smart objects on load, which is the one
+   * failure here that actually loses work.
+   */
+  useEffect(() => {
+    if (!boardsHydrated) return
+    const dead = placements.filter((g) => !g.memberIds.some((m) => objects.some((o) => o.id === m)))
+    if (!dead.length) return
+    const deadIds = new Set(dead.map((g) => g.id))
+    setPlacements((gs) => gs.filter((g) => !deadIds.has(g.id)))
+    setPos((p) => {
+      const next = { ...p }
+      for (const g of dead) delete next[g.id]
+      return next
+    })
+    setConnectors((c) => c.filter((e) => !deadIds.has(e.from) && !deadIds.has(e.to)))
+    setSel((cur) => (cur && deadIds.has(cur) ? null : cur))
+    for (const g of dead) {
+      const so = smartObjects.find((o) => o.id === g.smartObjectId)
+      if (so && scopeOf(so) === 'campaign') deleteSmartObject(so.id)
+    }
+  }, [boardsHydrated, placements, objects, smartObjects, deleteSmartObject])
   const placementName = (g: SmartPlacement) => smartObjectFor(g)?.name ?? 'Smart object'
   /**
    * Cards drawn on the board: the loose ones. A card inside a smart object lives inside it, not
@@ -5659,31 +5696,71 @@ export function FlowsView() {
     setSelected(new Set())
     setBriefCollapsed(false)
   }
-  /** Spill an object's members back onto the board and drop the object. */
+  /**
+   * Spill an object's members back onto the board and drop the object.
+   *
+   * THE CARDS COME OUT WHERE THE OBJECT WAS, which they did not used to. A member keeps the position
+   * it had when it was bundled — that becomes its layout INSIDE the object — and the object card
+   * takes the top-left-most of them as its own spot. Release simply deleted the object, so the
+   * members reappeared at those stored positions: drag a smart object across the board, detach it,
+   * and the cards leapt back to wherever they happened to be sitting before you ever grouped them,
+   * which on a worked-on board is somewhere else entirely and reads as the cards running away.
+   *
+   * So we move them by however far the object has travelled from where it was made. The internal
+   * layout is preserved — they stay in the same arrangement relative to each other — the whole
+   * cluster just lands under the card you were looking at.
+   */
   const releasePlacement = (gid: string) => {
     const g = placements.find((x) => x.id === gid)
     if (!g) return
     recordHistory(true)
     setPlacements((gs) => gs.filter((x) => x.id !== gid))
     setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
+    const layout = smartObjectFor(g)?.layout
     setPos((p) => {
       const next = { ...p }
+      const here = p[gid] ?? { x: 0, y: 0 }
+      /**
+       * PLACED FROM THE OBJECT'S OWN LAYOUT, not from whatever `pos` the members last had.
+       *
+       * The obvious version of this — shift each member by however far the object has been dragged
+       * — is wrong, and wrong silently. A member inside an object is not rendered, and a card that
+       * is not rendered does not reliably keep a `pos` entry across a save and a reload, so on a
+       * board that has been reopened the members have no stored position at all. Every one of them
+       * then falls back to translate(0, 0) and the whole bundle detaches into a single stack in the
+       * canvas corner, which is what this did before: two cards, same pixel, nowhere near the card
+       * you detached.
+       *
+       * `layout` is the field that survives, because it is stored ON the smart object and is what
+       * its own canvas arranges the contents by. Anchoring it at the object's position preserves the
+       * arrangement AND lands the cluster where you were looking.
+       */
+      const marks = g.memberIds.map((m) => layout?.[m]).filter((q): q is { x: number; y: number } => !!q)
+      const origin = marks.length ? marks.reduce((a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) })) : null
+      g.memberIds.forEach((m, i) => {
+        const mark = layout?.[m]
+        next[m] = mark && origin
+          ? { x: here.x + (mark.x - origin.x), y: here.y + (mark.y - origin.y) }
+          // No layout (an object written before the field existed): cascade them so they are at
+          // least distinguishable and reachable, rather than stacked on one another.
+          : { x: here.x + i * 18, y: here.y + i * 22 }
+      })
       delete next[gid]
       return next
     })
     setSel(g.memberIds[0] ?? null)
     setSelected(new Set())
   }
-  /** Delete an object AND its members (releasePlacement first if you only want the object gone). */
-  const deletePlacement = (gid: string) => {
-    const g = placements.find((x) => x.id === gid)
-    if (!g) return
-    recordHistory(true)
-    g.memberIds.forEach((m) => deleteObject(m))
-    setPlacements((gs) => gs.filter((x) => x.id !== gid))
-    setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
-    if (sel === gid) setSel(null)
-  }
+  /**
+   * NO DELETE FROM THE BOARD. This used to be `deletePlacement`, wired to "Delete object and its
+   * cards" in the canvas right-click menu — which contradicted the object panel a few hundred lines
+   * down, whose own comment says destroying an object reaches campaigns you cannot see from this
+   * board and therefore belongs where the object lives. Both positions could not be right; the
+   * panel's was, so the menu item has gone with the function behind it.
+   *
+   * The library still deletes, and does it the safe way: detach every placement first, then remove
+   * the object, so no board is left pointing at something that is no longer there.
+   */
   // ---- groups: hold an arrangement of cards together ----
   /** card id → the group it belongs to. A card is only ever in one. */
   const groupBy = useMemo(() => groupIndex(groups), [groups])
@@ -11281,20 +11358,28 @@ export function FlowsView() {
                         SHARED WEARS IT TOO. This read `scope === 'brand'`, so the rung with the widest
                         reach of the three — every campaign of every brand — was the one card on the
                         board carrying no warning at all. */}
-                    {scope !== 'campaign' && (
-                      <span
-                        className="flow-obj-linked"
-                        title={scope === 'shared'
-                          ? 'Shared with every brand: edits reach every campaign using it, whoever it belongs to'
-                          : 'In the brand library: edits reach every campaign using it'}
-                        aria-label={scope === 'shared' ? 'Shared with every brand' : 'In the brand library'}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
-                          <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
-                        </svg>
-                      </span>
-                    )}
+                    {/* EVERY SCOPE WEARS IT NOW. The mark used to appear only on brand and shared
+                        objects, where it warned about reach. It has a second job since the library
+                        shelf started wearing the card's shape: the row and the card are deliberately
+                        near-identical, and this is the one bit of chrome that says which is which —
+                        the card on the board is a REFERENCE to something that lives in the library,
+                        the row in the library is the thing itself. A campaign-scoped object is still
+                        a library object, on the rung only this board can reach, so it gets the mark
+                        and a tooltip that says how far it actually goes. */}
+                    <span
+                      className="flow-obj-linked"
+                      title={scope === 'shared'
+                        ? 'From the library, shared with every brand: edits reach every campaign using it, whoever it belongs to'
+                        : scope === 'brand'
+                          ? 'From the brand library: edits reach every campaign using it'
+                          : "From this campaign's library: only this board can use it"}
+                      aria-label={scope === 'shared' ? 'From the library, shared with every brand' : scope === 'brand' ? 'From the brand library' : "From this campaign's library"}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
+                        <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
+                      </svg>
+                    </span>
 
                   </div>
                   {/* THE CARD SHOWS ITS NAME. It does not edit it, because no other card does: naming
@@ -12737,15 +12822,15 @@ export function FlowsView() {
                     const so = smartObjectFor(onGroup)
                     return so ? (
                       <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); openObjectTab(so.id) }}>
-                        Open in its own tab
+                        Edit in its own tab
                       </button>
                     ) : null
                   })()}
-                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); releasePlacement(onGroup.id) }}>Release</button>
-                  <div className="flow-ctx-sep" />
-                  <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deletePlacement(onGroup.id) }}>
-                    Delete object and its cards
-                  </button>
+                  {/* "Detach here", not "Release". Same act, and it was the last place on the board
+                      still calling it something else — the panel and the diamond menu both say
+                      detach, and one action with two names is two actions to anybody who has not
+                      been told otherwise. */}
+                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); releasePlacement(onGroup.id) }}>Detach here</button>
                 </>
               ) : (
                 <>
