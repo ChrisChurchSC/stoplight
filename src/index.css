@@ -4854,9 +4854,10 @@ button.mf-open:focus-visible,
 .flow-lib-object-more-btn:focus-visible { opacity: 1 }
 .flow-lib-object-more-btn:hover { color: var(--text); background: var(--surface-2) }
 .flow-lib-object-more-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
-/* The button sits in the tile's top-right corner, beside the glyph rather than over the name, so the
-   name gets the tile's full width. It kept a 22px inset from when a row was one line. */
-.flow-lib-object .flow-lib-object-ic { padding-right: 22px }
+/* The glyph leads the row now, so it needs no inset of its own; the clearance moves to the NAME,
+   which is what the button would otherwise sit on top of. */
+.flow-lib-object .flow-lib-object-ic { padding-right: 0 }
+.flow-lib-object .flow-lib-object-name { padding-right: 20px }
 
 .flow-ctx-item.danger.armed {
   color: var(--red);
@@ -5231,6 +5232,23 @@ button.mf-open:focus-visible,
   background: var(--border);
   margin: 16px -14px;
 }
+
+/* A FACT, NOT A FIELD. The smart-object panel reports the object's name rather than setting it,
+   because a rename here would reach every campaign using the object, and this panel is the one place
+   you are thinking about a single campaign. Same size and rhythm as the input below it so the panel
+   still reads as one column, minus the border and fill that promise you can type. */
+.flow-inspect-read {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-inspect-read em { font-weight: 550; font-style: italic; color: var(--text-faint); }
 
 .flow-inspect-input {
   width: 100%;
@@ -24630,16 +24648,26 @@ table.aud-sheet td.stick .aud-cell {
 .flow-lib-folder-empty { font-size: 12.5px; color: var(--text-faint); padding: 6px 12px; }
 /* The brand's smart objects, shelved above its campaigns. A quiet group: it is reference material
    you check, not a list you click through, so the rows are not buttons. */
-/* TWO ACROSS, SQUARE. A list of one-line rows spent the panel's width on whitespace and showed four
-   objects where eight fit; a shelf is something you scan, so it reads as tiles. At 300px the panel
-   gives each tile about 128px, which is why the sub-line went: "1 card, none filled in" cannot be
-   read at that width, and the chips underneath say what is inside more directly anyway. */
+/* ONE ACROSS, SHAPED LIKE THE CARD IT BECOMES. These were square tiles, two across — a shelf you
+   scan rather than a list you read, which was the right call while the point was density.
+
+   It costs recognition, though, and recognition is the more valuable thing here: the object you drag
+   off this shelf lands on the board as a WIDE card with a coloured spine and a stack behind it, and
+   a square bears no resemblance to it. Two shapes for one thing is two things to anybody who has not
+   been told otherwise. So the shelf row now wears the card's clothes — same silhouette, same spine,
+   same stacked edges — and dragging one onto the board stops being a transformation.
+
+   The sub-line comes back with the width. It was hidden because "1 card, none filled in" is
+   unreadable at 128px; at full panel width it is the one line that says what the object is FOR,
+   which the chips underneath cannot. */
 .flow-lib-objects { padding: 2px 0 8px }
-/* Two across, on a container that holds nothing but tiles. */
+/* One across, and the gap carries the stack: the offset edges below reach 6px up and 6px right, so
+   a tighter gap would have each row's stack overlapping the name of the row above it. */
 .flow-lib-objgrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 6px 8px 0 0;
 }
 .flow-lib-objects-h {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
@@ -24649,31 +24677,55 @@ table.aud-sheet td.stick .aud-cell {
    what is inside — and is a drag handle onto the canvas, so it gets a card's affordances. */
 .flow-lib-object {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  aspect-ratio: 1;
+  /* A ROW, not a stack. In a square the glyph sat on its own line above the name; in a short wide
+     box that line is mostly empty, so the glyph moves beside the text where a list row wants it.
+     The card's identity is carried by the four cues below — silhouette, spine, tint, stack — not by
+     where the glyph sits. */
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 9px;
   min-width: 0;
-  padding: 9px;
+  padding: 7px 9px 8px;
+  /* The card's own chrome, borrowed wholesale from .flow-note-object on the canvas: the spine in the
+     object tone, the 6% tint every context card carries, the small radius. Kept as literal values
+     rather than a shared class because the two live in different stacking contexts and the canvas
+     card also carries drag, selection and connect states this row has no use for. */
+  --obj-tone: var(--accent-2);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-2);
+  border-left: 3px solid var(--obj-tone);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-2) 6%, var(--surface-2));
+  /* THE STACK, the same two offset pseudo-edges the canvas card uses, and the single strongest cue
+     that this row is a bundle rather than one thing. It is what makes the shape read as "several
+     things in one" before any label is read. */
+  box-shadow: 3px -3px 0 -1px var(--surface-2), 3px -3px 0 0 var(--border), 6px -6px 0 -1px var(--surface-2), 6px -6px 0 0 var(--border);
   cursor: grab;
   transition: border-color 120ms ease, background 120ms ease;
 }
 .flow-lib-object:hover { border-color: var(--border-strong, var(--border)); }
 .flow-lib-object:active { cursor: grabbing; }
-.flow-lib-object-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent); opacity: 0.7 }
-.flow-lib-object-ic svg { width: 15px; height: 15px; }
-/* The name takes the room the tile has left, and wraps rather than truncating at a word: two lines
-   of a real name beat one line plus an ellipsis when the tile is this narrow. */
-.flow-lib-object-txt { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 2px }
-.flow-lib-object-name {
-  font-size: 12px; line-height: 1.3; color: var(--text);
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-  overflow-wrap: anywhere;
+.flow-lib-object-ic {
+  flex: 0 0 auto; display: inline-flex; color: var(--obj-tone, var(--accent)); opacity: 0.85;
+  /* Nudged onto the name's baseline rather than the box's top edge, so the row reads as one line
+     with a mark in front of it instead of a glyph floating above the text. */
+  margin-top: 1px;
 }
-/* No room for it beside the chips, which say the same thing in less space. */
-.flow-lib-object-sub { display: none }
+.flow-lib-object-ic svg { width: 15px; height: 15px; }
+/* The name is one line with an ellipsis now, which is what .flow-obj-name does on the card. The
+   three-line clamp was for a 128px square, where wrapping genuinely beat truncating; at full panel
+   width a wrapped name just makes the rows different heights. */
+.flow-lib-object-txt { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 1px }
+.flow-lib-object-name {
+  font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Back, with the width to read it. This is the line that says what the object IS — "Jane Doe · 2
+   proof" — which the chips can only gesture at. */
+.flow-lib-object-sub {
+  display: block;
+  font-size: 11.5px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* One tinted glyph per card inside: an audience-plus-proof bundle reads differently from an
    audience-plus-message one without opening either. */
 .flow-lib-object-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: auto; }
