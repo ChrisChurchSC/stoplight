@@ -24605,6 +24605,20 @@ table.aud-sheet td.stick .aud-cell {
   color: var(--text-faint);
   margin-bottom: 9px;
 }
+/* WHY THIS RUNG WILL NOT TAKE A DROP. Amber rather than red: nothing has gone wrong and nothing has
+   failed — the rung is simply unusable until this campaign names a brand, which is a thing to go and
+   do rather than an error to recover from. Sits under the rung's own sentence and above its
+   contents, so it is read as a condition on the whole rung rather than as a note on one object. */
+.flow-lib-rung-blocked {
+  font-size: 11px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--amber) 72%, var(--text));
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--border));
+  border-radius: 7px;
+  padding: 7px 9px;
+  margin-bottom: 9px;
+}
 .flow-library-head { position: relative; display: flex; align-items: center; gap: 8px; padding: 14px 12px 14px 16px; border-bottom: 1px solid var(--border); }
 .flow-library-searchic { position: absolute; left: 28px; top: 50%; transform: translateY(-50%); color: var(--text-faint); display: inline-flex; pointer-events: none; }
 .flow-library-searchic svg { width: 16px; height: 16px; }

@@ -5587,23 +5587,38 @@ export function FlowsView() {
   /** The brand-library object a canvas placement shows. */
   const smartObjectFor = (g: SmartPlacement) => smartObjects.find((o) => o.id === g.smartObjectId)
   /**
-   * AN EMPTY BUNDLE IS A PROMISE NOBODY KEPT, so it does not get to sit on the board.
+   * AN EMPTY CARD IS A PROMISE NOBODY KEPT, so it does not get to sit on the board.
    *
    * You cannot make one — convertSelection refuses an empty selection — but you can arrive at one by
    * deleting the member cards one at a time, and deleteObject drops a card from `objects` without
-   * touching the memberIds pointing at it. What was left was a card saying "0 inside": nothing to
+   * touching the memberIds pointing at it. What is left is a card saying "0 inside": nothing to
    * open, nothing to place, nothing to say. It is also the state that made the old open-on-the-board
    * mode hide the entire canvas, which is how we found it.
    *
-   * The library object goes too, but ONLY when it is campaign-scoped — that rung means this board is
-   * the only thing that can see it, so an empty one is unreachable rather than merely unused. A
-   * brand or shared object survives: another campaign may be placing it, and emptying it here is not
-   * a decision to destroy it for them.
+   * ⚠️ THE PLACEMENT GOES. THE LIBRARY OBJECT STAYS. This deleted the object too when it was
+   * campaign-scoped, on the reasoning that a rung only this board can see makes an empty one
+   * unreachable. That was wrong three times over, and it destroyed a real object on a real board
+   * before anyone noticed:
+   *
+   * 1. It is the act this file removed from the board two commits ago. "Delete object and its cards"
+   *    came out of the canvas menu because destroying an object reaches campaigns you cannot see and
+   *    belongs where the object lives. An effect doing the same thing silently, with no confirmation,
+   *    is worse than the menu item — the menu at least waited to be clicked.
+   * 2. It tests the WRONG LIST. `memberIds` is which cards are bundled ON THIS BOARD; the library
+   *    object is defined by its `contents`. The two are separate and they drift — a card reading
+   *    "1 inside" has been seen against a tab holding two. So "no members on this board" is not
+   *    evidence the object is empty, and this deleted objects that had contents.
+   * 3. An object is more than its cards. `reference` is an uploaded document saying what the object
+   *    IS, which the copy writer reads as the authority on it, and it survives independently of
+   *    contents. An object with no cards and a written description is not empty in any sense that
+   *    matters.
+   *
+   * So the board cleans up the board: the card goes, and the object stays on the shelf where the
+   * library can delete it deliberately, with the confirmation that surface already has.
    *
    * ⚠️ GATED ON HYDRATION. `objects` and `placements` are loaded from the same snapshot but land in
    * separate commits, so before the board is hydrated every placement briefly looks memberless. Left
-   * ungated this effect would delete a board's entire set of smart objects on load, which is the one
-   * failure here that actually loses work.
+   * ungated this would strip a board's entire set of smart object cards on load.
    */
   useEffect(() => {
     if (!boardsHydrated) return
@@ -5618,11 +5633,7 @@ export function FlowsView() {
     })
     setConnectors((c) => c.filter((e) => !deadIds.has(e.from) && !deadIds.has(e.to)))
     setSel((cur) => (cur && deadIds.has(cur) ? null : cur))
-    for (const g of dead) {
-      const so = smartObjects.find((o) => o.id === g.smartObjectId)
-      if (so && scopeOf(so) === 'campaign') deleteSmartObject(so.id)
-    }
-  }, [boardsHydrated, placements, objects, smartObjects, deleteSmartObject])
+  }, [boardsHydrated, placements, objects])
   const placementName = (g: SmartPlacement) => smartObjectFor(g)?.name ?? 'Smart object'
   /**
    * Cards drawn on the board: the loose ones. A card inside a smart object lives inside it, not
@@ -10564,13 +10575,24 @@ export function FlowsView() {
                    *
                    * Dropping on the rung it already sits on is a no-op rather than a write: it is the
                    * commonest miss, and re-saving the same scope would still bump the board's history.
-                   * The brand rung refuses when no brand is in view, because that is the one that
-                   * needs somewhere to land.
+                   * The brand rung refuses when there is no brand for the object to land in.
+                   *
+                   * ⚠️ THE TWO HANDLERS HAVE TO AGREE, and they did not. onDrop accepted an object
+                   * that already carries a brand even with none in view (`!brand && !o.brand`), which
+                   * is right — the object names its own destination. onDragOver refused on `!brand`
+                   * alone, and onDragOver is the one the browser listens to, so that fallback was
+                   * unreachable by dragging and the drop condition was dead code. The reason it was
+                   * written stricter is real: `dataTransfer.getData` is blocked during dragover, so
+                   * the payload cannot be read there. `dragObjectId` is the way round it — the shelf
+                   * row sets it on dragstart precisely so the rest of the drag can tell what is in
+                   * the air.
                    */
+                  const dragged = dragObjectId ? smartObjects.find((o) => o.id === dragObjectId) : undefined
+                  const canTake = (to: SmartObjectScope, o?: SmartObject) => to !== 'brand' || !!brand || !!o?.brand
                   const rungDrop = (to: SmartObjectScope) => ({
                     onDragOver: (e: ReactDragEvent) => {
                       if (!e.dataTransfer.types.includes(SMART_OBJECT_DND)) return
-                      if (to === 'brand' && !brand) return
+                      if (!canTake(to, dragged)) return
                       e.preventDefault()
                       e.stopPropagation()
                       e.dataTransfer.dropEffect = 'move'
@@ -10586,7 +10608,7 @@ export function FlowsView() {
                       e.stopPropagation()
                       const o = smartObjects.find((x) => x.id === id)
                       if (!o || scopeOf(o) === to) return
-                      if (to === 'brand' && !brand && !o.brand) return
+                      if (!canTake(to, o)) return
                       // The board doing the demoting is the board it becomes visible on, which is
                       // the only honest reading of dropping it on "this campaign".
                       setSmartObjectScope(id, to, { brand: o.brand || brand, campaign: boardKey })
@@ -10605,6 +10627,22 @@ export function FlowsView() {
                       {/* The rung's own sentence, because "This brand" does not say who else is
                           affected and that is the whole difference between the three. */}
                       <div className="flow-lib-rung-hint">{r.hint}</div>
+                      {/* WHY IT WILL NOT TAKE ANYTHING. The brand rung refuses every drop on a board
+                          with no brand bound, which is correct — there is nowhere for the object to
+                          land — but it refused in complete silence: no cursor, no message, nothing.
+                          You drag, the card goes back, and there is no way to learn what is wrong.
+                          The menu on the object's panel at least greys "Move to this brand" out;
+                          this said nothing at all, and it is the surface you reach for first.
+
+                          Shown whether or not the rung is empty, because the rung being unusable is
+                          not the same fact as it having nothing on it, and a populated brand rung on
+                          a brandless board refuses drops just as quietly. */}
+                      {r.key === 'brand' && !brand && (
+                        <div className="flow-lib-rung-blocked">
+                          Add a Brand card to this campaign before moving anything here — this rung
+                          needs a brand to file it under.
+                        </div>
+                      )}
                       {r.list.length === 0 ? (
                         <div className="flow-lib-folder-empty">
                           {r.key === 'campaign'
