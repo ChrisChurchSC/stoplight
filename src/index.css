@@ -26284,16 +26284,29 @@ table.aud-sheet td.stick .aud-cell {
    do on .flow-inspect. Copying the panel's fields without its padding would have every group rule
    stop 2px short of the wall. */
 .sod-body { padding: 14px; }
+/* EVEN SPACE EITHER SIDE OF EVERY RULE. The shared group-head rule carries its whole gap BELOW the
+   border (padding-top: 15px) and nothing above it, so a divider sits hard against whatever ended the
+   section before it and floats away from the heading it introduces. In a tall inspector that is
+   absorbed by the fields; in a dialog this size it reads as the headings being mis-set.
+
+   Worse, "whatever ended the section" differed — an input contributed 0, the rung list 4 — so the
+   gap above the rules came out 0, 4, 0 down the column and no two sections matched. The space now
+   comes from the head itself, which is the only element that knows a new group is starting, so it is
+   the same everywhere no matter what precedes it. */
+.sod-body > .flow-inspect-label:not(:first-child) {
+  margin-top: 16px;
+  padding-top: 14px;
+}
 
 /* WHO CAN USE IT: three choices, stacked, each carrying its consequence. A select would fit in one
    line and hide the two options you did not pick, which are the ones you need to see to choose. */
-.sod-rungs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.sod-rungs { display: flex; flex-direction: column; gap: 5px; }
 .sod-rung {
   display: flex;
   flex-direction: column;
   gap: 1px;
   text-align: left;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface-2);
