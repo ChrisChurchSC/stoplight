@@ -74,16 +74,35 @@ function CampaignNav() {
       >
         <span className="nav-ico"><FilesIco /></span>
       </button>
-      {/* ASSETS IS STILL PARKED. It works, but the canvas is what is being made good, and a rail
-          offering a door to somewhere unfinished invites people through it. Disabled with the
-          reason on the tooltip rather than hidden, because a control that vanishes reads as
-          something you broke, and it is coming back. Re-enable by deleting the disabled prop and
-          giving it the onClick the other two have. */}
+      {/* UNPARKED. It was disabled while the canvas was being made good, on the grounds that "a rail
+          offering a door to somewhere unfinished invites people through it" — which was right at the
+          time and is the reason to say what changed rather than just delete the prop.
+
+          What it opens is the smart object library: every bundle you have made, on the rung you put
+          it on, and the place they are deleted from. The panel had the shelf and the search already;
+          what it did not have was a way in that anyone would find, or a visible way to act on a row.
+          Both of those are why it stayed shut, and both are now done.
+
+          Still one library, not "libraries": the published-content catalogue is its own page and has
+          not moved here. */}
+      {/* A TOGGLE, because it is a panel and not a destination. Files and Assets sit on the same
+          canvas — Assets is a drawer docked to its left — so the button that opens the drawer is the
+          obvious thing to press to shut it again. It only ever opened, which left closing it to the
+          chevron inside the panel or to pressing Files, neither of which is where your hand is.
+
+          Coming from another view it always OPENS rather than toggling: the press means "take me to
+          the library", and a toggle would have sent you to a board with the drawer shut whenever it
+          happened to have been left open. */}
       <button
-        className="nav-item soon"
-        disabled
-        title="Assets: the brand's asset libraries. Coming soon."
-        aria-label="Assets, coming soon"
+        className={`nav-item${assetsOpen ? ' active' : ''}`}
+        onClick={() => {
+          const fromElsewhere = !onBoard
+          setFlowView('flow')
+          setAssetsOpen(fromElsewhere ? true : !assetsOpen)
+        }}
+        title={assetsOpen ? 'Close the smart object library' : "Assets: the brand's smart object library"}
+        aria-label="Assets"
+        aria-pressed={assetsOpen}
       >
         <span className="nav-ico"><AssetsIco /></span>
       </button>

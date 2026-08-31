@@ -4782,15 +4782,15 @@ button.mf-open:focus-visible,
    control up there, and plainly crooked next to a second icon that is laid out in the title row. */
 .flow-panel-collapse { position: absolute; top: 16px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .flow-panel-collapse:hover { background: var(--surface-2); color: var(--text); }
-/* THE COMPONENT CONTROL. The button reuses .flow-panel-action so it sits with the collapse control
+/* THE SMART OBJECT CONTROL. The button reuses .flow-panel-action so it sits with the collapse control
    exactly as the old icon did; `on` is the filled state, which is the whole signal — filled means
-   "this is a component", and which RUNG it is on is said in words in the menu it opens. */
-.flow-cmp { position: relative; display: inline-flex; flex: 0 0 auto; margin-left: auto }
-.flow-cmp-btn.on { color: var(--accent) }
-.flow-cmp-btn[aria-expanded='true'] { background: var(--surface-2); color: var(--text) }
+   "this is one", and which RUNG it is on is said in words in the menu it opens. */
+.flow-so { position: relative; display: inline-flex; flex: 0 0 auto; margin-left: auto }
+.flow-so-btn.on { color: var(--accent) }
+.flow-so-btn[aria-expanded='true'] { background: var(--surface-2); color: var(--text) }
 
 /* Hangs off the button rather than the panel, so it stays put when the panel scrolls under it. */
-.flow-cmp-menu {
+.flow-so-menu {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
@@ -4802,7 +4802,7 @@ button.mf-open:focus-visible,
   background: var(--surface);
   box-shadow: 0 12px 28px -10px rgba(16, 24, 40, 0.28);
 }
-.flow-cmp-menu .flow-ctx-item {
+.flow-so-menu .flow-ctx-item {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -4813,20 +4813,52 @@ button.mf-open:focus-visible,
 /* THE RUNG, IN WORDS, and the consequence under each choice. The icon deliberately does not encode
    which rung this is, so the menu has to — and a rung is a decision about who else is affected,
    which is not a thing to infer from a label like "This brand". */
-.flow-cmp-menu-head {
+.flow-so-menu-head {
   padding: 6px 9px 7px;
   font-size: 11px;
   font-weight: 650;
   color: var(--text-muted);
 }
-.flow-cmp-menu-hint { font-size: 10.5px; line-height: 1.35; color: var(--text-faint) }
-.flow-cmp-menu .flow-ctx-item:disabled { opacity: 0.45; cursor: default }
-.flow-cmp-menu .flow-ctx-item:disabled .flow-cmp-menu-hint { color: var(--text-faint) }
-.flow-cmp-menu-sep { height: 1px; margin: 5px -5px; background: var(--border) }
+.flow-so-menu-hint { font-size: 10.5px; line-height: 1.35; color: var(--text-faint) }
+.flow-so-menu .flow-ctx-item:disabled { opacity: 0.45; cursor: default }
+.flow-so-menu .flow-ctx-item:disabled .flow-so-menu-hint { color: var(--text-faint) }
+.flow-so-menu-sep { height: 1px; margin: 5px -5px; background: var(--border) }
 
 /* Armed delete in the shelf menu: quiet until the first press, then unmistakable. Two presses because
    this is the one action here that cannot be undone by making the thing again — the boards using it
    lose their wiring too. */
+/* The row's visible menu button. Hidden until the row is hovered or the button is focused: a shelf
+   you are reading should not be a column of controls, and a shelf you are acting on should not make
+   you guess. */
+.flow-lib-object { position: relative }
+.flow-lib-object-more-btn {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+.flow-lib-object-more-btn svg { width: 15px; height: 15px }
+.flow-lib-object:hover .flow-lib-object-more-btn,
+.flow-lib-object-more-btn:focus-visible { opacity: 1 }
+.flow-lib-object-more-btn:hover { color: var(--text); background: var(--surface-2) }
+.flow-lib-object-more-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+/* The glyph leads the row now, so it needs no inset of its own; the clearance moves to the NAME,
+   which is what the button would otherwise sit on top of. */
+.flow-lib-object .flow-lib-object-ic { padding-right: 0 }
+.flow-lib-object .flow-lib-object-name { padding-right: 20px }
+
 .flow-ctx-item.danger.armed {
   color: var(--red);
   background: color-mix(in srgb, var(--red) 12%, transparent);
@@ -5200,6 +5232,23 @@ button.mf-open:focus-visible,
   background: var(--border);
   margin: 16px -14px;
 }
+
+/* A FACT, NOT A FIELD. The smart-object panel reports the object's name rather than setting it,
+   because a rename here would reach every campaign using the object, and this panel is the one place
+   you are thinking about a single campaign. Same size and rhythm as the input below it so the panel
+   still reads as one column, minus the border and fill that promise you can type. */
+.flow-inspect-read {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-inspect-read em { font-weight: 550; font-style: italic; color: var(--text-faint); }
 
 .flow-inspect-input {
   width: 100%;
@@ -23474,14 +23523,63 @@ table.aud-sheet td.stick .aud-cell {
    here, so declaration order is what makes these rules win. Don't relocate.
    ============================================================================ */
 
+/* ---- OUTPUT: raised, filled, and the widest card that is not the plate ---- */
+/* THE MATERIAL NOW HANGS OFF THE ROLE, not off the tier. It used to be assembled by accident: a
+   channel card got its fill from .flow-tier-deliv, a post card got its fill from .flow-brief-node,
+   and the raise, the radius and the width they share came from plain .flow-node — which an INPUT
+   card inherits too. So a post differed from a piece of context only by what .flow-note went on to
+   override, and every new output tier had to re-derive the same look by hand. [data-role='output']
+   was already emitted on all three sites in FlowsView and matched ZERO rules; this is the hook,
+   used.
+
+   TIER STILL OWNS COLOUR. Nothing here sets background or border-color on purpose: intensity is the
+   tier's job (campaign a faint plate, its channel card a firm tint, its posts a whisper) and this
+   rule is 0-2-0 sitting after the tier block, so declaring a fill here would silently flatten all
+   three into one. Role says how a card is BUILT; tier says how loud it is.
+
+   max-width: none is load-bearing. .flow-brief-node caps at 250px and .flow-node:not(.flow-brief-node)
+   at 252px, and max-width beats width — without releasing it, `width: 288px` is ignored and the
+   silhouette change quietly does nothing. Same trap the input rule below documents. */
+.flow-node[data-role='output'] {
+  width: 288px;
+  max-width: none;
+  border-radius: 12px;
+  box-shadow: var(--shadow-raise);
+}
+
 /* ---- INPUT: flat, recessed, a tone spine on the left ---- */
 .flow-note[data-role='input'] {
-  width: 236px;
+  /* SILHOUETTE IS THE CUE THAT SURVIVES. This was 236px against outputs capped at 250-252, a 6%
+     delta you could only see with the two cards adjacent — so the split was resting entirely on
+     elevation and fill, which are the two levers that die first. --shadow-raise is a 20px blur at
+     12% alpha and is a smudge at the 50% zoom preset; a 16% tone tint on white sits a few percent
+     of luminance from --surface-2. Width does not degrade: 200 against 288 reads at any zoom, in
+     greyscale, half-occluded behind a wire, and in the corner of your eye.
+
+     The board now steps 288 / 252 / 200 — the things you ship, the campaign plate, the context they
+     are written from. ⚠️ The plate sitting BETWEEN the other two is not the intent and not a choice
+     made here: .flow-stack-view > .flow-node[data-node-id='campaign'] asks for width: 340px and has
+     the specificity to win it, but the max-width: 252px cap above (added later, for tag-row
+     truncation) clamps it — different property, so specificity never arbitrates and the 340 has been
+     dead for a while. It went unnoticed while every card was ~250 wide. Give that rule
+     max-width: none and the step becomes 340 / 288 / 200, with the plate widest as its name implies;
+     left alone deliberately here because widening the campaign card is a call to make on purpose,
+     not a side effect of this change. */
+  width: 200px;
   max-width: none;
   /* .flow-node's padding (8px 10px 12px) double-pads these cards on top of each
      child's own inset. Reset here; children carry the whole inset below. */
   padding: 0;
-  background: var(--surface-2);
+  /* A NOD, NOT A LEGEND. 6% of the card's own tone mixed into the grey — enough that a board of
+     context reads as warm-and-various against the white it feeds, nowhere near enough to name a
+     kind by. It cannot be a legend and should not pretend to be one: NOTE_META gives Audience and
+     Company the SAME hex (#4c86f0), and Voice #0ea5a5 sits a hair from Data source #12a594, so at
+     this strength several pairs are the same colour. The spine and the glyph stay the identifier;
+     this is the surface agreeing with them.
+
+     6% because the Pattern card has been doing exactly this at 7% since it got its band, and it
+     reads as paper rather than as a status. Recipe borrowed from there wholesale. */
+  background: color-mix(in srgb, var(--note-tone) 6%, var(--surface-2));
   border: 1px solid var(--border);
   /* The accent moves from the top edge to a left spine. A full-width top rule now
      means "campaign root" and nothing else on this canvas. */
@@ -23501,8 +23599,25 @@ table.aud-sheet td.stick .aud-cell {
    neutralizes two exact tone collisions in NOTE_META: Audience and Company are
    both #4c86f0, and Voice #0ea5a5 sits a hair from Data source #12a594. */
 .flow-note[data-role='input'] .flow-note-kind { color: var(--text-muted); }
-/* No record picked yet: the card should read as empty rather than as done. */
-.flow-note[data-role='input']:not(.linked) { border-left-color: var(--border-strong); }
+/* No record picked yet: the card should read as empty rather than as done — so it keeps the plain
+   grey and the tint arrives with the record, which is what makes the tint worth anything. */
+.flow-note[data-role='input']:not(.linked) {
+  border-left-color: var(--border-strong);
+  background: var(--surface-2);
+}
+/* THE SPINE TELLS THE WHOLE STORY, in three steps: grey when nothing is picked, half-strength once
+   the card names a record, full tone once it actually feeds something. Empty → filled → working.
+
+   This exists because the lift that carries `attached` below is a SHADOW, and shadows do not
+   survive dark mode: --shadow there is black on a near-black board and reads as nothing at all. So
+   attachment needed one cue made of colour rather than light. The spine was already the card's
+   identifier and already had one unused step in it.
+
+   Pattern is excluded: its border is painted as a single tone-mixed edge under the zigzag band, and
+   a left-edge override at this specificity cuts a notch out of that. */
+.flow-note[data-role='input'].linked:not(.attached):not(.flow-note-pattern) {
+  border-left-color: color-mix(in srgb, var(--note-tone) 45%, var(--border));
+}
 .flow-note[data-role='input']:not(.linked) .flow-note-kind { color: var(--text-faint); }
 /* Selection stays FLAT (no --shadow tail), so a selected input never impersonates
    an output. 0-3-0 to out-specify .flow-note.sel and .flow-node.multi above.
@@ -23557,12 +23672,14 @@ table.aud-sheet td.stick .aud-cell {
 /* The warm paper tint under the band, so the card separates from the says-family cards it sits
    beside even where the band is scrolled out of view.
 
-   ⚠️ `.attached` sets `background: var(--surface)` on every input card and is declared BELOW this
-   block, so the tint has to OUT-SPECIFY it rather than merely precede it — hence the second arm,
-   which is (0,4,0) against its (0,3,0). Without it the tint vanished the moment the card was wired
-   to the campaign, which is most of the time and is exactly when you want to spot it. */
-.flow-note[data-role='input'].flow-note-pattern,
-.flow-note[data-role='input'].flow-note-pattern.attached {
+   This is now one notch above the 6% every input card carries rather than the only tinted card on
+   the board — the general rule took this card's recipe. Kept explicit at 7% because Pattern is the
+   one kind you hunt for rather than read in a set, and because deleting it would leave the card's
+   tint depending on a number set three hundred lines away.
+
+   The second arm this rule used to carry (`.flow-note-pattern.attached`) is gone with the white
+   `.attached` fill it existed to out-specify — see the WIRED IN block below. */
+.flow-note[data-role='input'].flow-note-pattern {
   background: color-mix(in srgb, var(--note-tone) 7%, var(--surface-2));
 }
 /* THE BAND: one painted layer, masked by two mask layers that union — a solid slab covering
@@ -23618,8 +23735,9 @@ table.aud-sheet td.stick .aud-cell {
    identifiable while it is still blank. A grey band was the first try and could not work: the
    label sits ON it, and --border-strong is near-white in the light theme and near-black in the
    dark one, so no single label colour is legible in both. */
-.flow-note[data-role='input'].flow-note-pattern:not(.linked),
-.flow-note[data-role='input'].flow-note-pattern:not(.linked).attached {
+/* Second arm dropped here too: it out-specified the white `.attached` fill, which no longer
+   exists. Plain grey when nothing is picked, same as every other unlinked input. */
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) {
   background: var(--surface-2);
 }
 .flow-note[data-role='input'].flow-note-pattern:not(.linked) { border-color: var(--border); }
@@ -23693,7 +23811,31 @@ table.aud-sheet td.stick .aud-cell {
 .flow.has-hub .flow-note-object:not(.attached) {
   opacity: 1;
 }
-.flow-note[data-role='input'].attached { background: var(--surface); }
+/* WIRED IN. This used to be said with `background: var(--surface)` — the card went WHITE the moment
+   it fed something. That was fine while every card was the same size and white meant nothing in
+   particular; it is not fine now that white is the output surface, because it made a wired-up
+   Audience card the same colour as a LinkedIn post. Fill now says role and only role.
+
+   So attachment moves to elevation, which was the one lever inputs deliberately did not use. The
+   old rule against that ("a selected input never impersonates an output", above) was written when
+   the two were the same width and a shadow was most of what told them apart. At 200 against 288
+   that is no longer true, and a 200px tinted card with a small lift cannot be read as a 288px white
+   one. --shadow, NOT --shadow-raise: a half step, already themed, and its own definition up top
+   reserves the raise for "a thing you ship". This is the rung below that, which is exactly what a
+   card that FEEDS the work is.
+
+   ⚠️ Smart objects are excluded by :not(.flow-note-object). Their box-shadow is not a shadow — it
+   is three offset pseudo-edges drawing the stack behind the card — and a plain `attached` rule
+   out-specifies it and wipes the stack. They keep the caption cue below. */
+.flow-note[data-role='input']:not(.flow-note-object).attached { box-shadow: var(--shadow); }
+/* Selection has to restate the lift or it drops it: these are 0-4-0 and beat the .sel/.multi rules
+   above no matter which is declared first, so the ring and the lift are spelled out together. */
+.flow-note[data-role='input']:not(.flow-note-object).attached.sel {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent), var(--shadow);
+}
+.flow-note[data-role='input']:not(.flow-note-object).attached.multi {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent), var(--shadow);
+}
 .flow-note[data-role='input'].attached .flow-note-kind { color: var(--note-tone, var(--text-muted)); }
 /* The hub's connection port. Sits on the brief's left edge, because context flows IN from the
    board toward the campaign, and the deliverables hang off its right. */
@@ -23761,13 +23903,13 @@ table.aud-sheet td.stick .aud-cell {
   border-color: var(--obj-tone);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--obj-tone) 40%, transparent), 3px -3px 0 -1px var(--surface-2), 3px -3px 0 0 var(--border), 6px -6px 0 -1px var(--surface-2), 6px -6px 0 0 var(--border);
 }
+/* Text, not a field: the card reports its name and the inspector sets it, like every other card. */
 .flow-obj-name {
   margin: 0 9px 6px; width: calc(100% - 18px); box-sizing: border-box;
-  border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
-  padding: 0; cursor: text;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.flow-obj-name:focus { outline: none; }
-.flow-obj-name::placeholder { color: var(--text-faint); font-weight: 550; }
+.flow-obj-name.unnamed { color: var(--text-faint); font-weight: 550; }
 /* What's inside, at a glance: one tinted glyph per member plus a count. */
 .flow-obj-members { display: flex; align-items: center; gap: 4px; padding: 0 9px 9px; flex-wrap: wrap; }
 .flow-obj-chip {
@@ -24425,7 +24567,44 @@ table.aud-sheet td.stick .aud-cell {
 /* The Assets library docks as the canvas's LEFT column, sharing Gretel's slot (same 360px width,
    border, and surface as .fchat) so the canvas and inspector stay put — Assets is a panel ON the
    one board, not a separate view. */
-.flow-assets { width: 360px; flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
+/* 300, not 360. It matched the inspector's width, which made sense while it was a browser of brand
+   folders; it is a list of names and counts, and 360 of each plus the rail left the canvas a strip.
+   Below about 280 the names, the count and the card chips start fighting. */
+.flow-assets { width: 300px; flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
+
+/* ONE RUNG PER SECTION, wearing the inspector's field vocabulary: a bold label, its own sentence
+   under it, and an edge-to-edge rule between groups. The panel used its own heading style, which is
+   how two panels in one product end up looking like two products. */
+.flow-lib-rung { padding: 16px 12px 10px }
+.flow-lib-rung + .flow-lib-rung {
+  border-top: 1px solid var(--border);
+}
+.flow-lib-rung .flow-inspect-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.flow-lib-rung-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+/* The rung's consequence, in words. "This brand" does not say who else is affected, and that is the
+   whole difference between the three. */
+/* The rung a dragged object would land on. Dashed like the folder heads, which is the same gesture
+   answering in the same way. */
+.flow-lib-rung.drop {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.flow-lib-rung-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  margin-bottom: 9px;
+}
 .flow-library-head { position: relative; display: flex; align-items: center; gap: 8px; padding: 14px 12px 14px 16px; border-bottom: 1px solid var(--border); }
 .flow-library-searchic { position: absolute; left: 28px; top: 50%; transform: translateY(-50%); color: var(--text-faint); display: inline-flex; pointer-events: none; }
 .flow-library-searchic svg { width: 16px; height: 16px; }
@@ -24441,9 +24620,6 @@ table.aud-sheet td.stick .aud-cell {
 .flow-library-close svg { width: 18px; height: 18px; }
 .flow-library-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
 .flow-library-body { flex: 1; overflow-y: auto; padding: 16px 20px 24px; }
-.flow-library-secttl { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
-/* "All libraries" sits below the brand data nav, so it needs a divider + breathing room above. */
-.flow-library-secttl-libs { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
 .flow-library-list { display: flex; flex-direction: column; gap: 4px; max-width: 640px; }
 .flow-library-item {
   display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
@@ -24458,38 +24634,9 @@ table.aud-sheet td.stick .aud-cell {
 .flow-library-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .flow-library-name { font-size: 14px; font-weight: 600; color: var(--text); }
 .flow-library-count { font-size: 12.5px; color: var(--text-muted); }
-.flow-library-empty { font-size: 13.5px; color: var(--text-faint); padding: 20px 2px; max-width: 520px; }
 
 /* Libraries organized by brand: a "Brands" header with a New-brand action, then a folder per brand. */
-.flow-lib-brandshead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.flow-lib-newbrand {
-  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-strong); background: var(--surface);
-  border-radius: 8px; padding: 4px 9px; font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer;
-}
-.flow-lib-newbrand:hover { border-color: var(--accent); color: var(--accent); }
-.flow-lib-newbrand svg { flex: 0 0 auto; }
-.flow-lib-newbrand-input {
-  width: 100%; margin: 8px 0 4px; border: 1px solid var(--accent); border-radius: 9px; background: var(--bg);
-  font: inherit; font-size: 13.5px; color: var(--text); padding: 8px 11px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.flow-lib-newbrand-input:focus { outline: none; }
-.flow-lib-folders { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
-.flow-lib-folder-head { display: flex; align-items: center; gap: 2px; border-radius: 9px; }
-.flow-lib-folder-head:hover { background: var(--surface-2); }
-.flow-lib-folder-head.current .flow-lib-folder-name { font-weight: 700; }
 /* The chevron toggles expand; the rest of the row opens the brand's page. */
-.flow-lib-chev {
-  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 30px;
-  border: none; background: none; color: var(--text-faint); cursor: pointer; transition: transform 0.12s ease; border-radius: 7px;
-}
-.flow-lib-chev:hover { color: var(--text-muted); }
-.flow-lib-chev svg { width: 15px; height: 15px; }
-.flow-lib-chev.open { transform: rotate(90deg); }
-.flow-lib-folder-open {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left;
-  border: none; background: none; border-radius: 8px; padding: 8px 8px 8px 2px; cursor: pointer;
-}
 .flow-lib-folder-ic { flex: 0 0 auto; display: inline-flex; color: var(--text-muted); }
 .flow-lib-folder-ic svg { width: 18px; height: 18px; }
 .flow-lib-folder-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -24501,7 +24648,27 @@ table.aud-sheet td.stick .aud-cell {
 .flow-lib-folder-empty { font-size: 12.5px; color: var(--text-faint); padding: 6px 12px; }
 /* The brand's smart objects, shelved above its campaigns. A quiet group: it is reference material
    you check, not a list you click through, so the rows are not buttons. */
-.flow-lib-objects { padding: 2px 0 6px; }
+/* ONE ACROSS, SHAPED LIKE THE CARD IT BECOMES. These were square tiles, two across — a shelf you
+   scan rather than a list you read, which was the right call while the point was density.
+
+   It costs recognition, though, and recognition is the more valuable thing here: the object you drag
+   off this shelf lands on the board as a WIDE card with a coloured spine and a stack behind it, and
+   a square bears no resemblance to it. Two shapes for one thing is two things to anybody who has not
+   been told otherwise. So the shelf row now wears the card's clothes — same silhouette, same spine,
+   same stacked edges — and dragging one onto the board stops being a transformation.
+
+   The sub-line comes back with the width. It was hidden because "1 card, none filled in" is
+   unreadable at 128px; at full panel width it is the one line that says what the object is FOR,
+   which the chips underneath cannot. */
+.flow-lib-objects { padding: 2px 0 8px }
+/* One across, and the gap carries the stack: the offset edges below reach 6px up and 6px right, so
+   a tighter gap would have each row's stack overlapping the name of the row above it. */
+.flow-lib-objgrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 6px 8px 0 0;
+}
 .flow-lib-objects-h {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text-faint); padding: 4px 12px 3px;
@@ -24510,30 +24677,58 @@ table.aud-sheet td.stick .aud-cell {
    what is inside — and is a drag handle onto the canvas, so it gets a card's affordances. */
 .flow-lib-object {
   display: flex;
+  /* A ROW, not a stack. In a square the glyph sat on its own line above the name; in a short wide
+     box that line is mostly empty, so the glyph moves beside the text where a list row wants it.
+     The card's identity is carried by the four cues below — silhouette, spine, tint, stack — not by
+     where the glyph sits. */
+  flex-direction: row;
   align-items: flex-start;
   gap: 9px;
-  padding: 7px 10px;
-  margin: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 9px;
+  min-width: 0;
+  padding: 7px 9px 8px;
+  /* The card's own chrome, borrowed wholesale from .flow-note-object on the canvas: the spine in the
+     object tone, the 6% tint every context card carries, the small radius. Kept as literal values
+     rather than a shared class because the two live in different stacking contexts and the canvas
+     card also carries drag, selection and connect states this row has no use for. */
+  --obj-tone: var(--accent-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--obj-tone);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-2) 6%, var(--surface-2));
+  /* THE STACK, the same two offset pseudo-edges the canvas card uses, and the single strongest cue
+     that this row is a bundle rather than one thing. It is what makes the shape read as "several
+     things in one" before any label is read. */
+  box-shadow: 3px -3px 0 -1px var(--surface-2), 3px -3px 0 0 var(--border), 6px -6px 0 -1px var(--surface-2), 6px -6px 0 0 var(--border);
   cursor: grab;
+  transition: border-color 120ms ease, background 120ms ease;
 }
-.flow-lib-object:hover { border-color: var(--border); background: var(--surface-2); }
+.flow-lib-object:hover { border-color: var(--border-strong, var(--border)); }
 .flow-lib-object:active { cursor: grabbing; }
-.flow-lib-object-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent); opacity: 0.7; margin-top: 1px; }
-.flow-lib-object-ic svg { width: 14px; height: 14px; }
-.flow-lib-object-txt { display: flex; flex-direction: column; min-width: 0; }
+.flow-lib-object-ic {
+  flex: 0 0 auto; display: inline-flex; color: var(--obj-tone, var(--accent)); opacity: 0.85;
+  /* Nudged onto the name's baseline rather than the box's top edge, so the row reads as one line
+     with a mark in front of it instead of a glyph floating above the text. */
+  margin-top: 1px;
+}
+.flow-lib-object-ic svg { width: 15px; height: 15px; }
+/* The name is one line with an ellipsis now, which is what .flow-obj-name does on the card. The
+   three-line clamp was for a 128px square, where wrapping genuinely beat truncating; at full panel
+   width a wrapped name just makes the rows different heights. */
+.flow-lib-object-txt { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 1px }
 .flow-lib-object-name {
-  font-size: 12.5px; color: var(--text);
+  font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Back, with the width to read it. This is the line that says what the object IS — "Jane Doe · 2
+   proof" — which the chips can only gesture at. */
 .flow-lib-object-sub {
-  font-size: 11px; color: var(--text-faint);
+  display: block;
+  font-size: 11.5px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* One tinted glyph per card inside: an audience-plus-proof bundle reads differently from an
    audience-plus-message one without opening either. */
-.flow-lib-object-chips { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.flow-lib-object-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: auto; }
 .flow-lib-object-chip { display: inline-flex; }
 .flow-lib-object-chip svg { width: 12px; height: 12px; }
 .flow-lib-object-more { font-size: 10px; color: var(--text-faint); }
@@ -24544,7 +24739,7 @@ table.aud-sheet td.stick .aud-cell {
   display: flex; align-items: center; gap: 6px;
   font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--text-muted);
-  padding: 5px 10px 3px; margin: 2px 8px 0;
+  padding: 5px 2px 5px; margin: 2px 0 0;
   border: 1px dashed transparent; border-radius: 8px;
 }
 .flow-lib-objfolder-h.drop { border-color: var(--accent); color: var(--accent); }
@@ -25542,8 +25737,6 @@ table.aud-sheet td.stick .aud-cell {
     .flow-insp-open,
     .flow-inspect-del,
     .flow-inspect-regen,
-    .flow-lib-folder-head,
-    .flow-lib-newbrand,
     .flow-lib-object,
     .flow-library-close,
     .flow-library-item,
@@ -25807,3 +26000,194 @@ table.aud-sheet td.stick .aud-cell {
   outline: none;
   border-color: var(--accent);
 }
+
+/* ── FINAL CREATIVE on an output card ────────────────────────────────────────
+   The artwork that used to live in a Drive folder, sitting under the copy it runs beside. Built
+   out of the inspector's own vocabulary rather than a new one: the upload target is .flow-doc-drop
+   (the same dashed box a Company card offers a brief through) and the drag overlay is
+   .flow-drop-over, so a file dragged at either panel gets the same answer. Only the tiles are new,
+   because nothing here had a grid of files before. */
+.cc { margin-top: 4px; }
+/* The whole section is the drop target, not just the button — but as an OUTLINE, which costs no
+   layout. A border arriving mid-drag would shift what you are aiming at out from under the cursor. */
+.cc.dropping {
+  outline: 1px dashed var(--accent);
+  outline-offset: 5px;
+  border-radius: 8px;
+}
+
+.cc-list {
+  list-style: none;
+  margin: 10px 0 9px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+/* A ROW PER FILE, not a gallery of squares. The panel is a 360px column, and the things a person
+   checks — the filename, 1080 × 1350, whether it has actually travelled — are all text. A grid of
+   thumbnails would show the one thing you can already recognise and hide the three you cannot. */
+.cc-tile {
+  display: flex;
+  gap: 9px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.cc-tile-face {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cc-tile-face img,
+.cc-tile-face video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cc-tile-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  /* A scrim under the glyph rather than over the frame: a play badge has to read against a white
+     first frame and a black one, and a flat tint only manages one of them. */
+  background: radial-gradient(circle at center, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 70%);
+  pointer-events: none;
+}
+.cc-tile-play svg { width: 20px; height: 20px; }
+.cc-tile-doc {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+/* THE SLIDE NUMBER. For a carousel the order is content — slide one is the hook — so it is on the
+   tile, legible at a glance, rather than implied by position in the list. */
+.cc-tile-n {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.cc-tile-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+/* The filename never wraps and never truncates from the left: "hero_v4_FINAL.png" and
+   "hero_v5_FINAL.png" differ in the middle, and a title attribute carries the rest. */
+.cc-tile-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-tile-meta { font-size: 10.5px; color: var(--text-faint); }
+/* WHERE IT ACTUALLY IS, in the warning family rather than the error one: nothing is broken and
+   nothing is lost, the file simply has not travelled yet. Only rendered when that is true — a
+   badge on every tile saying everything is fine is a badge nobody reads, and then the one that
+   matters is invisible too. */
+.cc-tile-local {
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 1px 5px;
+  border: 1px solid var(--warn-line);
+  border-radius: 4px;
+  background: var(--warn-tint);
+  color: var(--warn-ink);
+  font-size: 10px;
+  font-weight: 650;
+}
+.cc-tile-gone {
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--due-late);
+}
+.cc-tile-note { margin-top: 3px; font-size: 10.5px; color: var(--due-late); }
+
+.cc-tile-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+}
+/* The quiet link the rest of the panel says "things you can do to this object" in (see
+   .flow-doc-override-go), not a row of buttons. Four bordered boxes on a 52px-tall tile would
+   out-shout the filename. */
+.cc-act {
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--text-faint) 45%, transparent);
+}
+.cc-act:hover:not(:disabled) { color: var(--text); text-decoration-color: currentColor; }
+.cc-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cc-act:disabled { opacity: 0.4; cursor: default; text-decoration: none; }
+/* ARMED. The second press deletes, so it stops looking like the others. */
+.cc-act.danger {
+  color: var(--danger);
+  font-weight: 650;
+  text-decoration-color: currentColor;
+}
+.cc-act.danger:hover { color: var(--danger); }
+/* The reorder arrows are glyphs, not words — underlining an arrow reads as a typo. */
+.cc-act.icon {
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+}
+.cc-act.icon:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-2); }
+
+/* WHAT HAS NOT TRAVELLED, with the one button that fixes it. Rendered only while something is
+   actually stranded: a permanent line about sync status is a line nobody reads. */
+.cc-stranded {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--warn-line);
+  border-radius: 8px;
+  background: var(--warn-tint);
+  color: var(--warn-ink);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.cc-stranded .cc-act { color: var(--warn-ink); flex: none; font-weight: 650; }
+.cc-stranded .cc-act:hover:not(:disabled) { color: var(--warn-ink); }

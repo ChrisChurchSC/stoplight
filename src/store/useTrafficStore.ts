@@ -26,7 +26,7 @@ import { newFlight, flightForRow, type Flight } from '../domain/flight'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
 import { setBrandCalibration } from '../domain/journeyPerf'
 import { actualsProvider } from '../adapters/actuals'
-import { getActiveWorkspaceId } from '../lib/session'
+import { firstNameOf, getActiveWorkspaceId, getSession } from '../lib/session'
 import { contentProvider } from '../adapters/content'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import { asList, newAudience, normalizeAudience, splitLines, type AudienceType, mergeAudiences } from '../domain/audiences'
@@ -35,7 +35,7 @@ import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
 import { CHANNELS, resolveChannelId } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
-import { filesToAssets } from '../lib/files'
+import { filesToAssets, readImageSize, readVideoMeta } from '../lib/files'
 import {
   listFolderByUrl,
   isGoogleDriveConfigured,
@@ -181,6 +181,9 @@ import { contextGaps, type ContextGapKey } from '../domain/contextGaps'
 import { citableFigures, figuresUsedIn, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
 import { normalizeFigure } from '../domain/coherenceChecks'
 import { freshCommentId, type CardComment } from '../domain/cardComments'
+import { creativeKind, extensionOf, freshMediaId, moveMedia, type CardMedia } from '../domain/cardMedia'
+import { dropBytes, getBytes, putBytes } from '../lib/creativeBytes'
+import { removeCreative, uploadCreative } from '../adapters/media/creativeStore'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
@@ -712,6 +715,77 @@ function saveCardComments(list: CardComment[]): void {
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * THE FINISHED CREATIVE attached to each output card, keyed by row id (see domain/cardMedia).
+ *
+ * METADATA ONLY — name, size, dimensions, carousel order, and the storage path the bytes went to.
+ * That is small enough to ride this mirror with everything else; the files themselves go to the
+ * `creative` bucket, because one hero image base64'd into a workspace_state row would not just fail
+ * its own write, it would start failing the writes for campaigns and boards alongside it.
+ *
+ * Synced rather than device-local, and that is the point of the feature: a final asset only one
+ * person can see is the Drive folder this replaces.
+ */
+const CARD_MEDIA_KEY = 'stoplight.cardMedia.v1'
+function loadCardMedia(): Record<string, CardMedia[]> {
+  try {
+    const v = JSON.parse(localStorage.getItem(CARD_MEDIA_KEY) ?? '{}')
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+  } catch {
+    return {}
+  }
+}
+function saveCardMedia(map: Record<string, CardMedia[]>): void {
+  try {
+    persistState(CARD_MEDIA_KEY, map)
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * The one slice pushCreative touches, reached through the store rather than through a closure — it
+ * is called from two actions and lives outside both. Read lazily inside the bodies, so referencing
+ * the store above its own definition is fine: nothing here runs at module evaluation.
+ */
+const readCardMedia = (): Record<string, CardMedia[]> => useTrafficStore.getState().cardMedia
+const writeCardMedia = (cardMedia: Record<string, CardMedia[]>): void => {
+  saveCardMedia(cardMedia)
+  useTrafficStore.setState({ cardMedia })
+}
+
+/**
+ * Send one file's bytes to the workspace bucket and stamp the path onto its metadata.
+ *
+ * Shared by the upload path and the retry, so "a file reaches the workspace" is written once. Takes
+ * a read/write pair rather than the store's own set/get because it lives outside the store closure
+ * and only ever touches this one slice — which also makes it testable without a store.
+ *
+ * THE DELETE-MID-UPLOAD CASE is the reason this re-reads state after awaiting. A 40MB video can be
+ * in flight for seconds, and someone who changes their mind in that window would otherwise get a
+ * tile that reappears with a path on it — or, worse, no tile and an object sitting in the bucket
+ * that nothing references and nobody can find to delete.
+ */
+async function pushCreative(
+  rowId: string,
+  media: CardMedia,
+  blob: Blob,
+  read: () => Record<string, CardMedia[]>,
+  write: (map: Record<string, CardMedia[]>) => void,
+): Promise<void> {
+  const path = await uploadCreative(rowId, media.id, extensionOf(media.name), blob)
+  // No backend, signed out, or the upload failed. The entry keeps its missing `path`, the tile goes
+  // on saying "On this device", and the retry can pick it up later.
+  if (!path) return
+  const map = read()
+  const list = map[rowId] ?? []
+  if (!list.some((m) => m.id === media.id)) {
+    await removeCreative(path)
+    return
+  }
+  write({ ...map, [rowId]: list.map((m) => (m.id === media.id ? { ...m, path } : m)) })
 }
 
 // Per-brand SMART OBJECTS: named, reusable bundles of records ("the RevOps buyer"). Brand-level
@@ -1924,9 +1998,14 @@ interface TrafficState {
   /**
    * Move an object up or down the ladder. Replaces promoteSmartObject, which could only reach
    * 'brand' — with three rungs, an action named for one of them is an action that will be copied.
+   *
    * `brand` is required going TO 'brand' (that is the library it lands in) and ignored otherwise.
+   * `campaign` is required going TO 'campaign' for the same reason: a campaign-scoped object is
+   * visible on exactly one board, and the board it lands on is the one doing the demoting. Without
+   * it the object kept whatever board it was BUILT on, so demoting a shared object from a different
+   * campaign made it vanish — scoped to a board you are not standing on.
    */
-  setSmartObjectScope: (id: string, scope: SmartObjectScope, brand?: string) => void
+  setSmartObjectScope: (id: string, scope: SmartObjectScope, opts?: { brand?: string; campaign?: string }) => void
   /**
    * File a smart object under a folder path in its brand's library. undefined = unfiled. Folders are
    * not registered anywhere: filing the last object out of one is what removes it.
@@ -2706,6 +2785,17 @@ interface TrafficState {
   addCardComment: (campaign: string, cardId: string, author: string, text: string) => void
   resolveCardComment: (id: string, resolved: boolean) => void
   deleteCardComment: (id: string) => void
+  /** The finished creative attached to each output card, by row id, in carousel order. */
+  cardMedia: Record<string, CardMedia[]>
+  /** Attach files to a card. Appends, so a second drop adds slides rather than replacing them. */
+  addCardMedia: (rowId: string, files: File[]) => Promise<void>
+  /** Detach one file and delete its bytes — from the workspace and from this device. */
+  removeCardMedia: (rowId: string, mediaId: string) => Promise<void>
+  /** Reorder a carousel. `to` is the destination index. */
+  moveCardMedia: (rowId: string, mediaId: string, to: number) => void
+  /** Push any files that never reached the workspace. Safe to call repeatedly; a no-op when
+   *  everything is already there or no backend is configured. */
+  syncCardMedia: (rowId: string) => Promise<void>
   /** Live preview: draft copy for a set of not-yet-built deliverable slots WITHOUT
    *  seeding any rows or touching localStorage. Resolves one {headline, primary} per
    *  slot (in order) plus which writer produced it, so the Flows builder can show
@@ -3164,6 +3254,120 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCardComments(cardComments)
       return { cardComments }
     }),
+  cardMedia: loadCardMedia(),
+  addCardMedia: async (rowId, files) => {
+    // A zero-byte file is what a dragged FOLDER arrives as in some browsers. Attaching it produces
+    // a tile that can never preview and never download, named after a directory.
+    const usable = files.filter((f) => f.size > 0)
+    if (!usable.length) return
+    let who: string | undefined
+    try {
+      who = firstNameOf((await getSession())?.user ?? null) || undefined
+    } catch {
+      /* no backend / signed out — the tile just doesn't name anyone */
+    }
+
+    const made: { media: CardMedia; file: File }[] = []
+    for (const file of usable) {
+      const id = freshMediaId()
+      const kind = creativeKind(file.type, file.name)
+      const media: CardMedia = {
+        id,
+        name: file.name,
+        mime: file.type || 'application/octet-stream',
+        size: file.size,
+        kind,
+        uploadedAt: Date.now(),
+        uploadedBy: who,
+      }
+      // The dimensions a reviewer checks against the channel's spec. Read off a throwaway object
+      // URL and revoked immediately — the displayable URL comes from the byte store, keyed by id,
+      // so keeping this one alive would be a second handle on the same file.
+      if (kind === 'image' || kind === 'video') {
+        const probeUrl = URL.createObjectURL(file)
+        try {
+          if (kind === 'image') {
+            const probe = await readImageSize(probeUrl)
+            if (probe) {
+              media.width = probe.width
+              media.height = probe.height
+            }
+          } else {
+            const probe = await readVideoMeta(probeUrl)
+            if (probe) {
+              media.width = probe.width
+              media.height = probe.height
+              // A stream with no duration reports Infinity, and "Infinity:NaN" under a tile is
+              // worse than saying nothing about how long it runs.
+              if (Number.isFinite(probe.durationSec)) media.durationSec = probe.durationSec
+            }
+          }
+        } finally {
+          URL.revokeObjectURL(probeUrl)
+        }
+      }
+      await putBytes(id, file)
+      made.push({ media, file })
+    }
+
+    /**
+     * THE TILES LAND BEFORE THE UPLOAD DOES, on purpose. A 40MB video takes seconds to reach the
+     * bucket and the person who dropped it needs to see it accepted now — with the tile saying
+     * plainly that it has not travelled yet. The alternative is a panel that does nothing for eight
+     * seconds, which is indistinguishable from a panel that ignored the drop.
+     */
+    set((s) => {
+      const cardMedia = { ...s.cardMedia, [rowId]: [...(s.cardMedia[rowId] ?? []), ...made.map((m) => m.media)] }
+      saveCardMedia(cardMedia)
+      return { cardMedia }
+    })
+
+    /**
+     * ONE AT A TIME, not Promise.all. A carousel is six files and a Reel is one large one; firing
+     * them together saturates the connection so every tile finishes late instead of the first
+     * finishing early, and a bucket that rejects the burst fails all of them rather than one.
+     */
+    for (const { media, file } of made) {
+      await pushCreative(rowId, media, file, readCardMedia, writeCardMedia)
+    }
+  },
+  removeCardMedia: async (rowId, mediaId) => {
+    const doomed = (get().cardMedia[rowId] ?? []).find((m) => m.id === mediaId)
+    set((s) => {
+      const rest = (s.cardMedia[rowId] ?? []).filter((m) => m.id !== mediaId)
+      const cardMedia = { ...s.cardMedia }
+      // Drop the key rather than leaving an empty array behind: this map is mirrored whole, and a
+      // campaign's worth of `{"row_x": []}` is bytes on every write forever.
+      if (rest.length) cardMedia[rowId] = rest
+      else delete cardMedia[rowId]
+      saveCardMedia(cardMedia)
+      return { cardMedia }
+    })
+    // The bytes AFTER the metadata, both best-effort. The metadata is what every surface reads, so
+    // a storage call that fails leaves an orphaned object rather than a tile that will not go away.
+    await dropBytes(mediaId)
+    if (doomed?.path) await removeCreative(doomed.path)
+  },
+  moveCardMedia: (rowId, mediaId, to) =>
+    set((s) => {
+      const list = s.cardMedia[rowId]
+      if (!list) return {}
+      const next = moveMedia(list, mediaId, to)
+      if (next === list) return {}
+      const cardMedia = { ...s.cardMedia, [rowId]: next }
+      saveCardMedia(cardMedia)
+      return { cardMedia }
+    }),
+  syncCardMedia: async (rowId) => {
+    for (const media of get().cardMedia[rowId] ?? []) {
+      if (media.path) continue
+      const blob = await getBytes(media.id)
+      // No local copy and no workspace copy: uploaded from another device that never finished, or
+      // this browser's storage was cleared. Nothing to push — the tile keeps saying so.
+      if (!blob) continue
+      await pushCreative(rowId, media, blob, readCardMedia, writeCardMedia)
+    }
+  },
   brandSystems: loadBrandSystems(),
   brandMeta: loadBrandMeta(),
   brandNotice: null,
@@ -3778,13 +3982,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveSmartObjects(smartObjects)
       return { smartObjects }
     }),
-  setSmartObjectScope: (id, scope, brand) =>
+  setSmartObjectScope: (id, scope, opts) =>
     set((s) => {
       const smartObjects = s.smartObjects.map((o) =>
-        // `campaign` is kept, not cleared: it records where the object came from, which is what the
-        // inspector's provenance line reads. `brand` is kept for the same reason on the way up —
-        // a shared object still came from somewhere.
-        o.id === id ? { ...o, scope, brand: brand ?? o.brand } : o,
+        // `campaign` is kept EXCEPT when landing on 'campaign', where it decides visibility rather
+        // than recording provenance. Everywhere else it is provenance — where the object came from,
+        // which is what the inspector's line reads — and so is `brand` on the way up.
+        o.id === id
+          ? { ...o, scope, brand: opts?.brand ?? o.brand, campaign: scope === 'campaign' ? opts?.campaign ?? o.campaign : o.campaign }
+          : o,
       )
       saveSmartObjects(smartObjects)
       return { smartObjects }
@@ -6007,6 +6213,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.flowBoards.v1': 'flowBoards',
       'stoplight.smartObjects.v1': 'smartObjects',
       'stoplight.cardComments.v1': 'cardComments',
+      // The creative attached to each card. Registered because a final asset only the uploader can
+      // see is the Drive folder this replaces — the metadata has to reach the workspace for the
+      // bytes in the bucket to be findable at all.
+      'stoplight.cardMedia.v1': 'cardMedia',
       // Registered here, unlike brandDatasets, which is absent from this map and so is device-local:
       // a brand-scoped format that a teammate cannot see is not a brand-scoped format.
       'stoplight.outputTypes.v1': 'outputTypes',
@@ -6132,7 +6342,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1', 'stoplight.brandFieldSources.v1',
         'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.flights.v1', 'stoplight.canvases.v1',
         'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.flowBoards.v1',
-        'stoplight.smartObjects.v1', 'stoplight.cardComments.v1', 'stoplight.homeChats.v1',
+        'stoplight.smartObjects.v1', 'stoplight.cardComments.v1', 'stoplight.cardMedia.v1', 'stoplight.homeChats.v1',
         TASKS_KEY, RECORD_GROUPING_KEY,
       ]
       for (const key of STATE_MIGRATIONS) {

@@ -75,6 +75,7 @@ import { SourceMark } from './SourceMark'
 import { DatasetRead } from './DatasetRead'
 import { DataSourceFace } from './DataSourceFace'
 import { CopyFields } from './CopyFields'
+import { CardCreative } from './CardCreative'
 import { Hint } from './Hint'
 import { FlowSteps } from './FlowSteps'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
@@ -85,7 +86,7 @@ import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { PanelHead } from './PanelHead'
-import { ComponentMenu } from './ComponentMenu'
+import { SmartObjectMenu } from './SmartObjectMenu'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
 import type { ChannelId, TrafficRow } from '../domain/types'
@@ -687,9 +688,9 @@ const CONNECT_SIDES = ['left', 'right', 'top', 'bottom'] as const
  */
 const CAMPAIGN_BRIEF_DESC = 'What the campaign is for, and what it makes'
 
-/** The definition line on a component's panel. Same job as OBJECT_META's menuDesc for a card kind:
+/** The definition line on a smart object's panel. Same job as OBJECT_META's menuDesc for a card kind:
  *  say what this panel is, once, in the header rather than as the body's first paragraph. */
-const COMPONENT_DESC = 'A bundle you can reuse instead of rebuilding it'
+const SMART_OBJECT_DESC = 'A bundle you can reuse instead of rebuilding it'
 
 /**
  * HOW LONG AGO IT SAVED, spelled out. A status line is read as a sentence, so "1 min ago" rather
@@ -1304,15 +1305,11 @@ export function FlowsView() {
   const openProject = useTrafficStore((s) => s.openProject)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const setBrandTab = useTrafficStore((s) => s.setBrandTab)
-  const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
-  const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const allBrandDatasets = useTrafficStore((s) => s.brandDatasets)
   const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
   // Brand-library smart objects: the reusable bundles a card picks from.
   const smartObjects = useTrafficStore((s) => s.smartObjects)
   const addSmartObject = useTrafficStore((s) => s.addSmartObject)
-  const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
   const setSmartObjectScope = useTrafficStore((s) => s.setSmartObjectScope)
   const setSmartObjectFolder = useTrafficStore((s) => s.setSmartObjectFolder)
@@ -1490,7 +1487,6 @@ export function FlowsView() {
   }
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
-  const openBrandTab = useTrafficStore((s) => s.openBrandTab)
   const openDatasetTab = useTrafficStore((s) => s.openDatasetTab)
   const openObjectTab = useTrafficStore((s) => s.openObjectTab)
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
@@ -1743,7 +1739,6 @@ export function FlowsView() {
 
   // Which smart object you're inside, if any. Non-null swaps the canvas to that object's members
   // and adds a breadcrumb segment, so editing one feels like editing a small campaign.
-  const [openPlacementId, setOpenGroupId] = useState<string | null>(null)
   // Right-click menu on the canvas. There was no context menu anywhere in the app before this;
   // it exists for "group into a smart object" but is the obvious home for per-card actions.
   // `on` is the id right-clicked (a card, an object, or null for empty canvas).
@@ -1840,15 +1835,6 @@ export function FlowsView() {
   const [briefSummoned, setBriefSummoned] = useState(false)
   // Search box on the Assets brand-library view.
   const [librarySearch, setLibrarySearch] = useState('')
-  // Assets is organized by brand folders. Which brand folders are expanded (the active brand starts
-  // open), and the inline "New brand" folder-creation input.
-  const [openBrandFolders, setOpenBrandFolders] = useState<Set<string>>(() => new Set())
-  const [addingBrand, setAddingBrand] = useState(false)
-  const [newBrandName, setNewBrandName] = useState('')
-  // The active brand's folder starts expanded (the user can still collapse it).
-  useEffect(() => {
-    if (brand) setOpenBrandFolders((prev) => (prev.has(brand) ? prev : new Set([...prev, brand])))
-  }, [brand])
   // Refs so the Cmd+. shortcut reads the panels' current state without re-binding the listener.
   const briefCollapsedRef = useRef(briefCollapsed)
   briefCollapsedRef.current = briefCollapsed
@@ -2306,6 +2292,8 @@ export function FlowsView() {
   // a live drop target. A custom mime type rather than text/plain: the board already accepts a
   // campaign NAME as text/plain on the campaigns page, and a stray text drop must not place an object.
   const [dragObjectId, setDragObjectId] = useState<string | null>(null)
+  /** The rung a dragged smart object is currently over, so the section it would land on says so. */
+  const [rungDropTarget, setRungDropTarget] = useState<SmartObjectScope | null>(null)
   // The folder head currently under a dragged object ('__unfiled__' for the loose group).
   const [objDropFolder, setObjDropFolder] = useState<string | null>(null)
   // Right-click menu on a shelf row: which object, and where to draw it.
@@ -2866,12 +2854,6 @@ export function FlowsView() {
       if (e.key === 'Escape' && selEdgeRef.current) {
         e.preventDefault()
         setSelEdge(null)
-        return
-      }
-      // Escape steps out of a smart object you're inside.
-      if (e.key === 'Escape' && openPlacementRef.current) {
-        e.preventDefault()
-        setOpenGroupId(null)
         return
       }
       // Bare B opens the block picker in the builder. Modifiers excluded now that B carries a chord
@@ -4222,7 +4204,7 @@ export function FlowsView() {
   // adds don't stack exactly on top of each other; the user drags it wherever from there.
   /**
    * Where a newly added card lands. It used to cascade from a FIXED point (300, 120) by
-   * `objects.length` * a 28x34 step, which failed three ways: the step is far smaller than a 236px
+   * `objects.length` * a 28x34 step, which failed three ways: the step is far smaller than a 200px
    * card so every card buried the last one, the anchor ignored pan and zoom so cards could land
    * off-screen or on top of the brief, and indexing by `objects.length` meant deleting cards reset
    * the cascade and dropped the next one back on an existing pile.
@@ -4236,8 +4218,13 @@ export function FlowsView() {
     const cw = cv?.clientWidth ?? 900
     const ch = cv?.clientHeight ?? 600
     const s = zoom / 100
-    // Reserve box: the widest card (236px) plus a gap, scaled to what's on screen right now.
-    const bw = 252 * s
+    // Reserve box: the card that is actually about to land, plus a gap, scaled to what's on screen
+    // right now. Both callers drop CONTEXT cards — addObject from the toolbar, pasteObjects from the
+    // clipboard — and those are 200px since inputs and outputs stopped sharing a silhouette (see the
+    // CARD ROLES block in index.css). Outputs are never placed through here; they are laid out by
+    // the column. Occupancy below is measured off the live DOM, so it already accounts for the wider
+    // output cards without being told their width.
+    const bw = 216 * s
     const bh = 132 * s
     const pad = 14 * s
     // Measure live rather than reading the `rects` STATE. rects is written by a layout effect, so
@@ -4293,8 +4280,6 @@ export function FlowsView() {
      * Same fix, same reason, as the line in setObjectRef.
      */
     objectsRef.current = [...objectsRef.current, made]
-    // Added while inside a smart object: it belongs to that object, not the outer board.
-    if (openPlacementId) setPlacements((gs) => gs.map((g) => (g.id === openPlacementId ? { ...g, memberIds: [...g.memberIds, id] } : g)))
     // Provisional position; the pendingPlace effect corrects it to `spot` once the card is
     // measured, the same way the deliverable picker places a node.
     setPos((p) => ({ ...p, [id]: { x: 0, y: 0 } }))
@@ -4996,6 +4981,16 @@ export function FlowsView() {
    * itself stays the source of truth, and the cards are views onto it.
    */
   const placeSmartObject = (o: SmartObject, at: { x: number; y: number }) => {
+    /**
+     * A BOARD ONLY PLACES WHAT IT MAY SEE. This took whatever it was handed, and the library used to
+     * show every brand's shelf — so another client's bundle could be dragged onto this campaign, and
+     * its records would then feed this campaign's copy. That is precisely the leak every record list
+     * in this file is filtered to avoid.
+     *
+     * The panel no longer offers them, which fixes the path people would actually take. This is the
+     * rule itself, in the one place that does the placing, so a future surface cannot reopen it.
+     */
+    if (!visibleOn(o, { brand, campaign: boardKey })) return
     recordHistory(true)
     const cards = objectCards(o).map((c) => ({ ...c, id: freshObjectId() }))
     const pid = freshGroupId()
@@ -5432,7 +5427,15 @@ export function FlowsView() {
         title={`${o.name}: drag onto the board, or double-click to open`}
         onDragStart={(e) => {
           e.dataTransfer.setData(SMART_OBJECT_DND, o.id)
-          e.dataTransfer.effectAllowed = 'copy'
+          /**
+           * copyMove, not copy. Every drop target here sets dropEffect 'move' — the folder heads, the
+           * unfiled area, and now the rungs — and a dropEffect the drag does not allow is reset to
+           * 'none' by the browser, which CANCELS the drop. Declared 'copy' for the canvas, which
+           * copies, this quietly made every filing and every rung change a no-op in a real drag.
+           * Synthetic DataTransfer does not enforce the pairing, so a test that dispatches its own
+           * events cannot see this.
+           */
+          e.dataTransfer.effectAllowed = 'copyMove'
           setDragObjectId(o.id)
         }}
         onDragEnd={() => { setDragObjectId(null); setObjDropFolder(null) }}
@@ -5465,6 +5468,29 @@ export function FlowsView() {
             </span>
           )}
         </span>
+        {/* A VISIBLE WAY IN. Every action on a row was a hidden gesture — drag to place, double-click
+            to open, right-click for everything else including delete — and a tooltip you only meet by
+            hovering and waiting is not a way to learn three of them. Right-click still works; this is
+            the same menu, on a control you can see.
+
+            Appears on hover and on keyboard focus, so it is reachable without a mouse and does not
+            clutter a shelf you are only reading. */}
+        <button
+          className="flow-lib-object-more-btn"
+          title="More"
+          aria-label={`More for ${o.name || 'this smart object'}`}
+          aria-haspopup="menu"
+          onClick={(e) => {
+            e.stopPropagation()
+            const r = e.currentTarget.getBoundingClientRect()
+            setShelfMenu({ id: o.id, x: Math.round(r.right - 6), y: Math.round(r.bottom + 4) })
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
+          </svg>
+        </button>
       </div>
     )
   }
@@ -5476,7 +5502,13 @@ export function FlowsView() {
    * A folder head is a drop target for the same drag that places an object on the canvas, so one
    * gesture does both jobs depending on where you let go.
    */
-  const renderObjectShelf = (list: SmartObject[]) => {
+  /**
+   * `rung` is the scope of the section this shelf is rendering. The folder and unfiled drop targets
+   * fill that section's body and stop propagation, so they — not the section — are what a real drag
+   * lands on. They have to know which rung they are in, or dropping a campaign object onto the brand
+   * section quietly filed it instead of promoting it.
+   */
+  const renderObjectShelf = (list: SmartObject[], rung: SmartObjectScope) => {
     const tree = buildFolderTree(list.map((o) => o.folder).filter((f): f is string => !!f), list, (o) => o.folder)
     const unfiled = list.filter((o) => !o.folder)
     const folderDrop = (path: string | undefined) => ({
@@ -5492,9 +5524,18 @@ export function FlowsView() {
         const id = e.dataTransfer.getData(SMART_OBJECT_DND)
         setObjDropFolder(null)
         setDragObjectId(null)
+        setRungDropTarget(null)
         if (!id) return
         e.preventDefault()
         e.stopPropagation()
+        // ONE DROP, THE WHOLE MEANING: it lands on this rung, in this folder. This handler covers the
+        // section's body, so a cross-rung drag lands here rather than on the section — and doing only
+        // the filing half made dropping a local object into the brand section look like nothing had
+        // happened, or worse, like it had been filed somewhere it could not be seen.
+        const o = smartObjects.find((x) => x.id === id)
+        if (o && scopeOf(o) !== rung && !(rung === 'brand' && !brand && !o.brand)) {
+          setSmartObjectScope(id, rung, { brand: o.brand || brand, campaign: boardKey })
+        }
         setSmartObjectFolder(id, path)
       },
     })
@@ -5514,7 +5555,10 @@ export function FlowsView() {
             {node.name}
             <span className="flow-lib-objfolder-n">{countDeep(node)}</span>
           </div>
-          {node.items.map(renderShelfObject)}
+          {/* The tiles get their own grid container. They sit among things that are not tiles — this
+              folder's head, its nested folders, the unfiled header — and a grid on the shared parent
+              would lay those out as cells too. */}
+          {node.items.length > 0 && <div className="flow-lib-objgrid">{node.items.map(renderShelfObject)}</div>}
           {node.children.map(renderNode)}
         </div>
       )
@@ -5532,7 +5576,7 @@ export function FlowsView() {
           onDragLeave={() => setObjDropFolder((p) => (p === '__unfiled__' ? null : p))}
         >
           {tree.length > 0 && unfiled.length > 0 && <div className="flow-lib-objects-h">{DRAFTS}</div>}
-          {unfiled.map(renderShelfObject)}
+          {unfiled.length > 0 && <div className="flow-lib-objgrid">{unfiled.map(renderShelfObject)}</div>}
           {tree.length > 0 && unfiled.length === 0 && (
             <div className="flow-lib-folder-empty">Drag here to take an object out of its folder.</div>
           )}
@@ -5542,13 +5586,56 @@ export function FlowsView() {
   }
   /** The brand-library object a canvas placement shows. */
   const smartObjectFor = (g: SmartPlacement) => smartObjects.find((o) => o.id === g.smartObjectId)
+  /**
+   * AN EMPTY BUNDLE IS A PROMISE NOBODY KEPT, so it does not get to sit on the board.
+   *
+   * You cannot make one — convertSelection refuses an empty selection — but you can arrive at one by
+   * deleting the member cards one at a time, and deleteObject drops a card from `objects` without
+   * touching the memberIds pointing at it. What was left was a card saying "0 inside": nothing to
+   * open, nothing to place, nothing to say. It is also the state that made the old open-on-the-board
+   * mode hide the entire canvas, which is how we found it.
+   *
+   * The library object goes too, but ONLY when it is campaign-scoped — that rung means this board is
+   * the only thing that can see it, so an empty one is unreachable rather than merely unused. A
+   * brand or shared object survives: another campaign may be placing it, and emptying it here is not
+   * a decision to destroy it for them.
+   *
+   * ⚠️ GATED ON HYDRATION. `objects` and `placements` are loaded from the same snapshot but land in
+   * separate commits, so before the board is hydrated every placement briefly looks memberless. Left
+   * ungated this effect would delete a board's entire set of smart objects on load, which is the one
+   * failure here that actually loses work.
+   */
+  useEffect(() => {
+    if (!boardsHydrated) return
+    const dead = placements.filter((g) => !g.memberIds.some((m) => objects.some((o) => o.id === m)))
+    if (!dead.length) return
+    const deadIds = new Set(dead.map((g) => g.id))
+    setPlacements((gs) => gs.filter((g) => !deadIds.has(g.id)))
+    setPos((p) => {
+      const next = { ...p }
+      for (const g of dead) delete next[g.id]
+      return next
+    })
+    setConnectors((c) => c.filter((e) => !deadIds.has(e.from) && !deadIds.has(e.to)))
+    setSel((cur) => (cur && deadIds.has(cur) ? null : cur))
+    for (const g of dead) {
+      const so = smartObjects.find((o) => o.id === g.smartObjectId)
+      if (so && scopeOf(so) === 'campaign') deleteSmartObject(so.id)
+    }
+  }, [boardsHydrated, placements, objects, smartObjects, deleteSmartObject])
   const placementName = (g: SmartPlacement) => smartObjectFor(g)?.name ?? 'Smart object'
-  const openPlacement = openPlacementId ? placements.find((g) => g.id === openPlacementId) ?? null : null
-  // Cards drawn on the CURRENT canvas: inside an object, only its members; outside, only cards
-  // that aren't in one (grouped cards live inside their object, not loose on the board).
-  const visibleObjects = openPlacement
-    ? objects.filter((n) => openPlacement.memberIds.includes(n.id))
-    : objects.filter((n) => !placementOf(n.id))
+  /**
+   * Cards drawn on the board: the loose ones. A card inside a smart object lives inside it, not
+   * on the canvas, and the placement card stands for the whole bundle.
+   *
+   * This used to have a second case — while you were INSIDE an object, the canvas narrowed to that
+   * object's members. That mode has gone with the in-flow editing it existed to serve, and the
+   * filter is a single expression again. Its worst failure is worth recording so nobody rebuilds
+   * it: on an object with nothing inside, the narrowed board matched NOTHING, hiding every context
+   * card including the ones that had no relationship to the object at all. Recoverable — the
+   * breadcrumb restored it — but indistinguishable from having lost the board's contents.
+   */
+  const visibleObjects = objects.filter((n) => !placementOf(n.id))
   // Name a fresh object after what it's about: the first member with a linked record wins, else
   // the first member's kind. Beats "Smart object 3" as a default you'd have to fix every time.
   const suggestPlacementName = (ids: string[]): string => {
@@ -5609,38 +5696,71 @@ export function FlowsView() {
     setSelected(new Set())
     setBriefCollapsed(false)
   }
-  /** Spill an object's members back onto the board and drop the object. */
+  /**
+   * Spill an object's members back onto the board and drop the object.
+   *
+   * THE CARDS COME OUT WHERE THE OBJECT WAS, which they did not used to. A member keeps the position
+   * it had when it was bundled — that becomes its layout INSIDE the object — and the object card
+   * takes the top-left-most of them as its own spot. Release simply deleted the object, so the
+   * members reappeared at those stored positions: drag a smart object across the board, detach it,
+   * and the cards leapt back to wherever they happened to be sitting before you ever grouped them,
+   * which on a worked-on board is somewhere else entirely and reads as the cards running away.
+   *
+   * So we move them by however far the object has travelled from where it was made. The internal
+   * layout is preserved — they stay in the same arrangement relative to each other — the whole
+   * cluster just lands under the card you were looking at.
+   */
   const releasePlacement = (gid: string) => {
     const g = placements.find((x) => x.id === gid)
     if (!g) return
     recordHistory(true)
-    if (openPlacementId === gid) setOpenGroupId(null)
     setPlacements((gs) => gs.filter((x) => x.id !== gid))
     setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
+    const layout = smartObjectFor(g)?.layout
     setPos((p) => {
       const next = { ...p }
+      const here = p[gid] ?? { x: 0, y: 0 }
+      /**
+       * PLACED FROM THE OBJECT'S OWN LAYOUT, not from whatever `pos` the members last had.
+       *
+       * The obvious version of this — shift each member by however far the object has been dragged
+       * — is wrong, and wrong silently. A member inside an object is not rendered, and a card that
+       * is not rendered does not reliably keep a `pos` entry across a save and a reload, so on a
+       * board that has been reopened the members have no stored position at all. Every one of them
+       * then falls back to translate(0, 0) and the whole bundle detaches into a single stack in the
+       * canvas corner, which is what this did before: two cards, same pixel, nowhere near the card
+       * you detached.
+       *
+       * `layout` is the field that survives, because it is stored ON the smart object and is what
+       * its own canvas arranges the contents by. Anchoring it at the object's position preserves the
+       * arrangement AND lands the cluster where you were looking.
+       */
+      const marks = g.memberIds.map((m) => layout?.[m]).filter((q): q is { x: number; y: number } => !!q)
+      const origin = marks.length ? marks.reduce((a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) })) : null
+      g.memberIds.forEach((m, i) => {
+        const mark = layout?.[m]
+        next[m] = mark && origin
+          ? { x: here.x + (mark.x - origin.x), y: here.y + (mark.y - origin.y) }
+          // No layout (an object written before the field existed): cascade them so they are at
+          // least distinguishable and reachable, rather than stacked on one another.
+          : { x: here.x + i * 18, y: here.y + i * 22 }
+      })
       delete next[gid]
       return next
     })
     setSel(g.memberIds[0] ?? null)
     setSelected(new Set())
   }
-  /** Delete an object AND its members (releasePlacement first if you only want the object gone). */
-  const deletePlacement = (gid: string) => {
-    const g = placements.find((x) => x.id === gid)
-    if (!g) return
-    recordHistory(true)
-    if (openPlacementId === gid) setOpenGroupId(null)
-    g.memberIds.forEach((m) => deleteObject(m))
-    setPlacements((gs) => gs.filter((x) => x.id !== gid))
-    setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
-    if (sel === gid) setSel(null)
-  }
-  // Renaming renames the LIBRARY object, so it changes everywhere the object is placed.
-  const renamePlacement = (gid: string, name: string) => {
-    const g = placements.find((x) => x.id === gid)
-    if (g) updateSmartObject(g.smartObjectId, { name })
-  }
+  /**
+   * NO DELETE FROM THE BOARD. This used to be `deletePlacement`, wired to "Delete object and its
+   * cards" in the canvas right-click menu — which contradicted the object panel a few hundred lines
+   * down, whose own comment says destroying an object reaches campaigns you cannot see from this
+   * board and therefore belongs where the object lives. Both positions could not be right; the
+   * panel's was, so the menu item has gone with the function behind it.
+   *
+   * The library still deletes, and does it the safe way: detach every placement first, then remove
+   * the object, so no board is left pointing at something that is no longer there.
+   */
   // ---- groups: hold an arrangement of cards together ----
   /** card id → the group it belongs to. A card is only ever in one. */
   const groupBy = useMemo(() => groupIndex(groups), [groups])
@@ -5882,8 +6002,6 @@ export function FlowsView() {
   // else through refs, so Cmd+G goes through one too rather than capturing a stale selection.
   const convertSelectionRef = useRef(convertSelection)
   convertSelectionRef.current = convertSelection
-  const openPlacementRef = useRef<string | null>(openPlacementId)
-  openPlacementRef.current = openPlacementId
   const placementsRef = useRef(placements)
   placementsRef.current = placements
   const releaseRef = useRef(releasePlacement)
@@ -5900,9 +6018,6 @@ export function FlowsView() {
   viewNameRef.current = viewName
   const setChannelDetachedRef = useRef(setChannelDetached)
   setChannelDetachedRef.current = setChannelDetached
-  /** Drop a member out of an object without deleting the card. */
-  const removeFromPlacement = (gid: string, noteId: string) =>
-    setPlacements((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
 
   const updateObjectText = (id: string, text: string) => setObjects((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
   /**
@@ -6653,7 +6768,6 @@ export function FlowsView() {
     setGroups([])
     setRenamingGroup(null)
     setSelEdge(null)
-    setOpenGroupId(null)
     // NOTHING IS BLANKED HERE ANY MORE. Every campaign now has a board of its own, keyed by name, so
     // there is no shared slot for the next one to inherit — and blanking one was how the previous
     // draft's cards were destroyed.
@@ -6734,7 +6848,6 @@ export function FlowsView() {
     // Close Gretel on the way in: its starter questions name the campaign you were just in, and a
     // dialog that survives the switch would offer them about the one you have opened.
     setGretelOpen(false)
-    setOpenGroupId(null)
     // The record catches up with the board before anything scopes by it: a campaign wired to a
     // Brand card before binding existed reads Unassigned until this writes what the card says.
     // Idempotent, and a no-op when the board names nothing.
@@ -7960,20 +8073,10 @@ export function FlowsView() {
     )
   }
 
-  // Assets is a brand-organized library browser: each brand is a folder of its campaign libraries.
-  const toggleBrandFolder = (b: string) =>
-    setOpenBrandFolders((prev) => {
-      const next = new Set(prev)
-      next.has(b) ? next.delete(b) : next.add(b)
-      return next
-    })
-  // Clicking a brand opens it as a canvas tab: its brand page on the Data tab (the flexible data
-  // sets), with the preset basics one tab over. Scoped to the clicked brand.
-  const openBrand = (b: string) => {
-    if (b !== brand) setClientFilter(b)
-    openBrandTab(b)
-    setBrandTab('data')
-  }
+  /* The Assets panel's brand-folder browser is gone: it is organised by RUNG now, so there is no
+     folder head to expand and no brand row to open from here. toggleBrandFolder, openBrand and
+     createBrandFolder went with it — the last of those minted a brand record and re-scoped the
+     workspace, which is the brand rail's job and never belonged behind a click in this panel. */
   // Double-clicking a Data source card opens its linked data set as a full-page spreadsheet tab. If
   // it isn't linked to a data set yet (empty, or a connector), spin one up, link it, and open it.
   const openDataCard = (nt: CanvasObject) => {
@@ -7992,20 +8095,6 @@ export function FlowsView() {
     const id = addBrandDataset(brand)
     setObjectRef(nt.id, id)
     openDatasetTab(id)
-  }
-  // "Start a folder for a new brand": create + register the brand, then drop into its brand page on
-  // the About tab so its basics (the dropdowns Gretel reads) are right there to fill out.
-  const createBrandFolder = () => {
-    const nm = newBrandName.trim()
-    if (!nm) return
-    const id = addBrandRecord({ name: nm })
-    updateBrandRecord(id, { name: nm })
-    setOpenBrandFolders((prev) => new Set([...prev, nm]))
-    setNewBrandName('')
-    setAddingBrand(false)
-    setClientFilter(nm)
-    openBrandTab(nm)
-    setBrandTab('about')
   }
 
   // The outline (campaign + its deliverables) — a map of the board's contents, shown in the
@@ -8168,7 +8257,7 @@ export function FlowsView() {
           tag={nt.kind === 'data-source' ? <span className="flow-panel-wip">Work in progress</span> : undefined}
           actions={
             promoteCount > 0 ? (
-              <ComponentMenu
+              <SmartObjectMenu
                 canUseBrand={!!brand}
                 onMake={(rung) => convertSelection(rung)}
                 onMove={() => {}}
@@ -8905,18 +8994,18 @@ export function FlowsView() {
               <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
             </svg>
           }
-          title={placementName(g)}
-          sub={COMPONENT_DESC}
+          title="Smart object"
+          sub={SMART_OBJECT_DESC}
           actions={(() => {
             const so = smartObjectFor(g)
             if (!so) return undefined
             return (
-              <ComponentMenu
+              <SmartObjectMenu
                 scope={scopeOf(so)}
                 canUseBrand={!!(so.brand || brand)}
                 onMake={() => {}}
-                onMove={(rung) => setSmartObjectScope(so.id, rung, rung === 'brand' ? so.brand || brand : undefined)}
-                onOpen={() => setOpenGroupId(g.id)}
+                onMove={(rung) => setSmartObjectScope(so.id, rung, { brand: so.brand || brand, campaign: boardKey })}
+                onOpen={() => openObjectTab(so.id)}
                 onDetach={() => releasePlacement(g.id)}
               />
             )
@@ -8925,13 +9014,13 @@ export function FlowsView() {
         <div className="flow-inspect">
           {/* "Bundled" only describes a MULTI-card object. Said of one card it was simply untrue, and
               it made a legitimate single-card object look like a mistake. */}
-          <p className="flow-inspect-desc">
-            {members.length > 1
-              ? 'Several cards bundled and named, so you can reuse them instead of rebuilding them.'
-              : 'A named card you can reuse instead of rebuilding it. Drag more cards in to bundle them together.'}
-          </p>
+          {/* READ-ONLY ON THE BOARD. The name is text here, not a field, because renaming reaches
+              every campaign using this object and the board is the one place you are thinking about
+              a single campaign. Same reason the members below lost their remove buttons: this panel
+              now REPORTS what the object is and offers the two ways to act on it — edit the
+              definition in its own tab, or detach a copy that belongs to this board alone. */}
           <label className="flow-inspect-label">Name</label>
-          <input className="flow-inspect-input" value={placementName(g)} placeholder="Name this object…" onChange={(e) => renamePlacement(g.id, e.target.value)} />
+          <div className="flow-inspect-read">{placementName(g) || <em>Untitled smart object</em>}</div>
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>Inside ({members.length})</label>
           <div className="flow-obj-list">
             {members.map((m) => (
@@ -8943,19 +9032,26 @@ export function FlowsView() {
                     <span className="flow-obj-row-kind">{OBJECT_META[m.kind].label}</span>
                     <span className="flow-obj-row-val">{cardLabel(m) || 'Nothing picked yet'}</span>
                   </span>
-                  <button className="flow-obj-row-out" title="Move out of this object" aria-label="Move out of this object" onClick={() => removeFromPlacement(g.id, m.id)}>✕</button>
                 </div>
             ))}
-            {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside. Open it and add an object, or release it.</div>}
+            {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside yet. Edit it in its own tab to add something.</div>}
           </div>
-          <button className="flow-insp-open" onClick={() => setOpenGroupId(g.id)}>Open this smart object</button>
-          {/* Two different opens, deliberately. The one above narrows THIS board to the object's
-              contents and hands you a breadcrumb back; this one gives it a tab of its own, which
-              survives switching campaigns, so an object can sit open beside the campaign using it. */}
+          {/* ONE OPEN, NOT TWO. There used to be a second button here that stepped into the object on
+              this board — it narrowed the canvas to the object's members and handed you a breadcrumb
+              back. Two problems, one fatal. It was an editing surface for a shared thing sitting
+              inside a single campaign, which is exactly the bleed this panel now avoids. And on an
+              object with nothing inside it, narrowing the canvas to zero members hid every context
+              card on the board, including ones that had nothing to do with the object, so it read as
+              though the board had lost your work. It had not — the breadcrumb brought it all back —
+              but a view state that looks like data loss is not one to keep for a path that should
+              not exist anyway.
+
+              So the tab is the only way in. It survives switching campaigns, which is right for a
+              thing no single campaign owns. */}
           {(() => {
             const so = smartObjectFor(g)
             return so ? (
-              <button className="flow-insp-open subtle" onClick={() => openObjectTab(so.id)}>Open in its own tab</button>
+              <button className="flow-insp-open" onClick={() => openObjectTab(so.id)}>Edit in its own tab</button>
             ) : null
           })()}
           {/* WHERE IT LIVES, on the object's own panel. This is where you look when you select a
@@ -8999,7 +9095,10 @@ export function FlowsView() {
             }
             return (
               <>
-                <div className="flow-inspect-note">Only on this campaign. Edit it freely: nothing else uses it.</div>
+                {/* "Edit it freely" was true of the object and false of this panel, which no longer
+                    edits anything. What is still true — and the only thing worth saying on a rung
+                    nobody else can reach — is that changing it costs nothing elsewhere. */}
+                <div className="flow-inspect-note">Only on this campaign. Changing it affects nothing else.</div>
               </>
             )
           })()}
@@ -9768,6 +9867,14 @@ export function FlowsView() {
             has to build. */}
         {renderCtas(selPost)}
 
+        {/* THE FINISHED ARTWORK, directly under the copy it runs beside and the controls it sits
+            on — everything above this describes the post, and this is the post. It was the one
+            part of an asset that lived somewhere else entirely (a Drive folder, a Slack thread),
+            which is why "is this ready?" was a question you had to ask a person rather than a
+            card. Above "Connected to" for the same reason the CTAs are: what this asset IS comes
+            before which cards instructed it. */}
+        <CardCreative rowId={selPost.id} />
+
         {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
             This asked the wrong question and answered it confidently. It read only the
             DIRECTION channel: the typed instruction fields on a card. A card can be
@@ -9966,9 +10073,7 @@ export function FlowsView() {
    */
   const renderLayers = () => (
     <>
-      <div className="flow-panel-head">
-        <span className="flow-panel-title">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</span>
-      </div>
+      <PanelHead title={viewing ? viewShort : name.trim() || 'Untitled campaign'} />
       <div className="flow-overview">
         <div className="flow-outline-list">
           <div className="flow-outline-head">Layers</div>
@@ -10308,19 +10413,6 @@ export function FlowsView() {
           <span className="flow-crumb-now">
             {viewing ? viewShort : name.trim() || (flowShareLock ? 'Campaign' : 'New campaign')}
           </span>
-          {/* Inside a smart object: a third crumb segment, so the way back out is where you'd look
-              for it rather than only on Escape. */}
-          {openPlacement && (
-            <>
-              <span className="flow-crumb-sep">/</span>
-              <button className="flow-crumb-obj" onClick={() => setOpenGroupId(null)} title="Back to the campaign board">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" />
-                </svg>
-                {placementName(openPlacement)}
-              </button>
-            </>
-          )}
         </div>
         <div className="flow-top-right">
           {/* WHETHER THE BOARD IS SAVED BELONGS TO THE BOARD, not to whichever card is selected.
@@ -10425,121 +10517,106 @@ export function FlowsView() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="M15 9l-2 3 2 3" /></svg>
                 </button>
               </div>
+              {/* ONE SECTION PER RUNG, in the order the ladder climbs. The panel used to open on this
+                  campaign, then jump to a directory of BRANDS with a folder each — which is a
+                  different axis from the one the smart object menu teaches, so the panel quietly
+                  re-taught a second model of the same thing.
+
+                  It also showed you other brands' shelves, which you cannot use: brand-scoped means
+                  brand-scoped. Dragging one onto this board was possible and was a cross-brand leak
+                  (see placeSmartObject, which now refuses it). Rung-first closes that by only ever
+                  showing what this board may actually reach.
+
+                  What went with the brand tree: opening a brand's page from a folder row, which
+                  re-scoped the whole workspace from a click that looked like an accordion, and "New
+                  brand", which minted a brand record from inside a smart object panel. Neither is a
+                  smart object concern; both live on the brand rail. */}
               <div className="flow-library-body">
-                {/* Libraries organized by brand: one folder per brand, each holding its campaigns.
-                    "New brand" starts a folder for a brand you don't have yet. */}
-                {/* THIS CAMPAIGN FIRST. A campaign-scoped object exists only on the board you are
-                    looking at, so burying it under a brand folder said the opposite of what scoping
-                    means. Brand folders below hold the promoted ones, which every campaign can reach. */}
                 {(() => {
-                  const here = smartObjects
-                    .filter((o) => scopeOf(o) === 'campaign' && visibleOn(o, { campaign: boardKey }))
-                    .filter((o) => !q || o.name.toLowerCase().includes(q))
-                    .sort((x, y) => x.name.localeCompare(y.name))
-                  return (
-                    <>
-                      <div className="flow-lib-brandshead">
-                        <span className="flow-library-secttl">
-                          {viewName ? viewName.replace(`${brand} — `, '') : 'This campaign'}
-                        </span>
-                        <span className="flow-lib-folder-count">{here.length}</span>
-                      </div>
-                      {here.length === 0 ? (
+                  const match = (o: SmartObject) =>
+                    !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q)
+                  const byName = (x: SmartObject, y: SmartObject) => x.name.localeCompare(y.name)
+                  const rungs: { key: SmartObjectScope; title: string; hint: string; list: SmartObject[] }[] = [
+                    {
+                      key: 'campaign',
+                      title: viewName ? viewName.replace(`${brand} — `, '') : 'This campaign',
+                      hint: 'Only this board can use these',
+                      list: smartObjects.filter((o) => scopeOf(o) === 'campaign' && visibleOn(o, { campaign: boardKey })).filter(match).sort(byName),
+                    },
+                    {
+                      key: 'brand',
+                      title: brand || 'This brand',
+                      hint: brand ? `Every campaign for ${brand}` : 'Every campaign for this brand',
+                      list: smartObjects.filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand })).filter(match).sort(byName),
+                    },
+                    {
+                      key: 'shared',
+                      title: 'Every brand',
+                      hint: 'Any campaign, whoever it belongs to',
+                      list: smartObjects.filter((o) => scopeOf(o) === 'shared').filter(match).sort(byName),
+                    },
+                  ]
+                  /**
+                   * A RUNG IS A DROP TARGET, so the ladder can be climbed by dragging as well as from
+                   * the menu on the object's panel. The same drag already means two things depending
+                   * on where you let go — the canvas places it, a folder head files it — so a third
+                   * destination is the pattern, not a new one.
+                   *
+                   * Dropping on the rung it already sits on is a no-op rather than a write: it is the
+                   * commonest miss, and re-saving the same scope would still bump the board's history.
+                   * The brand rung refuses when no brand is in view, because that is the one that
+                   * needs somewhere to land.
+                   */
+                  const rungDrop = (to: SmartObjectScope) => ({
+                    onDragOver: (e: ReactDragEvent) => {
+                      if (!e.dataTransfer.types.includes(SMART_OBJECT_DND)) return
+                      if (to === 'brand' && !brand) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      e.dataTransfer.dropEffect = 'move'
+                      if (rungDropTarget !== to) setRungDropTarget(to)
+                    },
+                    onDragLeave: () => setRungDropTarget((v) => (v === to ? null : v)),
+                    onDrop: (e: ReactDragEvent) => {
+                      const id = e.dataTransfer.getData(SMART_OBJECT_DND)
+                      setRungDropTarget(null)
+                      setDragObjectId(null)
+                      if (!id) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      const o = smartObjects.find((x) => x.id === id)
+                      if (!o || scopeOf(o) === to) return
+                      if (to === 'brand' && !brand && !o.brand) return
+                      // The board doing the demoting is the board it becomes visible on, which is
+                      // the only honest reading of dropping it on "this campaign".
+                      setSmartObjectScope(id, to, { brand: o.brand || brand, campaign: boardKey })
+                    },
+                  })
+                  return rungs.map((r) => (
+                    <div
+                      className={`flow-lib-rung${rungDropTarget === r.key ? ' drop' : ''}`}
+                      key={r.key}
+                      {...rungDrop(r.key)}
+                    >
+                      <label className="flow-inspect-label">
+                        {r.title}
+                        <span className="flow-lib-rung-count">{r.list.length}</span>
+                      </label>
+                      {/* The rung's own sentence, because "This brand" does not say who else is
+                          affected and that is the whole difference between the three. */}
+                      <div className="flow-lib-rung-hint">{r.hint}</div>
+                      {r.list.length === 0 ? (
                         <div className="flow-lib-folder-empty">
-                          No smart objects here yet. Select cards on the canvas and press ⌘G.
+                          {r.key === 'campaign'
+                            ? 'Nothing here yet. Select a card, then use the smart object button at the top of its panel to choose who can reuse it.'
+                            : `Nothing on this rung yet. Move one here from its panel to let ${r.key === 'shared' ? 'every brand' : 'every campaign'} use it.`}
                         </div>
                       ) : (
-                        <div className="flow-lib-objects">{renderObjectShelf(here)}</div>
+                        <div className="flow-lib-objects">{renderObjectShelf(r.list, r.key)}</div>
                       )}
-                    </>
-                  )
+                    </div>
+                  ))
                 })()}
-                {/* SHARED, ABOVE THE BRANDS, because that is where it is on the ladder: reachable from
-                    every campaign of every brand. Listed even when empty is wrong — an empty shelf is
-                    a promise nobody kept, the same argument the folders make — so it appears once
-                    something is on it. */}
-                {(() => {
-                  const shared = smartObjects
-                    .filter((o) => scopeOf(o) === 'shared')
-                    .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
-                    .sort((x, y) => x.name.localeCompare(y.name))
-                  if (!shared.length) return null
-                  return (
-                    <>
-                      <div className="flow-lib-brandshead">
-                        <span className="flow-library-secttl">Shared with every brand</span>
-                        <span className="flow-lib-folder-count">{shared.length}</span>
-                      </div>
-                      <div className="flow-lib-objects">{renderObjectShelf(shared)}</div>
-                    </>
-                  )
-                })()}
-                <div className="flow-lib-brandshead">
-                  <span className="flow-library-secttl">Brands</span>
-                  <button className="flow-lib-newbrand" onClick={() => setAddingBrand((v) => !v)}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                    New brand
-                  </button>
-                </div>
-                {addingBrand && (
-                  <input
-                    className="flow-lib-newbrand-input"
-                    autoFocus
-                    placeholder="Brand name…"
-                    value={newBrandName}
-                    onChange={(e) => setNewBrandName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); createBrandFolder() }
-                      if (e.key === 'Escape') { setAddingBrand(false); setNewBrandName('') }
-                    }}
-                    onBlur={() => { if (!newBrandName.trim()) setAddingBrand(false) }}
-                  />
-                )}
-                <div className="flow-lib-folders">
-                  {brands.map((b) => {
-                    // A brand folder holds SMART OBJECTS, nothing else. It used to also list the
-                    // brand's campaigns, which made the folder a second navigation tree to work the
-                    // canvas from — a duplicate of the Campaigns page and the tab strip, both of
-                    // which open a campaign already. Nothing was reachable only from here.
-                    const shelf = smartObjects
-                      .filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand: b.name }))
-                      .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
-                      .sort((x, y) => x.name.localeCompare(y.name))
-                    if (q && shelf.length === 0 && !b.name.toLowerCase().includes(q)) return null
-                    const open = openBrandFolders.has(b.name) || !!q
-                    return (
-                      <div className="flow-lib-folder" key={b.name}>
-                        <div className={`flow-lib-folder-head${b.name === brand ? ' current' : ''}`}>
-                          <button className={`flow-lib-chev${open ? ' open' : ''}`} title={open ? 'Collapse' : 'Expand'} aria-label={open ? 'Collapse' : 'Expand'} onClick={() => toggleBrandFolder(b.name)}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
-                          </button>
-                          {/* The brand row itself opens the brand's page (basics + data sets). */}
-                          <button className="flow-lib-folder-open" title={`Open ${b.name}`} onClick={() => openBrand(b.name)}>
-                            <span className="flow-lib-folder-ic" aria-hidden="true">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
-                            </span>
-                            <span className="flow-lib-folder-name">{b.name}</span>
-                            {/* Objects, not campaigns: the folder holds objects, so a campaign count
-                                here described something that is no longer in it. */}
-                            <span className="flow-lib-folder-count">{smartObjects.filter((o) => scopeOf(o) === 'brand' && visibleOn(o, { brand: b.name })).length}</span>
-                          </button>
-                        </div>
-                        {open && (
-                          <div className="flow-lib-folder-body">
-                            {shelf.length === 0 ? (
-                              <div className="flow-lib-folder-empty">
-                                No smart objects yet. Promote one from a campaign to share it here.
-                              </div>
-                            ) : (
-                              <div className="flow-lib-objects">{renderObjectShelf(shelf)}</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  {brands.length === 0 && <div className="flow-library-empty">No brands yet. Start one above.</div>}
-                </div>
               </div>
             </aside>
           )
@@ -11247,7 +11324,7 @@ export function FlowsView() {
             {/* SMART OBJECTS. Collapsed bundles of the cards above: one card showing the name and
                 what's inside. Double-click opens it (the canvas swaps to its members). Not drawn
                 while you're inside one, since objects don't nest yet. */}
-            {!openPlacement && placements.map((g) => {
+            {placements.map((g) => {
               const members = g.memberIds.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n)
               const so = smartObjectFor(g)
               const scope = so ? scopeOf(so) : 'campaign'
@@ -11261,8 +11338,11 @@ export function FlowsView() {
                   style={{ transform: `translate(${pos[g.id]?.x ?? 0}px, ${pos[g.id]?.y ?? 0}px)` }}
                   onMouseDown={(e) => startDrag(e, g.id)}
                   onClick={(e) => clickSelect(e, g.id)}
-                  onDoubleClick={(e) => { e.stopPropagation(); setOpenGroupId(g.id) }}
-                  title="Double-click to open"
+                  // Double-click opens the DEFINITION, in its own tab — the same gesture the shelf
+                  // row uses, so the card and the library row behave alike. It used to step into the
+                  // object on this board, which is the editing-in-place path that has gone.
+                  onDoubleClick={(e) => { e.stopPropagation(); if (so) openObjectTab(so.id) }}
+                  title="Double-click to edit in its own tab"
                 >
                   <div className="flow-note-head">
                     <span className="flow-note-ic" aria-hidden="true">
@@ -11278,29 +11358,48 @@ export function FlowsView() {
                         SHARED WEARS IT TOO. This read `scope === 'brand'`, so the rung with the widest
                         reach of the three — every campaign of every brand — was the one card on the
                         board carrying no warning at all. */}
-                    {scope !== 'campaign' && (
-                      <span
-                        className="flow-obj-linked"
-                        title={scope === 'shared'
-                          ? 'Shared with every brand: edits reach every campaign using it, whoever it belongs to'
-                          : 'In the brand library: edits reach every campaign using it'}
-                        aria-label={scope === 'shared' ? 'Shared with every brand' : 'In the brand library'}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
-                          <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
-                        </svg>
-                      </span>
-                    )}
+                    {/* EVERY SCOPE WEARS IT NOW. The mark used to appear only on brand and shared
+                        objects, where it warned about reach. It has a second job since the library
+                        shelf started wearing the card's shape: the row and the card are deliberately
+                        near-identical, and this is the one bit of chrome that says which is which —
+                        the card on the board is a REFERENCE to something that lives in the library,
+                        the row in the library is the thing itself. A campaign-scoped object is still
+                        a library object, on the rung only this board can reach, so it gets the mark
+                        and a tooltip that says how far it actually goes. */}
+                    <span
+                      className="flow-obj-linked"
+                      title={scope === 'shared'
+                        ? 'From the library, shared with every brand: edits reach every campaign using it, whoever it belongs to'
+                        : scope === 'brand'
+                          ? 'From the brand library: edits reach every campaign using it'
+                          : "From this campaign's library: only this board can use it"}
+                      aria-label={scope === 'shared' ? 'From the library, shared with every brand' : scope === 'brand' ? 'From the brand library' : "From this campaign's library"}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
+                        <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
+                      </svg>
+                    </span>
 
                   </div>
-                  <input
-                    className="flow-obj-name"
-                    value={placementName(g)}
-                    placeholder="Name this object…"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => renamePlacement(g.id, e.target.value)}
-                  />
+                  {/* THE CARD SHOWS ITS NAME. It does not edit it, because no other card does: naming
+                      "moved to the inspector, where a board-local override belongs" (see the note on
+                      the input card's own name field), and every kind followed except this one. A
+                      field on one card type and not the others teaches that cards are editable in
+                      place, which is wrong everywhere else on the board.
+
+                      The panel already carries a labelled Name, so nothing is lost — and the input
+                      here was worse than redundant: it swallowed mousedown to keep from dragging the
+                      card, so the biggest target on a smart object was the one part you could not
+                      drag it by. */}
+                  {(() => {
+                    // The object's OWN name, not placementName's fallback: that returns the string
+                    // "Smart object" when there is no object to ask, so testing against it would
+                    // label an object somebody actually called "Smart object" as unnamed. A name of
+                    // '' is the real empty case and ?? does not catch it.
+                    const nm = smartObjectFor(g)?.name?.trim()
+                    return <div className={`flow-obj-name${nm ? '' : ' unnamed'}`}>{nm || 'Unnamed'}</div>
+                  })()}
                   {/* What's inside, at a glance: one tinted glyph per member. */}
                   <div className="flow-obj-members">
                     {members.map((m) => (
@@ -11826,15 +11925,17 @@ export function FlowsView() {
           ) : viewing ? (
             pickAt !== null ? (
               <>
-                <div className="flow-panel-head">
-                  <button className="flow-back" onClick={() => { setPickAt(null); setConnectFrom(null) }}>
-                    ‹ Back
-                  </button>
-                  {/* The card you branched from is the one selected on the board, right next to the
-                      line being drawn out of it, so naming it again in the title only made the title
-                      long enough to truncate. */}
-                  <span className="flow-panel-title">{connectFrom ? 'Next Step' : 'Add channel'}</span>
-                </div>
+                {/* The card you branched from is the one selected on the board, right next to the
+                    line being drawn out of it, so naming it again in the title only made the title
+                    long enough to truncate. */}
+                <PanelHead
+                  lead={
+                    <button className="flow-back" onClick={() => { setPickAt(null); setConnectFrom(null) }}>
+                      ‹ Back
+                    </button>
+                  }
+                  title={connectFrom ? 'Next Step' : 'Add channel'}
+                />
                 <div className="flow-picker-list">
                   {grouped.map(([group, presets]) => (
                     <div key={group} className="flow-pgroup">
@@ -11856,14 +11957,14 @@ export function FlowsView() {
               renderPostInspector(selPost)
             ) : selDeliv ? (
               <>
-                <div className="flow-panel-head">
-                  <PresetTile tone={selDeliv.tone} channel={selDeliv.channel} />
-                  <span className="flow-panel-title">{selDeliv.label}</span>
-                </div>
+                {/* The kind's definition line rides in the head rather than opening the body — see
+                    PanelHead's `sub`, and the ten other panels that already say it there. */}
+                <PanelHead
+                  lead={<PresetTile tone={selDeliv.tone} channel={selDeliv.channel} />}
+                  title={selDeliv.label}
+                  sub={`${CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} · ${typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}`}
+                />
                 <div className="flow-inspect">
-                  <p className="flow-inspect-desc">
-                    {CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} · {typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}
-                  </p>
                   {/* CUT OFF FROM THE BRIEF. The missing line says it on the canvas, but a missing
                       thing is a poor way to state a fact: you have to know it used to be there. The
                       panel says it in words, and offers the way back, because reconnecting by drawing
@@ -12165,12 +12266,14 @@ export function FlowsView() {
             )
           ) : pickAt !== null ? (
             <>
-              <div className="flow-panel-head">
-                <button className="flow-back" onClick={() => setPickAt(null)}>
-                  ‹ Back
-                </button>
-                <span className="flow-panel-title">Add channel</span>
-              </div>
+              <PanelHead
+                lead={
+                  <button className="flow-back" onClick={() => setPickAt(null)}>
+                    ‹ Back
+                  </button>
+                }
+                title="Add channel"
+              />
               <div className="flow-picker-list">
                 {grouped.map(([group, presets]) => (
                   <div key={group} className="flow-pgroup">
@@ -12296,9 +12399,7 @@ export function FlowsView() {
               if (!node || !p) {
                 return (
                   <>
-                    <div className="flow-panel-head">
-                      <span className="flow-panel-title">Post</span>
-                    </div>
+                    <PanelHead title="Post" />
                     <div className="flow-overview">
                       <div className="flow-ov-note">This post is no longer on the canvas.</div>
                     </div>
@@ -12312,13 +12413,15 @@ export function FlowsView() {
               const loading = !!pv?.loading && !(post?.headline || post?.primary || post?.components?.length)
               return (
                 <>
-                  <div className="flow-panel-head">
-                    <PresetTile tone={toneForPreset(p)} channel={p.channel} />
-                    <span className="flow-panel-title">{isPage ? 'Page' : `Post ${bi + 1}`}</span>
-                    <button className="flow-back flow-close" onClick={() => setSel(null)}>
-                      ✕
-                    </button>
-                  </div>
+                  <PanelHead
+                    lead={<PresetTile tone={toneForPreset(p)} channel={p.channel} />}
+                    title={isPage ? 'Page' : `Post ${bi + 1}`}
+                    actions={
+                      <button className="flow-back flow-close" onClick={() => setSel(null)}>
+                        ✕
+                      </button>
+                    }
+                  />
                   <div className="flow-inspect">
                     <button className="flow-back" onClick={() => setSel(node.id)}>
                       ‹ {p.label}
@@ -12380,13 +12483,15 @@ export function FlowsView() {
               const p = presetByKey(node.presetKey)!
               return (
                 <>
-                  <div className="flow-panel-head">
-                    <PresetTile tone={toneForPreset(p)} channel={p.channel} />
-                    <span className="flow-panel-title">{p.label}</span>
-                    <button className="flow-back flow-close" onClick={() => setSel(null)}>
-                      ✕
-                    </button>
-                  </div>
+                  <PanelHead
+                    lead={<PresetTile tone={toneForPreset(p)} channel={p.channel} />}
+                    title={p.label}
+                    actions={
+                      <button className="flow-back flow-close" onClick={() => setSel(null)}>
+                        ✕
+                      </button>
+                    }
+                  />
                   <div className="flow-inspect">
                     <textarea
                       className="flow-desc"
@@ -12582,7 +12687,7 @@ export function FlowsView() {
                 Open in its own tab<span className="flow-ctx-kbd">dbl-click</span>
               </button>
               {/* DELETE LIVES HERE AND NOWHERE ELSE. It used to sit on the board's own panel, where
-                  it destroyed a component across campaigns you could not see from the board you were
+                  it destroyed a smart object across campaigns you could not see from the board you were
                   standing on. You have to come to the library — where the thing actually lives, and
                   where the count below is true — to end it.
 
@@ -12609,7 +12714,7 @@ export function FlowsView() {
                     >
                       {armed
                         ? `Click again to delete${usedOn ? ` · detaches ${usedOn} board${usedOn === 1 ? '' : 's'}` : ''}`
-                        : 'Delete this component'}
+                        : 'Delete this smart object'}
                     </button>
                   </>
                 )
@@ -12713,22 +12818,19 @@ export function FlowsView() {
                 </button>
               ) : onGroup ? (
                 <>
-                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); setOpenGroupId(onGroup.id) }}>
-                    Open<span className="flow-ctx-kbd">dbl-click</span>
-                  </button>
                   {(() => {
                     const so = smartObjectFor(onGroup)
                     return so ? (
                       <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); openObjectTab(so.id) }}>
-                        Open in its own tab
+                        Edit in its own tab
                       </button>
                     ) : null
                   })()}
-                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); releasePlacement(onGroup.id) }}>Release</button>
-                  <div className="flow-ctx-sep" />
-                  <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deletePlacement(onGroup.id) }}>
-                    Delete object and its cards
-                  </button>
+                  {/* "Detach here", not "Release". Same act, and it was the last place on the board
+                      still calling it something else — the panel and the diamond menu both say
+                      detach, and one action with two names is two actions to anybody who has not
+                      been told otherwise. */}
+                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); releasePlacement(onGroup.id) }}>Detach here</button>
                 </>
               ) : (
                 <>
@@ -12742,11 +12844,6 @@ export function FlowsView() {
                     {convertible.length > 1 ? 'Bundle into a smart object' : 'Make a smart object'}
                     <span className="flow-ctx-kbd">⌘⇧B</span>
                   </button>
-                  {openPlacement && onCard && (
-                    <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); removeFromPlacement(openPlacement.id, onCard.id) }}>
-                      Move out of this object
-                    </button>
-                  )}
                   {onCard && (
                     <>
                       <div className="flow-ctx-sep" />
@@ -13080,15 +13177,15 @@ export function FlowsView() {
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
                 </button>
-                <div className="flow-panel-head">
-                  <span className="flow-panel-title">Add channel</span>
-                </div>
-                <div className="flow-picker-list">
-                  <div className="flow-inspect-desc">
-                    {assetPick.scheduledAt
+                <PanelHead
+                  title="Add channel"
+                  sub={
+                    assetPick.scheduledAt
                       ? `One asset, on ${new Date(assetPick.scheduledAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}. Pick the channel it goes out on.`
-                      : 'One asset in this campaign. Pick the channel it goes out on.'}
-                  </div>
+                      : 'One asset in this campaign. Pick the channel it goes out on.'
+                  }
+                />
+                <div className="flow-picker-list">
                   {grouped.map(([group, presets]) => (
                     <div key={group} className="flow-pgroup">
                       <div className="flow-pgroup-h">{group}</div>
@@ -13145,9 +13242,7 @@ export function FlowsView() {
                     if (!row) {
                       return (
                         <>
-                          <div className="flow-panel-head">
-                            <span className="flow-panel-title">Asset</span>
-                          </div>
+                          <PanelHead title="Asset" />
                           <div className="flow-inspect">
                             <p className="flow-inspect-note">That asset is no longer in this campaign.</p>
                           </div>
@@ -13162,12 +13257,13 @@ export function FlowsView() {
                      brand. Saying so beats inventing a card to satisfy the panel — see gridPick. */
                   return (
                     <>
-                      <div className="flow-panel-head">
-                        <span className="flow-note-ic flow-insp-ic" style={{ color: OBJECT_META[gridPick.kind].tone }} aria-hidden="true">
+                      <PanelHead
+                        tone={OBJECT_META[gridPick.kind].tone}
+                        icon={
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[gridPick.kind].icon}</svg>
-                        </span>
-                        <span className="flow-panel-title">{gridPick.label}</span>
-                      </div>
+                        }
+                        title={gridPick.label}
+                      />
                       <div className="flow-inspect">
                         <p className="flow-inspect-note">
                           {gridPick.kind === 'brand'
