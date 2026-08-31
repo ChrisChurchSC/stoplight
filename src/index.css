@@ -26219,3 +26219,209 @@ table.aud-sheet td.stick .aud-cell {
 }
 .cc-stranded .cc-act { color: var(--warn-ink); flex: none; font-weight: 650; }
 .cc-stranded .cc-act:hover:not(:disabled) { color: var(--warn-ink); }
+
+/* ============================================================================
+   THE SMART OBJECT DIALOG — editing an object's name, rung, description and
+   contents. Replaces the canvas tab that used to open for this, which was the
+   wrong weight for the job and could not edit the contents anyway.
+
+   Shell borrowed from .lib-modal (same overlay, radius and shadow) so a second
+   modal language does not appear; the INSIDE is the inspector's, because the
+   fields here are the same fields those panels edit and they should not look
+   like a different app.
+   ============================================================================ */
+.sod-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 16px;
+  overflow-y: auto;
+}
+.sod {
+  position: relative;
+  width: 100%;
+  /* Narrower than .lib-modal's 640: that one shows a captured post, this is a column of fields, and
+     a field row two-thirds of a screen wide is harder to read, not easier. */
+  max-width: 460px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.sod:focus { outline: none; }
+.sod-head {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.sod-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.sod-x {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.sod-x:hover { color: var(--text); }
+/* 14px so the labels' full-bleed rules (margin -14px) land on the dialog's edges, exactly as they
+   do on .flow-inspect. Copying the panel's fields without its padding would have every group rule
+   stop 2px short of the wall. */
+.sod-body { padding: 14px; }
+
+/* WHO CAN USE IT: three choices, stacked, each carrying its consequence. A select would fit in one
+   line and hide the two options you did not pick, which are the ones you need to see to choose. */
+.sod-rungs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.sod-rung {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  cursor: pointer;
+  font: inherit;
+}
+.sod-rung strong { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.sod-rung em { font-style: normal; font-size: 11px; color: var(--text-faint); }
+.sod-rung:hover:not(:disabled) { border-color: var(--border-strong); }
+.sod-rung.on {
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 8%, var(--surface));
+}
+.sod-rung.on strong { color: color-mix(in srgb, var(--accent-2) 70%, var(--text)); }
+.sod-rung:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sod-ref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+.sod-ref-name { font-size: 12.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sod-ref-size { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.sod-ref-x { margin-left: auto; border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--text-muted); cursor: pointer; }
+.sod-ref-x:hover { color: var(--text); }
+/* The dashed box the rest of the app uses for "drop or choose a file", so an upload target looks
+   like an upload target wherever you meet one. */
+.sod-ref-add {
+  display: block;
+  padding: 11px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 9px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  cursor: pointer;
+}
+.sod-ref-add:hover { border-color: var(--accent); color: var(--text); }
+.sod-ref-add input { display: none; }
+
+.sod-cards { display: flex; flex-direction: column; gap: 4px; }
+.sod-card,
+.sod-add-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  min-width: 0;
+}
+.sod-add-opt { width: 100%; text-align: left; font: inherit; cursor: pointer; }
+.sod-add-opt:hover { border-color: var(--accent); }
+.sod-card-ic { flex: 0 0 auto; display: inline-flex; }
+.sod-card-ic svg { width: 15px; height: 15px; }
+.sod-card-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sod-card-kind { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
+.sod-card-val { font-size: 12.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sod-card-x {
+  margin-left: auto;
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.sod-card-x:hover { color: var(--bad-ink, #c0392b); }
+
+.sod-add,
+.sod-add-cancel {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 9px;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.sod-add:hover { border-color: var(--accent); color: var(--text); }
+.sod-add-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.sod-add-cancel { border-style: solid; margin-top: 4px; }
+
+.sod-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+.sod-foot .spacer { flex: 1; }
+/* Quiet until armed. Destroying an object reaches campaigns you cannot see from this dialog, so the
+   first press only states what the second one will do — the same two-step the library shelf uses. */
+.sod-del {
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.sod-del:hover { color: var(--bad-ink, #c0392b); }
+.sod-del.armed {
+  color: #fff;
+  background: var(--bad-ink, #c0392b);
+  border-color: var(--bad-ink, #c0392b);
+  font-weight: 600;
+}
+.sod-done {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 7px 16px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.sod-done:hover { border-color: var(--text-faint); }

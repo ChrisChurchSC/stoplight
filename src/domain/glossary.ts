@@ -209,7 +209,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     short:
       "A named card you can reuse instead of rebuilding it, holding one card or several bundled together. It starts out living inside one campaign; assign it to the brand's folder and every campaign for that brand can reach it.",
     more:
-      'Double-click a smart object and it opens in its own tab on a blank canvas holding only its contents. Inside it, being on the canvas is being in the object, so there is nothing to wire. Once it is in a brand folder, editing it changes it everywhere it is used.',
+      'Double-click a smart object and it opens for editing: its name, who can use it, the document describing it, and the cards inside. The board itself only reports what an object holds — editing happens in one place, because once it is in a brand folder a change reaches every campaign using it. To change one just on this board, detach it: the cards spill back out and the object is left alone for everyone else.',
     seeAlso: ['object', 'brand'],
   },
   canvasOutput: {

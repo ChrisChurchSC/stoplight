@@ -122,7 +122,7 @@ export function SmartObjectMenu({
                 </button>
               ))}
               <button className="flow-ctx-item" role="menuitem" onClick={act(onOpen)}>
-                Edit in its own tab
+                Edit smart object
                 <span className="flow-so-menu-hint">Changes reach every campaign using it</span>
               </button>
               <div className="flow-so-menu-sep" />
