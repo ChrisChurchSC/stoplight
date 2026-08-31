@@ -26008,6 +26008,20 @@ table.aud-sheet td.stick .aud-cell {
    .flow-drop-over, so a file dragged at either panel gets the same answer. Only the tiles are new,
    because nothing here had a grid of files before. */
 .cc { margin-top: 4px; }
+/* THE RULE ABOVE "FINAL CREATIVE", which the positional selector could not draw.
+   `.flow-inspect-label:not(:first-child)` gives every group head a rule by POSITION, which is what
+   keeps a long panel reading as a few named things. It works on every other head in this inspector
+   and could not work on this one: CardCreative is a component, so its head is :first-child of `.cc`
+   rather than of the panel, and the selector correctly saw a head at the top of its container. The
+   result was the CTAs above running straight into the artwork below with nothing between them.
+   Restated here rather than loosened up there, because the position rule is right for the panel and
+   this is a fact about the wrapper. Values match it exactly; -14px is .flow-inspect's own padding. */
+.cc > .flow-inspect-label {
+  border-top: 1px solid var(--border);
+  margin-left: -14px;
+  margin-right: -14px;
+  padding: 15px 14px 0;
+}
 /* The whole section is the drop target, not just the button — but as an OUTLINE, which costs no
    layout. A border arriving mid-drag would shift what you are aiming at out from under the cursor. */
 .cc.dropping {
