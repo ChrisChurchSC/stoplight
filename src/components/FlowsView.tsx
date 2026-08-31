@@ -87,6 +87,7 @@ import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { PanelHead } from './PanelHead'
 import { SmartObjectMenu } from './SmartObjectMenu'
+import { SmartObjectDialog } from './SmartObjectDialog'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
 import type { ChannelId, TrafficRow } from '../domain/types'
@@ -1312,6 +1313,8 @@ export function FlowsView() {
   const addSmartObject = useTrafficStore((s) => s.addSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
   const setSmartObjectScope = useTrafficStore((s) => s.setSmartObjectScope)
+  const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
+  const attachObjectReference = useTrafficStore((s) => s.attachObjectReference)
   const setSmartObjectFolder = useTrafficStore((s) => s.setSmartObjectFolder)
   // Record-create actions, so a card can make the thing it needs instead of dead-ending on
   // "No audiences established yet".
@@ -1488,7 +1491,6 @@ export function FlowsView() {
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
   const openDatasetTab = useTrafficStore((s) => s.openDatasetTab)
-  const openObjectTab = useTrafficStore((s) => s.openObjectTab)
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
 
@@ -2292,6 +2294,8 @@ export function FlowsView() {
   // a live drop target. A custom mime type rather than text/plain: the board already accepts a
   // campaign NAME as text/plain on the campaigns page, and a stray text drop must not place an object.
   const [dragObjectId, setDragObjectId] = useState<string | null>(null)
+  /** The smart object being edited in the dialog, or null. Replaces the canvas tab this used to open. */
+  const [editObjectId, setEditObjectId] = useState<string | null>(null)
   /** The rung a dragged smart object is currently over, so the section it would land on says so. */
   const [rungDropTarget, setRungDropTarget] = useState<SmartObjectScope | null>(null)
   // The folder head currently under a dragged object ('__unfiled__' for the loose group).
@@ -5439,7 +5443,7 @@ export function FlowsView() {
           setDragObjectId(o.id)
         }}
         onDragEnd={() => { setDragObjectId(null); setObjDropFolder(null) }}
-        onDoubleClick={() => openObjectTab(o.id)}
+        onDoubleClick={() => setEditObjectId(o.id)}
         onContextMenu={(e) => {
           e.preventDefault()
           e.stopPropagation()
@@ -9016,7 +9020,7 @@ export function FlowsView() {
                 canUseBrand={!!(so.brand || brand)}
                 onMake={() => {}}
                 onMove={(rung) => setSmartObjectScope(so.id, rung, { brand: so.brand || brand, campaign: boardKey })}
-                onOpen={() => openObjectTab(so.id)}
+                onOpen={() => setEditObjectId(so.id)}
                 onDetach={() => releasePlacement(g.id)}
               />
             )
@@ -9029,7 +9033,7 @@ export function FlowsView() {
               every campaign using this object and the board is the one place you are thinking about
               a single campaign. Same reason the members below lost their remove buttons: this panel
               now REPORTS what the object is and offers the two ways to act on it — edit the
-              definition in its own tab, or detach a copy that belongs to this board alone. */}
+              definition in its dialog, or detach a copy that belongs to this board alone. */}
           <label className="flow-inspect-label">Name</label>
           <div className="flow-inspect-read">{placementName(g) || <em>Untitled smart object</em>}</div>
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>Inside ({members.length})</label>
@@ -9045,7 +9049,7 @@ export function FlowsView() {
                   </span>
                 </div>
             ))}
-            {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside yet. Edit it in its own tab to add something.</div>}
+            {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside yet. Open it to add a card.</div>}
           </div>
           {/* ONE OPEN, NOT TWO. There used to be a second button here that stepped into the object on
               this board — it narrowed the canvas to the object's members and handed you a breadcrumb
@@ -9062,7 +9066,7 @@ export function FlowsView() {
           {(() => {
             const so = smartObjectFor(g)
             return so ? (
-              <button className="flow-insp-open" onClick={() => openObjectTab(so.id)}>Edit in its own tab</button>
+              <button className="flow-insp-open" onClick={() => setEditObjectId(so.id)}>Edit smart object</button>
             ) : null
           })()}
           {/* WHERE IT LIVES, on the object's own panel. This is where you look when you select a
@@ -11376,11 +11380,11 @@ export function FlowsView() {
                   style={{ transform: `translate(${pos[g.id]?.x ?? 0}px, ${pos[g.id]?.y ?? 0}px)` }}
                   onMouseDown={(e) => startDrag(e, g.id)}
                   onClick={(e) => clickSelect(e, g.id)}
-                  // Double-click opens the DEFINITION, in its own tab — the same gesture the shelf
+                  // Double-click opens the DEFINITION, in its dialog — the same gesture the shelf
                   // row uses, so the card and the library row behave alike. It used to step into the
                   // object on this board, which is the editing-in-place path that has gone.
-                  onDoubleClick={(e) => { e.stopPropagation(); if (so) openObjectTab(so.id) }}
-                  title="Double-click to edit in its own tab"
+                  onDoubleClick={(e) => { e.stopPropagation(); if (so) setEditObjectId(so.id) }}
+                  title="Double-click to edit this smart object"
                 >
                   <div className="flow-note-head">
                     <span className="flow-note-ic" aria-hidden="true">
@@ -12721,8 +12725,8 @@ export function FlowsView() {
                 </>
               )}
               <div className="flow-ctx-sep" />
-              <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); openObjectTab(o.id) }}>
-                Open in its own tab<span className="flow-ctx-kbd">dbl-click</span>
+              <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); setEditObjectId(o.id) }}>
+                Edit smart object<span className="flow-ctx-kbd">dbl-click</span>
               </button>
               {/* DELETE LIVES HERE AND NOWHERE ELSE. It used to sit on the board's own panel, where
                   it destroyed a smart object across campaigns you could not see from the board you were
@@ -12859,8 +12863,8 @@ export function FlowsView() {
                   {(() => {
                     const so = smartObjectFor(onGroup)
                     return so ? (
-                      <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); openObjectTab(so.id) }}>
-                        Edit in its own tab
+                      <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); setEditObjectId(so.id) }}>
+                        Edit smart object
                       </button>
                     ) : null
                   })()}
@@ -13468,6 +13472,54 @@ export function FlowsView() {
           </div>
         </>
       )}
+
+      {/* EDITING A SMART OBJECT. This used to open a canvas TAB, which was the wrong weight — a tab
+          is somewhere you dwell, and this is a thing you change and close — and which could not edit
+          the contents at all: the page showed them as a read-only grid, so once the board went
+          read-only there was nowhere left in the app to change what an object holds.
+
+          Contents and the placement's memberIds are kept in step here on purpose. They start as the
+          same ids (convertSelection passes the very cards it bundles) and had no single writer, so
+          they drifted — a board card reading "1 inside" against a tab holding two. Every edit below
+          writes both. */}
+      {(() => {
+        const o = editObjectId ? smartObjects.find((x) => x.id === editObjectId) : null
+        if (!o) return null
+        const contents = o.contents ?? []
+        const inside = new Set(contents.map((c) => c.id))
+        const write = (next: CanvasObject[]) => {
+          recordHistory(true)
+          updateSmartObject(o.id, { contents: next, refs: next.map(refForObject).filter((r): r is FlowReference => !!r) })
+          const ids = next.map((c) => c.id)
+          setPlacements((gs) => gs.map((g) => (g.smartObjectId === o.id ? { ...g, memberIds: ids } : g)))
+        }
+        return (
+          <SmartObjectDialog
+            object={o}
+            /* Context cards on this board that are not already inside it. A card bundled into some
+               OTHER object is still offered: putting it in two bundles is a legitimate thing to do,
+               and the board is what stops a card being in two placements, not this list. */
+            boardCards={objects.filter((n) => OBJECT_META[n.kind].role === 'input' && !inside.has(n.id))}
+            cardLabel={(c) => cardLabel(c)}
+            canUseBrand={!!(o.brand || brand)}
+            onRename={(name) => updateSmartObject(o.id, { name })}
+            onScope={(sc) => setSmartObjectScope(o.id, sc, { brand: o.brand || brand, campaign: boardKey })}
+            onAdd={(card) => write([...contents, card])}
+            onRemove={(cardId) => write(contents.filter((c) => c.id !== cardId))}
+            onAttachRef={(f) => { void attachObjectReference(o.id, f) }}
+            onRemoveRef={() => updateSmartObject(o.id, { reference: undefined })}
+            /* The same three steps the library shelf takes, because deleting from two places by two
+               different routes is how a board ends up pointing at an object that is gone. */
+            onDelete={() => {
+              deleteSmartObject(o.id)
+              placements.filter((pl) => pl.smartObjectId === o.id).forEach((pl) => releasePlacement(pl.id))
+              setObjects((os) => os.map((x) => (x.smartObjectId === o.id ? { ...x, smartObjectId: undefined } : x)))
+              setEditObjectId(null)
+            }}
+            onClose={() => setEditObjectId(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

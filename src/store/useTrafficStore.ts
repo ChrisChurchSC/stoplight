@@ -1757,7 +1757,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands' | 'calendar' | 'dataset' | 'object'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands' | 'calendar' | 'dataset'
   /** A record id to auto-open in its RecordsTable drawer once that sheet mounts (e.g. clicking a
    *  task's linked company jumps to Companies and pops that row's details). Consumed + cleared by
    *  the table that owns the id. */
@@ -1972,7 +1972,13 @@ interface TrafficState {
      *  reconstruct the ones that carry no record. */
     contents?: CanvasObject[],
   ) => string
-  updateSmartObject: (id: string, patch: Partial<Pick<SmartObject, 'name' | 'refs' | 'reference'>>) => void
+  /**
+   * `contents` is patchable because the smart object DIALOG edits it — the cards inside an object
+   * are changed there and nowhere else, now that the board reports rather than edits. It travels
+   * with `refs`, which the caller recomputes from the same list: `kind` is derived from refs below,
+   * and contents without refs would leave an object holding a card whose record nothing can see.
+   */
+  updateSmartObject: (id: string, patch: Partial<Pick<SmartObject, 'name' | 'refs' | 'reference' | 'contents'>>) => void
   /**
    * Attach an uploaded document as the object's reference — what the copy writer reads as the
    * authority on what this object IS. Resolves to a message when the file cannot be used, or null
@@ -2175,13 +2181,6 @@ interface TrafficState {
   activeDatasetId: string | null
   openDatasetTab: (id: string) => void
   closeDatasetTab: (id: string) => void
-  /** Smart objects opened as canvas tabs — each is its own blank canvas holding that object's
-   *  contents. `activeObjectId` is the one the 'object' page renders. Session-only, like
-   *  openDatasetTabs: which tabs you had open is not worth restoring on another device. */
-  openObjectTabs: string[]
-  activeObjectId: string | null
-  openObjectTab: (id: string) => void
-  closeObjectTab: (id: string) => void
   /** A campaign the Flows view should open in view mode (the project tabs set this so a
    *  tab opens the flow, not the legacy canvas). '' means open a fresh flow builder.
    *  FlowsView consumes it and calls clearFlowOpen. */
@@ -2527,7 +2526,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands' | 'calendar' | 'dataset' | 'object') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands' | 'calendar' | 'dataset') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -3390,8 +3389,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   openBrandTabs: [],
   openDatasetTabs: [],
   activeDatasetId: null,
-  openObjectTabs: [],
-  activeObjectId: null,
   // A single-flow share opens straight into that flow (flowOpen drives FlowsView to open it).
   flowOpen: initialShare?.campaign ?? null,
   flowOpenView: 'flow',
@@ -4112,24 +4109,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // describes the campaign. Null re-offers the check rather than showing a stale verdict.
       return { smartObjects, campaignList, coherenceCheckedHash: null }
     }),
+  // Nothing to close any more: a smart object is edited in a dialog over the board it was opened
+  // from, so deleting one cannot strand you on a page describing it.
   deleteSmartObject: (id) =>
     set((s) => {
       const smartObjects = s.smartObjects.filter((o) => o.id !== id)
       saveSmartObjects(smartObjects)
-      // The object's tab goes with it, wherever the delete came from. The tab strip already guards
-      // against a missing object, so nothing crashed, but deleting one from the canvas while its
-      // tab was open left you parked on a page reading "No smart object open" with a dead entry
-      // still counted among the open tabs.
-      if (!s.openObjectTabs.includes(id)) return { smartObjects }
-      const openObjectTabs = s.openObjectTabs.filter((t) => t !== id)
-      const wasActive = s.activeObjectId === id
-      const activeObjectId = wasActive ? openObjectTabs[openObjectTabs.length - 1] ?? null : s.activeObjectId
-      return {
-        smartObjects,
-        openObjectTabs,
-        activeObjectId,
-        page: wasActive && !activeObjectId ? 'flows' : s.page,
-      }
+      return { smartObjects }
     }),
 
   addOutputType: (brand, channel, label) => {
@@ -4761,26 +4747,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
     }),
 
-  // The opener sets `page` itself, so no caller ever needs a separate setPage; the closer re-points
-  // at the previous tab and only leaves the page on the last close. Same policy as the data-set
-  // tabs, deliberately, because two tab strips behaving differently is worse than either behaviour.
-  openObjectTab: (id) =>
-    set((s) => ({
-      openObjectTabs: s.openObjectTabs.includes(id) ? s.openObjectTabs : [...s.openObjectTabs, id],
-      activeObjectId: id,
-      page: 'object',
-    })),
-  closeObjectTab: (id) =>
-    set((s) => {
-      const openObjectTabs = s.openObjectTabs.filter((d) => d !== id)
-      const wasActive = s.activeObjectId === id
-      const activeObjectId = wasActive ? openObjectTabs[openObjectTabs.length - 1] ?? null : s.activeObjectId
-      return {
-        openObjectTabs,
-        activeObjectId,
-        page: wasActive && !activeObjectId ? 'flows' : s.page,
-      }
-    }),
 
   setCampaignStatus: (name, status) =>
     set((s) => {

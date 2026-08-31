@@ -90,7 +90,6 @@ const BrandsView = lazy(() => import('./BrandsView').then((m) => ({ default: m.B
 const CampaignCalendar = lazy(() => import('./CampaignCalendar').then((m) => ({ default: m.CampaignCalendar })))
 const BrandPage = lazy(() => import('./BrandPage').then((m) => ({ default: m.BrandPage })))
 const DatasetPage = lazy(() => import('./DatasetPage').then((m) => ({ default: m.DatasetPage })))
-const ObjectPage = lazy(() => import('./ObjectPage').then((m) => ({ default: m.ObjectPage })))
 const BillingPage = lazy(() => import('./BillingPage').then((m) => ({ default: m.BillingPage })))
 const Portfolio = lazy(() => import('./Portfolio').then((m) => ({ default: m.Portfolio })))
 
@@ -420,10 +419,6 @@ export function Workbench() {
               ) : page === 'dataset' ? (
                 <div className="home-main-scroll">
                   <DatasetPage />
-                </div>
-              ) : page === 'object' ? (
-                <div className="home-main-scroll">
-                  <ObjectPage />
                 </div>
               ) : page === 'content' ? (
                 <div className="home-main-scroll">
