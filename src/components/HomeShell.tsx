@@ -85,11 +85,24 @@ function CampaignNav() {
 
           Still one library, not "libraries": the published-content catalogue is its own page and has
           not moved here. */}
+      {/* A TOGGLE, because it is a panel and not a destination. Files and Assets sit on the same
+          canvas — Assets is a drawer docked to its left — so the button that opens the drawer is the
+          obvious thing to press to shut it again. It only ever opened, which left closing it to the
+          chevron inside the panel or to pressing Files, neither of which is where your hand is.
+
+          Coming from another view it always OPENS rather than toggling: the press means "take me to
+          the library", and a toggle would have sent you to a board with the drawer shut whenever it
+          happened to have been left open. */}
       <button
         className={`nav-item${assetsOpen ? ' active' : ''}`}
-        onClick={() => { setFlowView('flow'); setAssetsOpen(true) }}
-        title="Assets: the brand's smart object library"
+        onClick={() => {
+          const fromElsewhere = !onBoard
+          setFlowView('flow')
+          setAssetsOpen(fromElsewhere ? true : !assetsOpen)
+        }}
+        title={assetsOpen ? 'Close the smart object library' : "Assets: the brand's smart object library"}
         aria-label="Assets"
+        aria-pressed={assetsOpen}
       >
         <span className="nav-ico"><AssetsIco /></span>
       </button>

@@ -48,6 +48,15 @@ export function SmartObjectMenu({
   canUseBrand: boolean
   onMake: (scope: Rung) => void
   onMove: (scope: Rung) => void
+  /**
+   * Opens the object's OWN TAB, which is the only place its contents can be changed.
+   *
+   * This used to step into the object on the board itself. That made the board an editing surface
+   * for something shared: a tweak made while thinking about one campaign rewrote the definition, and
+   * every other campaign using it changed with no sign that anything had happened. Editing now
+   * happens in one place, away from any single campaign, which is the whole reason the library
+   * exists. `onDetach` is the way to make a change that belongs to THIS board only.
+   */
   onOpen: () => void
   /**
    * Spills the cards back onto the board and leaves the smart object in the library. Non-destructive:
@@ -112,7 +121,10 @@ export function SmartObjectMenu({
                   <span className="flow-so-menu-hint">{r.hint}</span>
                 </button>
               ))}
-              <button className="flow-ctx-item" role="menuitem" onClick={act(onOpen)}>Open it</button>
+              <button className="flow-ctx-item" role="menuitem" onClick={act(onOpen)}>
+                Edit in its own tab
+                <span className="flow-so-menu-hint">Changes reach every campaign using it</span>
+              </button>
               <div className="flow-so-menu-sep" />
               <button className="flow-ctx-item" role="menuitem" onClick={act(onDetach)}>
                 Detach here
