@@ -51,7 +51,6 @@ const onTheIndex = {
   campaignFilter: 'Acme — Alpha',
   openBrandTabs: [],
   openDatasetTabs: [],
-  openObjectTabs: [],
   // The prune only runs once the workspace read has landed; leave it un-hydrated so it stays out.
   flightsHydrated: false,
   openProjectsPruned: true,

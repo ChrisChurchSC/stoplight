@@ -38,11 +38,6 @@ export function CanvasProjectTabs() {
   const activeDatasetId = useTrafficStore((s) => s.activeDatasetId)
   const openDatasetTab = useTrafficStore((s) => s.openDatasetTab)
   const closeDatasetTab = useTrafficStore((s) => s.closeDatasetTab)
-  const smartObjects = useTrafficStore((s) => s.smartObjects)
-  const openObjectTabs = useTrafficStore((s) => s.openObjectTabs)
-  const activeObjectId = useTrafficStore((s) => s.activeObjectId)
-  const openObjectTab = useTrafficStore((s) => s.openObjectTab)
-  const closeObjectTab = useTrafficStore((s) => s.closeObjectTab)
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
   const campaignList = useTrafficStore((s) => s.campaignList)
   // Whether a campaign BOARD is the thing on screen, as opposed to the Campaigns index. FlowsView
@@ -217,10 +212,6 @@ export function CanvasProjectTabs() {
     e.stopPropagation()
     closeDatasetTab(id)
   }
-  const closeObj = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation()
-    closeObjectTab(id)
-  }
 
   return (
     <div className="cv-projects">
@@ -296,38 +287,9 @@ export function CanvasProjectTabs() {
           </span>
         )
       })}
-      {openObjectTabs.map((id) => {
-        const o = smartObjects.find((x) => x.id === id)
-        // The guard matters: deleting an object with its tab still open would otherwise crash the
-        // whole strip rather than dropping one tab.
-        if (!o) return null
-        // An object's folder is a path inside its brand's library, so the eyebrow shows the last
-        // segment and the tooltip carries the whole path — same rule the campaign tabs follow.
-        //
-        // This line used to carry the object's SCOPE ("Only on this campaign" / the brand library),
-        // which is a different question: where it can be SEEN, not where it is filed. Worth knowing,
-        // and not worth a tab's one label — a sentence in a 9px eyebrow truncated to "ONLY ON THIS…"
-        // on any tab with a real name beside it. Scope belongs on the object page, which states it.
-        const folder = o.folder ? folderName(o.folder) : DRAFTS
-        return (
-          <span
-            key={`obj:${id}`}
-            className={`cv-project-tab cv-object-tab${page === 'object' && activeObjectId === id ? ' active' : ''}`}
-            title={`${o.folder || DRAFTS} · ${o.name || 'Untitled smart object'}`}
-            role="button"
-            tabIndex={0}
-            onClick={() => openObjectTab(id)}
-          >
-            <span className="cv-project-tab-body">
-              <span className="cv-project-tab-client">{folder}</span>
-              <span className="cv-project-tab-name">{o.name || 'Untitled smart object'}</span>
-            </span>
-            <button className="cv-project-tab-x" title="Close this tab" onClick={(e) => closeObj(e, id)}>
-              ✕
-            </button>
-          </span>
-        )
-      })}
+      {/* SMART OBJECTS NO LONGER GET A TAB. Editing one is a dialog over the board it was opened
+          from — a thing you change and close, not somewhere you dwell — so an object never takes a
+          slot in the strip its campaigns live in. See SmartObjectDialog. */}
       <span
         className="cv-project-tab cv-project-tab-new"
         role="button"
